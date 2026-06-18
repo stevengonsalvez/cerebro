@@ -1,0 +1,17 @@
+title = "CEREBRO gitleaks config"
+
+# Use gitleaks' full default ruleset, then add repo-specific allowlisting.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "placeholder/example files contain no real secrets"
+paths = [
+  '''\.env\.example''',
+  '''config/settings\.example\.yaml''',
+]
+# Allow obvious placeholder tokens so examples don't trip entropy rules.
+regexes = [
+  '''REPLACE_ME''',
+  '''<[A-Z_]+>''',
+]

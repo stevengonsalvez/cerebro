@@ -1,0 +1,11 @@
+version: 2
+
+secret:
+  # Placeholder files only — exclude from secret scanning.
+  ignored-paths:
+    - ".env.example"
+    - "config/settings.example.yaml"
+  # Never print detected secret values in CI logs.
+  show-secrets: false
+  # Fail CI on any new policy break.
+  exit-zero: false
