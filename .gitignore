@@ -1,0 +1,41 @@
+# ── secrets / env (NEVER commit) ───────────────────────────
+.env
+*.env
+!.env.example
+config/settings.yaml
+config/settings.local.yaml
+config/*.local.yaml
+*.token
+.bws-token
+*.key
+*.pem
+cookies.txt
+*credentials*
+*secret*
+!*.example*
+
+# ── runtime / state ────────────────────────────────────────
+*.sqlite
+*.sqlite3
+*.db
+*.log
+logs/
+_scratch/
+cerebro/_scratch/
+
+# ── python ─────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# ── os / editor ────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/

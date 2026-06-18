@@ -1,0 +1,27 @@
+# Copy to config/settings.yaml (gitignored) and fill with real values.
+# This example file contains placeholders ONLY — never put real values here.
+
+vault_path: "~/path/to/ObsidianVault/Cerebro"   # local path, never committed
+dry_run: true                                     # writes to _scratch/, mutes ntfy
+
+depth:
+  min: 15
+  max: 25
+  score_threshold: 0.5
+
+dedup_days: 14
+
+models:
+  triage: claude-haiku-4-5
+  digest: claude-sonnet-4-6
+
+ntfy:
+  topic: "REPLACE_ME"          # shared secret — only ever in settings.yaml
+
+bitwarden:
+  anthropic_key_id: "REPLACE_ME"   # bws secret id holding ANTHROPIC_API_KEY
+  sweetistics_key_id: ""           # optional bws secret id (bird fallback)
+
+schedule:
+  hour: 7
+  minute: 0
