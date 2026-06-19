@@ -23,7 +23,6 @@ rss:
     # Claude Code / Codex / Copilot — tool changelogs + blogs
     - https://github.com/anthropics/claude-code/releases.atom
     - https://github.com/openai/codex/releases.atom
-    - https://github.com/Aider-AI/aider/releases.atom
     - https://github.blog/changelog/feed/
     - https://github.blog/feed/
     - https://openai.com/news/rss.xml
