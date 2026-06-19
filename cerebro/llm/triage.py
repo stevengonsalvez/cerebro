@@ -23,27 +23,30 @@ def _extract_json(text: str):
     return json.loads(m.group(0) if m else text)
 
 
-def triage(signals: list[Signal], settings) -> list[Signal]:
-    """Score + categorize via Claude Code (haiku), keep score >= threshold, sort desc."""
+def _score_batch(signals, base, matrix, tmpl, model) -> dict:
+    items = [
+        {"id": base + j, "title": s.title[:200], "snippet": s.clean_text[:200], "source": s.source}
+        for j, s in enumerate(signals)
+    ]
+    prompt = tmpl.format(matrix=matrix, items=json.dumps(items, ensure_ascii=False))
+    try:
+        results = _extract_json(claude.run(prompt, model))
+    except (json.JSONDecodeError, AttributeError):
+        results = _extract_json(claude.run(prompt + "\n\nReturn ONLY the JSON array. No other text.", model))
+    return {r["id"]: r for r in results if isinstance(r, dict) and "id" in r}
+
+
+def triage(signals: list[Signal], settings, batch: int = 60) -> list[Signal]:
+    """Score + categorize via Claude Code (haiku) in batches, keep score >= threshold, sort desc."""
     if not signals:
         return []
-    items = [
-        {"id": i, "title": s.title[:200], "snippet": s.clean_text[:200], "source": s.source}
-        for i, s in enumerate(signals)
-    ]
-    prompt = (PROMPTS / "triage.md").read_text().format(
-        matrix=_matrix_block(settings.matrix),
-        items=json.dumps(items, ensure_ascii=False),
-    )
+    matrix = _matrix_block(settings.matrix)
+    tmpl = (PROMPTS / "triage.md").read_text()
     model = settings.models.get("triage", "haiku")
-    raw = claude.run(prompt, model)
-    try:
-        results = _extract_json(raw)
-    except (json.JSONDecodeError, AttributeError):
-        raw = claude.run(prompt + "\n\nReturn ONLY the JSON array. No other text.", model)
-        results = _extract_json(raw)
+    by_id: dict = {}
+    for start in range(0, len(signals), batch):
+        by_id.update(_score_batch(signals[start:start + batch], start, matrix, tmpl, model))
 
-    by_id = {r["id"]: r for r in results if isinstance(r, dict) and "id" in r}
     threshold = settings.depth.get("score_threshold", 0.5)
     out: list[Signal] = []
     for i, s in enumerate(signals):

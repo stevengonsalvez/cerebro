@@ -22,13 +22,14 @@ def canonical(url: str) -> str:
 
 
 def simhash(text: str) -> int:
-    """64-bit simhash over word tokens — near-dup detection across sources."""
-    bits = [0] * 64
+    """63-bit simhash over word tokens — near-dup detection across sources.
+    63 not 64 bits so it fits SQLite's signed-INTEGER column."""
+    bits = [0] * 63
     for tok in _WORD.findall(text.lower()):
         h = int(hashlib.md5(tok.encode()).hexdigest(), 16)
-        for i in range(64):
+        for i in range(63):
             bits[i] += 1 if (h >> i) & 1 else -1
-    return sum(1 << i for i in range(64) if bits[i] > 0)
+    return sum(1 << i for i in range(63) if bits[i] > 0)
 
 
 def _hamming(a: int, b: int) -> int:
