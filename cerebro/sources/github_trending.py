@@ -16,27 +16,31 @@ STARS_RE = re.compile(r'([\d,]+)\s+stars today')
 
 
 def fetch(cfg: dict, settings) -> list[Signal]:
-    since = cfg.get("since", "daily")
+    sinces = cfg.get("since", "daily")
+    if isinstance(sinces, str):
+        sinces = [sinces]
     out: list[Signal] = []
-    seen: set[str] = set()
-    for lang in (cfg.get("languages") or [""]):
-        url = f"https://github.com/trending/{lang}" if lang else "https://github.com/trending"
-        r = http_get(url, params={"since": since})
-        if r.status_code != 200:
-            continue
-        for block in r.text.split('<article class="Box-row">')[1:]:
-            h2 = H2_RE.search(block)          # repo link lives in the heading, not sponsor/avatar links
-            m = REPO_RE.search(h2.group(1)) if h2 else None
-            if not m or m.group(1) in seen:
+    seen: set[str] = set()        # dedup repos trending in >1 window
+    for since in sinces:
+        for lang in (cfg.get("languages") or [""]):
+            url = f"https://github.com/trending/{lang}" if lang else "https://github.com/trending"
+            r = http_get(url, params={"since": since})
+            if r.status_code != 200:
                 continue
-            repo = m.group(1)
-            seen.add(repo)
-            d = DESC_RE.search(block)
-            desc = html.unescape(re.sub("<[^>]+>", "", d.group(1)).strip()) if d else ""
-            st = STARS_RE.search(block)
-            out.append(Signal(
-                url=f"https://github.com/{repo}",
-                title=f"{repo}: {desc}".strip().rstrip(":"), source="github", captured=now_iso(),
-                meta={"repo": repo, "stars_today": st.group(1) if st else None, "lang": lang or None},
-            ))
+            for block in r.text.split('<article class="Box-row">')[1:]:
+                h2 = H2_RE.search(block)      # repo link lives in the heading, not sponsor/avatar links
+                m = REPO_RE.search(h2.group(1)) if h2 else None
+                if not m or m.group(1) in seen:
+                    continue
+                repo = m.group(1)
+                seen.add(repo)
+                d = DESC_RE.search(block)
+                desc = html.unescape(re.sub("<[^>]+>", "", d.group(1)).strip()) if d else ""
+                st = STARS_RE.search(block)
+                out.append(Signal(
+                    url=f"https://github.com/{repo}",
+                    title=f"{repo}: {desc}".strip().rstrip(":"), source="github", captured=now_iso(),
+                    meta={"repo": repo, "stars": st.group(1) if st else None,
+                          "window": since, "lang": lang or None},
+                ))
     return out
