@@ -32,6 +32,13 @@ class State:
     def __init__(self, db_path: str = "cerebro.sqlite"):
         self.db = sqlite3.connect(str(db_path))
         self.db.executescript(SCHEMA)
+        # migrate older DBs: add token-usage columns if missing
+        for col in ("input_tokens INTEGER", "output_tokens INTEGER", "cache_read INTEGER",
+                    "cache_creation INTEGER", "cost_usd REAL", "llm_calls INTEGER"):
+            try:
+                self.db.execute(f"ALTER TABLE runs ADD COLUMN {col}")
+            except sqlite3.OperationalError:
+                pass
 
     def seen_recent(self, url_hash: str, days: int) -> bool:
         cur = self.db.execute(
@@ -59,10 +66,13 @@ class State:
     def log_run(self, st: RunStats) -> None:
         self.db.execute(
             "INSERT OR REPLACE INTO runs(run_id,started_at,finished_at,raw_count,"
-            "after_dedup,after_triage,digested,dry_run,x_ok,error)"
-            " VALUES(?,datetime('now'),datetime('now'),?,?,?,?,?,?,?)",
+            "after_dedup,after_triage,digested,dry_run,x_ok,error,"
+            "input_tokens,output_tokens,cache_read,cache_creation,cost_usd,llm_calls)"
+            " VALUES(?,datetime('now'),datetime('now'),?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (st.run_id, st.raw, st.after_dedup, st.after_triage, st.digested,
-             int(st.dry_run), int(st.x_ok), st.error),
+             int(st.dry_run), int(st.x_ok), st.error,
+             st.input_tokens, st.output_tokens, st.cache_read, st.cache_creation,
+             st.cost_usd, st.llm_calls),
         )
         self.db.commit()
 

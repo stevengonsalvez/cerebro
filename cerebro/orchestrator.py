@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 
 from .config import Settings
-from .llm import digest, triage
+from .llm import claude, digest, triage
 from .models import RunStats
 from .process import dedup, extract, junkgate
 from .sink import notify, vault
@@ -37,15 +37,19 @@ def run(settings: Settings) -> tuple[RunStats, dict]:
     # 2. funnel: junk-gate → dedup → triage → extract top-N → digest
     cand = dedup.dedupe(junkgate.filter(raw), state, settings.dedup_days)
     st.after_dedup = len(cand)
-    kept = triage.triage(cand, settings)
+    meter = claude.new_meter()
+    kept = triage.triage(cand, settings, meter=meter)
     st.after_triage = len(kept)
     top = kept[: settings.depth.get("max", 25)]
     extract.enrich(top)
-    briefing = digest.digest(top, settings)
+    briefing = digest.digest(top, settings, meter=meter)
     st.digested = len(top)
+    st.input_tokens, st.output_tokens = meter["input_tokens"], meter["output_tokens"]
+    st.cache_read, st.cache_creation = meter["cache_read"], meter["cache_creation"]
+    st.cost_usd, st.llm_calls = meter["cost_usd"], meter["calls"]
 
     # 3. write + remember (mark every candidate so tomorrow doesn't re-triage them) + notify
-    paths = vault.write(date, briefing, top, settings)
+    paths = vault.write(date, briefing, top, settings, st)
     for s in cand:
         state.mark(s)
     notify.push(st, paths["daily"], settings)

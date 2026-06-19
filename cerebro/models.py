@@ -32,3 +32,10 @@ class RunStats:
     dry_run: bool = True
     x_ok: bool = True
     error: str = ""
+    # LLM token usage (summed across all claude -p calls this run)
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read: int = 0
+    cache_creation: int = 0
+    cost_usd: float = 0.0
+    llm_calls: int = 0

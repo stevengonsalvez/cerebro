@@ -8,7 +8,7 @@ from . import claude
 PROMPTS = pathlib.Path(__file__).resolve().parent.parent / "prompts"
 
 
-def digest(top: list[Signal], settings) -> str:
+def digest(top: list[Signal], settings, meter: dict | None = None) -> str:
     """The user-facing 'explain-to-me' briefing markdown, via Claude Code (sonnet)."""
     if not top:
         return "_No signals cleared the relevance bar today._"
@@ -18,4 +18,4 @@ def digest(top: list[Signal], settings) -> str:
     )
     prompt = (PROMPTS / "digest.md").read_text().format(items=items, count=len(top))
     model = settings.models.get("digest", "sonnet")
-    return claude.run(prompt, model).strip()
+    return claude.run(prompt, model, meter).strip()
