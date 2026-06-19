@@ -1,21 +1,23 @@
 # Security Policy
 
-CEREBRO is a public repository that handles personal data flows (email, vault) and
-paid API keys. It is built **secrets-out**: no credential, token, cookie, or private
-endpoint is ever committed.
+CEREBRO is a public repository. It is built **secrets-out**: no credential, token, cookie, or
+private endpoint is ever committed.
 
 ## Secret handling
 
-| Secret | Where it lives | Never |
-|--------|----------------|-------|
-| `ANTHROPIC_API_KEY` | Bitwarden Secrets Manager (`bws secret get`) | in repo, env files, or logs |
-| `BWS_ACCESS_TOKEN` (bootstrap) | macOS Keychain (`cerebro-bws`), exported by `scripts/run.sh` | in the launchd plist or repo |
-| `ntfy` topic | `config/settings.yaml` (gitignored) | committed |
-| Vault path | `config/settings.yaml` (gitignored) | committed |
-| bird / gog auth | managed by those CLIs outside the repo | committed |
+The pipeline holds **no API keys** — every external capability self-authenticates outside the repo:
 
-Rule: if it authenticates, authorizes, or addresses a private channel, it goes in
-Bitwarden or Keychain — not the repo. Committed `*.example` files hold placeholders only.
+| Capability | Auth mechanism | Repo sees |
+|------------|----------------|-----------|
+| LLM (triage + digest) | **Claude Code** on the machine (`claude -p`) — uses its own login/subscription | nothing |
+| X / Twitter | `bird` reads the browser's `x.com` cookie (Firefox/Chrome) | nothing |
+| Gmail newsletters | `gws` (Google Workspace CLI) — its own Google OAuth | nothing |
+| Notifications | `ntfy` topic in `config/settings.yaml` (gitignored) | nothing |
+
+The only sensitive value CEREBRO itself stores is the **ntfy topic** (anyone with it can read/publish
+to that channel) — it lives only in the gitignored `config/settings.yaml`. Committed `*.example`
+files hold placeholders only. There is no API key to vault, so no secret-manager is required for v1;
+if a real secret is ever introduced, store it in the OS Keychain (or a secrets manager) — never the repo.
 
 ## Scanning (defense in depth)
 
@@ -24,22 +26,18 @@ Two independent scanners run **both** locally (pre-commit) and in CI (every push
 - **gitleaks** — regex/entropy secret detection. Config: `.gitleaks.toml`.
 - **GitGuardian ggshield** — 400+ detectors + validity checks. Config: `.gitguardian.yaml`.
 
-CI: `.github/workflows/security.yml`. Local: `.pre-commit-config.yaml` (run
-`pre-commit install`). The ggshield CI job is a no-op until `GITGUARDIAN_API_KEY`
-is added to repo secrets (`gh secret set GITGUARDIAN_API_KEY`).
-
-GitHub-native secret scanning + push protection are also enabled on this repo
-(free for public repos).
+CI: `.github/workflows/security.yml` (both jobs green; `GITGUARDIAN_API_KEY` is set in repo secrets).
+Local: `.pre-commit-config.yaml` (run `pre-commit install`). GitHub-native secret scanning + push
+protection + Dependabot are also enabled.
 
 ## If a secret is ever committed
 
-1. **Revoke/rotate the credential immediately** (the leaked value is compromised the
-   moment it is pushed to a public repo — rotation, not history rewrite, is the fix).
+1. **Revoke/rotate the credential immediately** — a value pushed to a public repo is compromised the
+   moment it lands; rotation, not history rewrite, is the fix.
 2. Purge from history (`git filter-repo`) and force-push.
 3. Confirm gitleaks + ggshield pass on the rewritten history.
 
 ## Reporting
 
-Found something? Open a private security advisory via the repo's **Security →
-Advisories** tab, or contact the maintainer directly. Do not file a public issue
-containing the sensitive detail.
+Open a private security advisory via the repo's **Security → Advisories** tab, or contact the
+maintainer directly. Do not file a public issue containing the sensitive detail.

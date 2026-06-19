@@ -8,7 +8,8 @@ CEREBRO ingests raw tech signals (Gmail newsletters, Hacker News, Reddit, GitHub
 Trending, RSS, X), filters them against a hyper-specific interest matrix, and writes
 a clean "explain-to-me" briefing plus atomic, Dataview-queryable notes into an
 Obsidian vault — daily, at 07:00, via `launchd`. Filtering is done cheaply by Haiku
-4.5; the user-facing digest by Sonnet 4.6. Target spend ~$4–5/month.
+4.5; the user-facing digest by Sonnet 4.6 — both run via Claude Code on the
+machine (no API key; covered by your Claude Code subscription).
 
 ## Flow
 
@@ -28,12 +29,9 @@ Full design: [`SPEC.md`](./SPEC.md) · build plan: [`plans/cerebro-implementatio
 
 This repo is **public** and contains **zero secrets** by design.
 
-- **All secrets via Bitwarden Secrets Manager (`bws`).** The pipeline fetches
-  `ANTHROPIC_API_KEY` (and any optional keys) at runtime from a `bws` machine
-  account. Nothing secret is ever written to the repo.
-- **Bootstrap token in Keychain.** `BWS_ACCESS_TOKEN` lives in the macOS Keychain
-  (service `cerebro-bws`) and is exported by `scripts/run.sh` — never in the plist,
-  never in the repo.
+- **No API keys.** The LLM runs via Claude Code on the machine (`claude -p`),
+  which uses its own login. `bird` (X) reads the browser cookie; `gws` (Gmail)
+  uses its own Google OAuth. Nothing secret is written to the repo.
 - **`ntfy` topic + vault path live only in `config/settings.yaml`** (gitignored).
   Committed `*.example` files are placeholders.
 - **Two secret scanners, both pre-commit and CI:**
@@ -52,9 +50,10 @@ pipx install ggshield                 # or: pip install ggshield
 pre-commit install                    # activate local hooks
 pre-commit autoupdate                 # pin scanner hooks to latest
 
-# 2. Bitwarden Secrets Manager CLI + bootstrap token
-brew install bitwarden/tap/bws        # or per Bitwarden docs
-security add-generic-password -s cerebro-bws -a "$USER" -w '<BWS_ACCESS_TOKEN>'
+# 2. self-authenticating tools (CEREBRO stores no keys)
+#    - Claude Code: already logged in (`claude` on PATH)
+#    - bird: log into x.com in Firefox/Chrome  → `bird whoami` to confirm
+#    - gws:  Google OAuth                       → `gws gmail users getProfile`
 
 # 3. config (gitignored)
 cp config/settings.example.yaml config/settings.yaml   # fill real values

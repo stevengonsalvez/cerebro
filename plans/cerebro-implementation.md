@@ -7,8 +7,8 @@ briefing + atomic notes into a standalone local Obsidian vault. Source of truth:
 
 ## Current State Analysis
 Greenfield. No existing code. Working dir `/Users/stevengonsalvez/d/git/cerebro/`. Not yet a git
-repo. External tools already on the machine: `bird` (X CLI), `gog` (Gmail CLI), `bws` (Bitwarden
-Secrets Manager), `ntfy`. Python 3.x assumed present.
+repo. External tools already on the machine: `bird` (X CLI), `gws` (Gmail CLI), `claude` (Claude
+Code, the LLM runner). ntfy via `curl`. Python 3.x assumed present.
 
 ## Desired End State
 `python -m cerebro` (and the launchd job) runs the full funnel and writes
@@ -18,7 +18,7 @@ and no duplicates within 14 days.
 
 ### Key Decisions (from SPEC.md — do not re-litigate)
 - Python · launchd 07:00 · bird burner-X read-only · Haiku filter + Sonnet digest
-- Vault `~/d/git/cerebro-vault` (standalone local Obsidian vault) · bws secrets · ntfy · 14-day dedup
+- Vault `~/d/git/cerebro-vault` (standalone local Obsidian vault) · Claude Code LLM (no API key) · ntfy · 14-day dedup
 - Rollout: dry-run to `_scratch/` first, then live
 
 ## What We're NOT Doing
@@ -27,7 +27,7 @@ and no duplicates within 14 days.
 
 ## Implementation Approach
 Layered modules behind a thin orchestrator. Sources normalize everything to a single `Signal`
-dataclass; every downstream stage consumes/produces `list[Signal]`. Config in YAML, secrets via bws,
+dataclass; every downstream stage consumes/produces `list[Signal]`. Config in YAML, no secret store (Claude Code / bird / gws self-auth),
 state in SQLite. Dry-run is a single settings flag that reroutes the sink and mutes ntfy.
 
 ## Project File Tree
@@ -35,9 +35,9 @@ state in SQLite. Dry-run is a single settings flag that reroutes the sink and mu
 cerebro/
 ├── SPEC.md
 ├── README.md
-├── pyproject.toml              # deps: anthropic, feedparser, trafilatura, pyyaml, requests, simhash
+├── pyproject.toml              # deps: feedparser, trafilatura, pyyaml, requests, simhash
 ├── .gitignore                  # .env, *.sqlite, __pycache__, .venv
-├── .env.example                # BWS_ACCESS_TOKEN, NTFY_TOPIC (non-secret defaults)
+├── .env.example                # placeholder — CEREBRO needs no secret env vars
 ├── config/
 │   ├── settings.yaml           # vault_path, run depth, dedup_days, models, dry_run, ntfy topic
 │   ├── interest-matrix.yaml    # 4 categories + tags (the triage rubric)
@@ -46,7 +46,6 @@ cerebro/
 │   ├── __init__.py
 │   ├── __main__.py             # entry: python -m cerebro [--dry-run]
 │   ├── config.py               # load + merge yaml/env → Settings
-│   ├── secrets.py              # bws fetch wrapper
 │   ├── models.py               # Signal dataclass + RunStats
 │   ├── state.py                # SQLite seen-hash + run log
 │   ├── orchestrator.py         # the funnel
@@ -57,14 +56,14 @@ cerebro/
 │   │   ├── reddit.py
 │   │   ├── github_trending.py
 │   │   ├── rss.py
-│   │   ├── gmail.py            # subprocess → gog
+│   │   ├── gmail.py            # subprocess → gws
 │   │   └── x_bird.py           # subprocess → bird
 │   ├── process/
 │   │   ├── extract.py          # trafilatura HTML→text
 │   │   ├── dedup.py            # url-canonical + simhash
 │   │   └── junkgate.py         # lenient regex
 │   ├── llm/
-│   │   ├── client.py           # anthropic client factory
+│   │   ├── claude.py           # Claude Code subprocess wrapper
 │   │   ├── triage.py           # Haiku batch, strict JSON
 │   │   └── digest.py           # Sonnet briefing
 │   ├── sink/
@@ -74,7 +73,7 @@ cerebro/
 │       ├── triage.md
 │       └── digest.md
 ├── scripts/
-│   ├── run.sh                  # wrapper: export BWS token, exec python -m cerebro
+│   ├── run.sh                  # wrapper: exec python -m cerebro
 │   └── com.cerebro.daily.plist # launchd
 ├── plans/cerebro-implementation.md
 └── tests/
@@ -112,11 +111,11 @@ class Source(Protocol):
 # Per-source failure is caught by the orchestrator → logged, run continues.
 ```
 
-### `secrets.get`
+### `llm.claude.run`
 ```python
-def get(name: str) -> str:
-    # `bws secret get <id>` keyed by config; BWS_ACCESS_TOKEN must be in env.
-    # Caches within a run. Raises CerebroSecretError on miss.
+def run(prompt: str, model: str, timeout: int = 120) -> str:
+    # subprocess: claude -p <prompt> --model <model> (haiku|sonnet) → stdout text.
+    # No API key — Claude Code uses its own login. Raises CerebroLLMError on nonzero/timeout.
 ```
 
 ### `process` stage signatures
@@ -129,7 +128,7 @@ junkgate.filter(signals) -> list[Signal]                # lenient: drops non-EN/
 ### `llm.triage.triage`
 ```python
 def triage(signals: list[Signal], matrix: dict, settings) -> list[Signal]:
-    # Batches title+200-char snippet+source. Model claude-haiku-4-5.
+    # Batches title+200-char snippet+source. Runs via `claude -p --model haiku`.
     # output_config json_schema → {"results":[{"id","relevant":bool,"score":0..1,"category","tags":[]}]}
     # Mutates score/category/tags; returns signals where relevant and score >= threshold.
 ```
@@ -137,7 +136,7 @@ def triage(signals: list[Signal], matrix: dict, settings) -> list[Signal]:
 ### `llm.digest.digest`
 ```python
 def digest(top: list[Signal], settings) -> DigestResult:
-    # Model claude-sonnet-4-6. Input = top 15-25 by score, clean_text trimmed.
+    # Runs via `claude -p --model sonnet`. Input = top 15-25 by score, clean_text trimmed.
     # Returns: briefing_markdown (the daily note body) + {url_hash: one_liner} per signal.
 ```
 
@@ -174,20 +173,20 @@ row in window. On keep, upsert `seen` (update `last_seen`).
 
 ---
 
-## Phase 1: Scaffold, Config, State, Secrets
-<!-- wave: 1 | depends_on: [] | files: [pyproject.toml, .gitignore, .env.example, config/settings.yaml, config/interest-matrix.yaml, config/sources.yaml, cerebro/__init__.py, cerebro/config.py, cerebro/secrets.py, cerebro/models.py, cerebro/state.py] -->
+## Phase 1: Scaffold, Config, State
+<!-- wave: 1 | depends_on: [] | files: [pyproject.toml, .gitignore, .env.example, config/settings.yaml, config/interest-matrix.yaml, config/sources.yaml, cerebro/__init__.py, cerebro/config.py, cerebro/models.py, cerebro/state.py] -->
 
 ### Changes
-- `pyproject.toml`: deps `anthropic, feedparser, trafilatura, pyyaml, requests` (+ a simhash impl, e.g. `simhash` or inline 64-bit).
-- `config/settings.yaml`: vault path, `depth: {min: 15, max: 25, score_threshold: 0.5}`, `dedup_days: 14`, models (`triage: claude-haiku-4-5`, `digest: claude-sonnet-4-6`), `dry_run: true` (default ON for safety), `ntfy: {topic: ...}`, `bws: {anthropic_key_id: ...}`.
+- `pyproject.toml`: deps `feedparser, trafilatura, pyyaml, requests` (+ a simhash impl, e.g. `simhash` or inline 64-bit). No `anthropic` SDK — LLM is the `claude` CLI.
+- `config/settings.yaml`: vault path, `depth: {min: 15, max: 25, score_threshold: 0.5}`, `dedup_days: 14`, models (`triage: haiku`, `digest: sonnet` — Claude Code aliases), `dry_run: true` (default ON for safety), `ntfy: {topic: ...}`.
 - `config/interest-matrix.yaml`: the 4 categories + tag lists from SPEC.
 - `config/sources.yaml`: subreddits (r/ClaudeAI, r/ChatGPTCoding, r/LocalLLaMA, r/AI_Agents, r/vibecoding, r/cursor), newsletter senders (AI Breakfast, The Rundown, TLDR, Ben's Bites, ByteByteGo), RSS feeds (seed `[]` — fill later), X tags+accounts.
 - `config.py`: load+validate → `Settings`. CLI `--dry-run` overrides yaml.
-- `secrets.py`, `models.py`, `state.py` per contracts above.
+- `models.py`, `state.py` per contracts above.
 
 ### Success Criteria
 **Automated:** `python -c "from cerebro.config import load; load()"` succeeds · `python -c "from cerebro.state import State; State(':memory:').init()"` creates tables · `python -m cerebro --help` works.
-**Manual:** `bws secret get <id>` returns the Anthropic key when `BWS_ACCESS_TOKEN` set.
+**Manual:** `claude -p --model haiku 'reply OK'` returns text (Claude Code reachable).
 
 ---
 
@@ -212,7 +211,7 @@ row in window. On keep, upsert `seen` (update `last_seen`).
 Parallel with Phase 2 (disjoint files).
 
 ### Changes
-- `gmail.py`: subprocess `gog` to query `(label:newsletters OR from:{senders}) newer_than:1d`; parse to `Signal` (newsletter = link-aggregator → also extract embedded links as candidate signals). **Verify exact `gog` subcommand/flags at build (`gog --help`).**
+- `gmail.py`: subprocess `gws gmail users messages list --params '{"userId":"me","q":"(label:newsletters OR from:{senders}) newer_than:1d"}'` then `messages get` per id; parse to `Signal` (newsletter = link-aggregator → also extract embedded links as candidate signals). **Verify gws auth + flags at build (`gws gmail users getProfile`).**
 - `x_bird.py`: `bird whoami` first → if non-zero/auth error set `x_ok=False`, ntfy + skip (handled in orchestrator). Else `bird search "<tag>" -n N` per config tag + `bird read/thread` for key accounts → `Signal`. **Verify bird JSON output flag (`bird --help`); fall back to text parse.** Read-only — never `bird tweet/reply`.
 
 ### Success Criteria
@@ -240,9 +239,9 @@ Parallel with Phase 2 (disjoint files).
 Parallel with Phase 4 (disjoint files).
 
 ### Changes
-- `client.py`: `anthropic.Anthropic()` using key from `secrets.get`.
-- `triage.py`: batch survivors; `output_config={"format":{"type":"json_schema","schema":...}}`; `claude-haiku-4-5`; parse → set score/category/tags; keep `score >= threshold`. Retry once on parse fail.
-- `digest.py`: `claude-sonnet-4-6`; top 15–25 by score; return briefing markdown + per-signal one-liners. `max_tokens` generous; stream if large.
+- `claude.py`: subprocess wrapper around `claude -p --model <alias>`; returns stdout text; nonzero/timeout → CerebroLLMError.
+- `triage.py`: batch survivors into one prompt asking for **raw JSON only** (array of {id, score, category, tags}); `claude -p --model haiku`; `json.loads` (strip code fences/repair); set score/category/tags; keep `score >= threshold`. Retry once on parse fail.
+- `digest.py`: `claude -p --model sonnet`; top 15–25 by score; prompt returns briefing markdown + per-signal one-liners.
 - `prompts/*.md`: triage rubric embeds the interest-matrix; digest prompt = concise extractive "explain-to-me", grouped by category, no fluff.
 
 ### Success Criteria
@@ -276,7 +275,7 @@ Parallel with Phases 4–5 (disjoint files).
    → digest(Sonnet) → vault.write → notify.push → state.log_run
   ```
 - `__main__.py`: arg parse (`--dry-run`, `--source <name>` for isolated testing), call orchestrator.
-- `scripts/run.sh`: `export BWS_ACCESS_TOKEN=$(security find-generic-password -s cerebro-bws -w)` then `exec /path/.venv/bin/python -m cerebro`. (Keeps the bootstrap token out of the plist.)
+- `scripts/run.sh`: `exec /path/.venv/bin/python -m cerebro`. No secret bootstrap — Claude Code, bird, and gws self-authenticate.
 - `com.cerebro.daily.plist`: `StartCalendarInterval` hour 7 minute 0 (launchd runs a missed calendar job once on wake), `ProgramArguments → run.sh`, `StandardOut/ErrorPath` to a log, `RunAtLoad false`.
 
 ### launchd plist
@@ -320,11 +319,11 @@ Parallel with Phases 4–5 (disjoint files).
 ## Testing Strategy
 - **Unit:** each source parses its fixture; dedup collapses dups; junkgate keeps/drops correctly; triage parses JSON; vault writes valid frontmatter.
 - **Integration:** `python -m cerebro --dry-run` full funnel on live sources → `_scratch/`.
-- **Manual:** Obsidian render + Dataview query; launchd trigger; bird/gog auth paths; X-fail ntfy.
+- **Manual:** Obsidian render + Dataview query; launchd trigger; bird/gws auth paths; X-fail ntfy.
 
 ## Build Order (waves)
 ```
-Wave 1: Phase 1 (scaffold/config/state/secrets)
+Wave 1: Phase 1 (scaffold/config/state)
 Wave 2: Phase 2 (JSON sources)  ||  Phase 3 (gmail+bird)
 Wave 3: Phase 4 (process)  ||  Phase 5 (llm)  ||  Phase 6 (sink)
 Wave 4: Phase 7 (orchestrator + launchd)
@@ -334,6 +333,6 @@ Wave 5: Phase 8 (dry-run → live)  [checkpoint]
 ## References
 - Spec: `SPEC.md`
 - Vault: `~/d/git/cerebro-vault` (standalone local Obsidian vault)
-- External CLIs verified at build: `bird --help`, `gog --help`, `bws --help`, `ntfy`
-- Pre-build opens (seed values): RSS feed URLs · X key accounts · Bitwarden secret id for the Anthropic key
+- External CLIs verified at build: `bird`, `gws`, `claude`, `curl` (ntfy)
+- Pre-build opens (seed values): RSS feed URLs · X key accounts
 ```

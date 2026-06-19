@@ -2,7 +2,7 @@
 # This example file contains placeholders ONLY — never put real values here.
 
 vault_path: "~/d/git/cerebro-vault"   # standalone vault root; real path only in gitignored settings.yaml
-dry_run: true                                     # writes to _scratch/, mutes ntfy
+dry_run: true                          # writes to _scratch/, mutes ntfy
 
 depth:
   min: 15
@@ -11,16 +11,13 @@ depth:
 
 dedup_days: 14
 
+# LLM runs via Claude Code on the machine (`claude -p --model <alias>`). No API key.
 models:
-  triage: claude-haiku-4-5
-  digest: claude-sonnet-4-6
+  triage: haiku        # cheap filter pass
+  digest: sonnet       # user-facing "explain-to-me" briefing
 
 ntfy:
-  topic: "REPLACE_ME"          # shared secret — only ever in settings.yaml
-
-bitwarden:
-  anthropic_key_id: "REPLACE_ME"   # bws secret id holding ANTHROPIC_API_KEY
-  sweetistics_key_id: ""           # optional bws secret id (bird fallback)
+  topic: "REPLACE_ME"  # shared secret — only ever in settings.yaml (gitignored)
 
 schedule:
   hour: 7

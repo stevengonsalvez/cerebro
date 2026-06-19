@@ -28,7 +28,7 @@ SOURCES (free)            PRE-FILTER (cheap)              LLM (paid, tiny)      
                                   kills spam/non-EN └────────┘       │
                                                      80% kill        ▼
    sched: launchd 07:00 daily                                 ┌─────────────┐
-   secrets: Bitwarden machine acct (bws)                      │ Vault .md   │
+   LLM: Claude Code (no API key)                              │ Vault .md   │
    state: SQLite seen-hash, 14-day window                     │ daily +     │
    notify: ntfy push (count + link)                           │ atomic notes│
                                                               └─────────────┘
@@ -77,7 +77,7 @@ SOURCES (free)            PRE-FILTER (cheap)              LLM (paid, tiny)      
 LOCAL-FIRST  ─ launchd primary; X cookies + vault + secrets all want the mac
 IDEMPOTENT   ─ URL-hash filenames; re-runs never duplicate
 FUNNEL       ─ cheapest stage first; LLM only touches survivors
-SINGLE KEY   ─ script needs only ANTHROPIC_API_KEY; bird/gog hold own auth
+NO KEYS      ─ LLM via Claude Code; bird/gws self-auth (browser/OAuth)
 ```
 
 ### Components
@@ -85,7 +85,7 @@ SINGLE KEY   ─ script needs only ANTHROPIC_API_KEY; bird/gog hold own auth
 |-----------|---------|------------|
 | Scheduler | Fire daily 07:00, catch-up on wake | launchd plist (`StartCalendarInterval`) |
 | Orchestrator | Run the funnel end-to-end | Python 3.x |
-| Gmail ingest | Pull labeled/sender newsletters | `gog` skill (Gmail API) |
+| Gmail ingest | Pull labeled/sender newsletters | `gws` CLI (Gmail API) |
 | HN ingest | Top + show stories | HN Firebase JSON API |
 | Reddit ingest | Curated subreddit new/top | Reddit `.json` endpoints |
 | GitHub Trending | Daily trending repos | trending scrape/JSON |
@@ -94,18 +94,18 @@ SINGLE KEY   ─ script needs only ANTHROPIC_API_KEY; bird/gog hold own auth
 | Extractor | HTML → clean main text | trafilatura |
 | Dedup | Cross-source near-dup kill | URL-canonical + simhash |
 | Junk-gate | Lenient regex spam/non-EN cut | stdlib regex |
-| Triage | Semantic relevance + tag score | Haiku 4.5, strict JSON output |
-| Digest | "Explain-to-me" briefing | Sonnet 4.6 |
+| Triage | Semantic relevance + tag score | Claude Code `claude -p --model haiku`, JSON |
+| Digest | "Explain-to-me" briefing | Claude Code `claude -p --model sonnet` |
 | State | Seen-hash, 14-day dedup window | SQLite |
 | Sink | Write daily + atomic notes | Python file writes to vault |
 | Notifier | Push when ready | ntfy |
-| Secrets | Fetch API key at runtime | Bitwarden Secrets Manager (`bws`) |
+| LLM runner | Invoke Claude Code for triage/digest | `claude -p --model <alias>` |
 
 ### Integrations
 - **Vault:** direct write to `~/d/git/cerebro-vault` — a standalone local Obsidian vault.
 - **bird:** `bird search "<tag>" -n N`, `bird read`, `bird thread` — read-only, burner X account, cookie auth (residential IP). Sweetistics is a manual fallback engine.
-- **gog:** Gmail API, query `(label:newsletters OR from:{senders}) newer_than:1d`.
-- **Bitwarden:** `bws secret get` for `ANTHROPIC_API_KEY` (machine account). Bootstrap `BWS_ACCESS_TOKEN` lives in the launchd environment / Keychain.
+- **gws:** Gmail API, e.g. `gws gmail users messages list --params '{"userId":"me","q":"(label:newsletters OR from:{senders}) newer_than:1d"}'`.
+- **Claude Code:** `claude -p --model haiku|sonnet` for triage/digest — no API key; uses its own login.
 
 ### Interest Matrix (seeded, tune in `_meta/interest-matrix.yaml`)
 | # | Category | Frontmatter tags | Focus |
@@ -126,20 +126,21 @@ SINGLE KEY   ─ script needs only ANTHROPIC_API_KEY; bird/gog hold own auth
 | X key accounts / tags | seeded from the 4 categories; tune in config |
 
 ### Performance / Cost
-| Stage | Model | ~tokens/day | ~$/mo |
-|-------|-------|-------------|-------|
-| Triage | Haiku 4.5 | ~10k in / 2k out | ~0.60 |
-| Digest | Sonnet 4.6 | ~20k in / 4k out | ~3.60 |
-| Sources | — | — | 0 |
-| **Total** | | | **~4–5** |
+LLM runs via **Claude Code** on the machine (`claude -p --model haiku|sonnet`) — no metered API
+billing; cost is covered by the Claude Code subscription. Daily volume is modest (triage batched
+over ~60–80 survivors + one digest), so it stays well within normal usage.
 
-Prompt caching is moot at this volume (matrix likely < Haiku's 4096-token cache minimum; Haiku input ~$0.00001/day).
+| Stage | Model (Claude Code) | Notes |
+|-------|---------------------|-------|
+| Triage | `--model haiku` | batched, JSON scores/tags |
+| Digest | `--model sonnet` | top 15–25 → briefing |
+| Sources | — | free APIs / cookies |
 
 ### Security Requirements
-- No secrets on disk: `ANTHROPIC_API_KEY` fetched at runtime from Bitwarden machine account.
-- bird uses a **burner** X account — automation never touches the main account.
-- bird/gog auth tokens managed by those tools, outside the repo.
-- `.env`, cookies, tokens gitignored.
+- No API keys: LLM via Claude Code (own login); `bird` reads the browser x.com cookie; `gws` uses Google OAuth.
+- bird is strictly **read-only** (never `tweet`/`reply`) — currently reads the main account's cookie; swap to a burner by logging one into Firefox.
+- bird/gws auth managed by those tools, outside the repo.
+- Only sensitive value is the ntfy topic → gitignored `settings.yaml`. `.env`, cookies, tokens gitignored.
 
 ## Operational Behaviour
 
@@ -207,15 +208,15 @@ Signal frontmatter: `category`, `tags`, `source`, `url`, `score`, `captured`.
 | bird/X GraphQL breaks | Med | Med | Read-only + burner; Sweetistics manual fallback; ntfy alert |
 | Vault path under ~/d/git | Low | Low | `cerebro-vault` is its own dir, not under the `cerebro` repo — never committed |
 | Regex gate under-filters | Low | Low | Gate is lenient by design; Haiku does real semantic cut |
-| BWS_ACCESS_TOKEN bootstrap exposure | Med | Low | Token in launchd env / Keychain, not in repo |
-| Haiku JSON malformed | Low | Low | Strict JSON schema + retry on parse fail |
+| Claude Code usage limits hit | Low | Low | Daily volume modest; triage batched into one call |
+| Triage returns non-JSON | Low | Low | Prompt for raw JSON; parse with retry/repair |
 
 ## Implementation Notes
 
 ### Priority Order
 1. Project scaffold + config files (`interest-matrix.yaml`, source config) + SQLite schema
 2. Source ingestors (HN, Reddit, GitHub, RSS) — pure-JSON, fastest to verify
-3. Gmail (gog) + bird (X) ingestors
+3. Gmail (gws) + bird (X) ingestors
 4. Extract (trafilatura) + dedup (simhash) + regex junk-gate
 5. Haiku triage (strict JSON) + Sonnet digest
 6. Vault writer (daily + atomic notes, frontmatter)
@@ -234,7 +235,7 @@ Signal frontmatter: `category`, `tags`, `source`, `url`, `score`, `captured`.
 - [ ] Exact RSS feed URLs to seed
 - [ ] X key accounts to follow via bird (beyond tag search)
 - [ ] Decide later whether `cerebro-vault` should sync (Obsidian Sync / Drive) for multi-device
-- [ ] Bitwarden secret key/ID name for `ANTHROPIC_API_KEY`
+- [ ] Confirm gws Gmail OAuth is authorized (`gws gmail users getProfile`)
 
 ---
 
