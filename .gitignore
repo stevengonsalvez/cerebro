@@ -39,3 +39,6 @@ build/
 .DS_Store
 .idea/
 .vscode/
+
+# skill scratch (goals/plans/research/handover) — never commit
+.agents/
