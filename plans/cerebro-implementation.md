@@ -3,7 +3,7 @@
 ## Overview
 Build a local-first Python pipeline that, daily at 07:00 via launchd, ingests tech signals from
 6 sources, runs them through a free pre-filter → Haiku triage → Sonnet digest funnel, and writes a
-briefing + atomic notes into a Google-Drive-synced Obsidian vault. Source of truth: `SPEC.md`.
+briefing + atomic notes into a standalone local Obsidian vault. Source of truth: `SPEC.md`.
 
 ## Current State Analysis
 Greenfield. No existing code. Working dir `/Users/stevengonsalvez/d/git/cerebro/`. Not yet a git
@@ -12,13 +12,13 @@ Secrets Manager), `ntfy`. Python 3.x assumed present.
 
 ## Desired End State
 `python -m cerebro` (and the launchd job) runs the full funnel and writes
-`Cerebro/Daily/YYYY-MM-DD.md` + `Cerebro/Signals/<hash>.md` into the vault, ntfy-pings on completion,
+`Daily/YYYY-MM-DD.md` + `Signals/<hash>.md` into the vault, ntfy-pings on completion,
 costs ~$4–5/mo. Verify: a real run produces a daily note with 15–25 linked, scored, tagged signals
 and no duplicates within 14 days.
 
 ### Key Decisions (from SPEC.md — do not re-litigate)
 - Python · launchd 07:00 · bird burner-X read-only · Haiku filter + Sonnet digest
-- Vault `/Users/stevengonsalvez/My Drive/mynotes/Cerebro/` · bws secrets · ntfy · 14-day dedup
+- Vault `~/d/git/cerebro-vault` (standalone local Obsidian vault) · bws secrets · ntfy · 14-day dedup
 - Rollout: dry-run to `_scratch/` first, then live
 
 ## What We're NOT Doing
@@ -256,7 +256,7 @@ Parallel with Phase 4 (disjoint files).
 Parallel with Phases 4–5 (disjoint files).
 
 ### Changes
-- `vault.py`: write `Cerebro/Daily/<date>.md` (briefing body + `[[wikilinks]]` to signals) and `Cerebro/Signals/<url_hash>.md` (frontmatter: category/tags/source/url/score/captured + one-liner + clean_text excerpt). Target `_scratch/` when `dry_run`. Idempotent by filename.
+- `vault.py`: write `Daily/<date>.md` (briefing body + `[[wikilinks]]` to signals) and `Signals/<url_hash>.md` (frontmatter: category/tags/source/url/score/captured + one-liner + clean_text excerpt). Target `_scratch/` when `dry_run`. Idempotent by filename.
 - `notify.py`: ntfy publish "briefing ready · N signals · <obsidian/file link>"; no-op when `dry_run`.
 
 ### Success Criteria
@@ -333,7 +333,7 @@ Wave 5: Phase 8 (dry-run → live)  [checkpoint]
 
 ## References
 - Spec: `SPEC.md`
-- Vault: `/Users/stevengonsalvez/My Drive/mynotes/Cerebro/`
+- Vault: `~/d/git/cerebro-vault` (standalone local Obsidian vault)
 - External CLIs verified at build: `bird --help`, `gog --help`, `bws --help`, `ntfy`
-- Pre-build opens (seed values): RSS feed URLs · X key accounts · Bitwarden secret id for the Anthropic key · confirm vault folder is "available offline" in Drive
+- Pre-build opens (seed values): RSS feed URLs · X key accounts · Bitwarden secret id for the Anthropic key
 ```

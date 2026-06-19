@@ -1,7 +1,7 @@
 # Copy to config/settings.yaml (gitignored) and fill with real values.
 # This example file contains placeholders ONLY — never put real values here.
 
-vault_path: "~/path/to/ObsidianVault/Cerebro"   # local path, never committed
+vault_path: "~/d/git/cerebro-vault"   # standalone vault root; real path only in gitignored settings.yaml
 dry_run: true                                     # writes to _scratch/, mutes ntfy
 
 depth:

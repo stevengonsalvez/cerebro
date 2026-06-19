@@ -10,7 +10,7 @@
 CEREBRO is a local-first, token-minimal daily pipeline that ingests raw tech signals (Gmail
 newsletters, Hacker News, Reddit, GitHub Trending, RSS, X), filters them against a hyper-specific
 interest matrix, and writes a clean "explain-to-me" briefing plus atomic, Dataview-queryable notes
-into a Google-Drive-synced Obsidian vault. Runs daily at 07:00 via launchd on macOS. Filtering is
+into a standalone local Obsidian vault. Runs daily at 07:00 via launchd on macOS. Filtering is
 done cheaply by Haiku 4.5; the user-facing digest by Sonnet 4.6. Target cost ~$4–5/month.
 
 ## Master Flow
@@ -62,7 +62,7 @@ SOURCES (free)            PRE-FILTER (cheap)              LLM (paid, tiny)      
 - AI video / voice / TTS audio digest (deferred)
 - GitHub Actions cloud fallback (architecture stays idempotent to allow it later)
 - Web dashboard / UI — vault IS the interface
-- Multi-device beyond Google Drive sync
+- Multi-device vault sync
 
 ### Future Considerations
 - Audio (TTS) digest for commute
@@ -102,7 +102,7 @@ SINGLE KEY   ─ script needs only ANTHROPIC_API_KEY; bird/gog hold own auth
 | Secrets | Fetch API key at runtime | Bitwarden Secrets Manager (`bws`) |
 
 ### Integrations
-- **Vault:** direct write to `/Users/stevengonsalvez/My Drive/mynotes` (Google Drive syncs it).
+- **Vault:** direct write to `~/d/git/cerebro-vault` — a standalone local Obsidian vault.
 - **bird:** `bird search "<tag>" -n N`, `bird read`, `bird thread` — read-only, burner X account, cookie auth (residential IP). Sweetistics is a manual fallback engine.
 - **gog:** Gmail API, query `(label:newsletters OR from:{senders}) newer_than:1d`.
 - **Bitwarden:** `bws secret get` for `ANTHROPIC_API_KEY` (machine account). Bootstrap `BWS_ACCESS_TOKEN` lives in the launchd environment / Keychain.
@@ -165,10 +165,10 @@ ntfy push "briefing ready · N signals · <link>"  (suppressed in dry-run)
 
 ### Vault Layout
 ```
-mynotes/
-├── Cerebro/Daily/2026-06-15.md     # briefing, wikilinks → signals
-├── Cerebro/Signals/<urlhash>.md    # atomic, Dataview frontmatter
-└── Cerebro/_meta/interest-matrix.yaml
+~/d/git/cerebro-vault/         # standalone local Obsidian vault (vault root)
+├── Daily/2026-06-15.md         # briefing, wikilinks → signals
+├── Signals/<urlhash>.md        # atomic, Dataview frontmatter
+└── _meta/interest-matrix.yaml
 ```
 Signal frontmatter: `category`, `tags`, `source`, `url`, `score`, `captured`.
 
@@ -192,7 +192,7 @@ Signal frontmatter: `category`, `tags`, `source`, `url`, `score`, `captured`.
 | bird for X | browser-harness, twikit, official API | Same author as browser-harness, installed, GraphQL-direct, reads 99.8% safe; browser-harness now fallback |
 | Haiku filter | Ollama local embeddings | $1/1M is cheap enough to be the filter; drops the Ollama daemon/infra tax |
 | Sonnet digest | Haiku (cheaper), Opus (premium) | Quality where the user reads; Haiku stays the cheap filter |
-| Direct vault write | Git-repo sync | Vault is a local Drive-synced folder; direct write is zero-latency and offline |
+| Direct vault write | Git-repo sync | Vault is a local folder; direct write is zero-latency and offline |
 | Burner X account | Main account | Ban-proof hygiene though reads are low-risk |
 
 ### Deferred Decisions
@@ -205,7 +205,7 @@ Signal frontmatter: `category`, `tags`, `source`, `url`, `score`, `captured`.
 | Risk | Impact | Likelihood | Mitigation |
 |------|--------|------------|------------|
 | bird/X GraphQL breaks | Med | Med | Read-only + burner; Sweetistics manual fallback; ntfy alert |
-| Google Drive online-only files | Low | Low | Ensure vault folder is "available offline"; script writes locally, Drive syncs |
+| Vault path under ~/d/git | Low | Low | `cerebro-vault` is its own dir, not under the `cerebro` repo — never committed |
 | Regex gate under-filters | Low | Low | Gate is lenient by design; Haiku does real semantic cut |
 | BWS_ACCESS_TOKEN bootstrap exposure | Med | Low | Token in launchd env / Keychain, not in repo |
 | Haiku JSON malformed | Low | Low | Strict JSON schema + retry on parse fail |
@@ -233,7 +233,7 @@ Signal frontmatter: `category`, `tags`, `source`, `url`, `score`, `captured`.
 ## Open Questions
 - [ ] Exact RSS feed URLs to seed
 - [ ] X key accounts to follow via bird (beyond tag search)
-- [ ] Confirm `mynotes` vault folder is set "available offline" in Google Drive
+- [ ] Decide later whether `cerebro-vault` should sync (Obsidian Sync / Drive) for multi-device
 - [ ] Bitwarden secret key/ID name for `ANTHROPIC_API_KEY`
 
 ---
