@@ -8,13 +8,27 @@ reddit:
   subreddits: [ClaudeAI, ChatGPTCoding, LocalLLaMA, AI_Agents, vibecoding, cursor]
   listing: new          # new | hot
   limit: 25
-github_trending:
+github_trending:        # "GitHunt" — repos making the biggest moves (stars gained)
   enabled: true
-  since: daily          # daily | weekly | monthly
-  languages: []         # [] = all languages
+  since: [daily, weekly] # str or list; daily catches today's movers, weekly the sustained ones
+  languages: []          # [] = all languages
 rss:
   enabled: true
-  feeds: []             # seed feed URLs here (e.g. https://simonwillison.net/atom/everything/)
+  limit: 20
+  feeds:
+    # vibe coding / agentic engineering / AI engineering
+    - https://simonwillison.net/atom/everything/
+    - https://www.latent.space/feed
+    - https://www.interconnects.ai/feed
+    # Claude Code / Codex / Copilot — tool changelogs + blogs
+    - https://github.com/anthropics/claude-code/releases.atom
+    - https://github.com/openai/codex/releases.atom
+    - https://github.com/Aider-AI/aider/releases.atom
+    - https://github.blog/changelog/feed/
+    - https://github.blog/feed/
+    - https://openai.com/news/rss.xml
+    # product launches — topic-filtered downstream by triage ("ProductHunt, not everything")
+    - https://www.producthunt.com/feed
 x:
   enabled: true
   search_terms: ["claude code", "agentic coding", "token optimization", "TUI", "vibe coding"]
