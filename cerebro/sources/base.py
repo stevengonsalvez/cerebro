@@ -13,4 +13,5 @@ def now_iso() -> str:
 
 
 def http_get(url: str, **kw) -> requests.Response:
-    return requests.get(url, headers={"User-Agent": UA}, timeout=TIMEOUT, **kw)
+    kw.setdefault("timeout", TIMEOUT)
+    return requests.get(url, headers={"User-Agent": UA}, **kw)
