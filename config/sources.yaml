@@ -1,0 +1,27 @@
+# Source config. Toggle + tune per source. Lists are seeds — edit freely.
+hackernews:
+  enabled: true
+  lists: [topstories, showstories]
+  limit: 60
+reddit:
+  enabled: true
+  subreddits: [ClaudeAI, ChatGPTCoding, LocalLLaMA, AI_Agents, vibecoding, cursor]
+  listing: new          # new | hot
+  limit: 25
+github_trending:
+  enabled: true
+  since: daily          # daily | weekly | monthly
+  languages: []         # [] = all languages
+rss:
+  enabled: true
+  feeds: []             # seed feed URLs here (e.g. https://simonwillison.net/atom/everything/)
+x:
+  enabled: true
+  search_terms: ["claude code", "agentic coding", "token optimization", "TUI", "vibe coding"]
+  accounts: []          # seed key handles (without @)
+  per_query: 10
+gmail:
+  enabled: true
+  label: newsletters
+  senders: ["AI Breakfast", "The Rundown", "TLDR", "Ben's Bites", "ByteByteGo"]
+  newer_than: 1d

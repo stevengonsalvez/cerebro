@@ -1,0 +1,20 @@
+# Triage rubric. Each category: tags written into note frontmatter + a description
+# the LLM uses to score relevance. Tune freely after the first runs.
+categories:
+  - key: coding-agents-llm
+    tags: [ai/agents, ai/llm-mechanics, release-notes]
+    desc: >
+      Coding agents & LLM mechanics — Claude / Codex / GitHub Copilot changelogs and
+      deep-dives, token optimization, prompt caching, context-window management,
+      novel agentic patterns.
+  - key: cli-tui
+    tags: [cli/tui]
+    desc: Terminal / CLI utilities, TUIs, tools that streamline the terminal workflow.
+  - key: vibe-coding
+    tags: [vibe-coding, repo/trending]
+    desc: Rising GitHub repos, viral AI frameworks, open-source automation, agent-driven build tools.
+  - key: agentic-saas
+    tags: [ai/saas, ai/tool-pairing]
+    desc: >
+      Agentic tool-pairing & AI SaaS — mission-control dashboards, enterprise Claude
+      management, multimodal extensions (video / voice / browser automation).
