@@ -10,6 +10,7 @@ config/*.local.yaml
 *.key
 *.pem
 cookies.txt
+accounts.db
 *credentials*
 *secret*
 !*.example*

@@ -28,11 +28,20 @@ rss:
     - https://openai.com/news/rss.xml
     # product launches — topic-filtered downstream by triage ("ProductHunt, not everything")
     - https://www.producthunt.com/feed
-x:
+x:                      # free headless reads via twscrape (your Firefox cookies; no API key)
   enabled: true
-  search_terms: ["claude code", "agentic coding", "token optimization", "TUI", "vibe coding"]
-  accounts: []          # seed key handles (without @)
-  per_query: 10
+  account: stevengonsalvez   # label for the twscrape account (loads your saved x.com cookies)
+  search_terms: ["claude code", "agentic coding", "context engineering", "coding agent", "vibe coding"]
+  min_likes: 10         # drop zero-engagement noise from search results
+  accounts:             # curators + high-signal follows — all their tweets kept, listicles exploded
+    - sentient_agency
+    - levelsio
+    - theo
+    - skirano
+    - bcherny
+    - mattpocockuk
+  per_query: 12
+  explode_min_links: 3  # tweets with >=N external links → one signal per embedded link (listicle explode)
 gmail:
   enabled: true
   label: newsletters
