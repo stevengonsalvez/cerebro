@@ -9,6 +9,7 @@ description = "placeholder/example files contain no real secrets"
 paths = [
   '''\.env\.example''',
   '''config/settings\.example\.yaml''',
+  '''accounts\.db''',
 ]
 # Allow obvious placeholder tokens so examples don't trip entropy rules.
 regexes = [
