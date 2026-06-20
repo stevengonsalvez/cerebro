@@ -12,7 +12,7 @@ from .base import http_get, now_iso
 H2_RE = re.compile(r'<h2 class="h3 lh-condensed">(.*?)</h2>', re.S)
 REPO_RE = re.compile(r'href="/([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)"')
 DESC_RE = re.compile(r'<p class="col-9[^"]*"[^>]*>(.*?)</p>', re.S)
-STARS_RE = re.compile(r'([\d,]+)\s+stars today')
+STARS_RE = re.compile(r'([\d,]+)\s+stars\s+(?:today|this week|this month)')
 
 
 def fetch(cfg: dict, settings) -> list[Signal]:
