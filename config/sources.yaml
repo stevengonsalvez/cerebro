@@ -12,6 +12,12 @@ github_trending:        # "GitHunt" — repos making the biggest moves (stars ga
   enabled: true
   since: [daily, weekly] # str or list; daily catches today's movers, weekly the sustained ones
   languages: []          # [] = all languages
+ossinsight:             # GitHub star-velocity (most stars GAINED in the window) via api.ossinsight.io
+  enabled: true
+  period: [past_week]    # past_24_hours | past_week | past_month (str or list)
+  languages: [All]
+  min_stars: 20          # min stars gained in the period
+  max_items: 40
 rss:
   enabled: true
   limit: 20
