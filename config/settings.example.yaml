@@ -10,6 +10,7 @@ depth:
   score_threshold: 0.5
 
 dedup_days: 14
+prerank_keep: 180        # cheap interest pre-rank keeps top-N before the LLM triage (saves tokens)
 
 # LLM runs via Claude Code on the machine (`claude -p --model <alias>`). No API key.
 models:

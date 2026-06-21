@@ -16,6 +16,7 @@ class Settings:
     dry_run: bool
     depth: dict
     dedup_days: int
+    prerank_keep: int
     models: dict
     ntfy_topic: str
     schedule: dict
@@ -42,6 +43,7 @@ def load(dry_run_override: bool | None = None) -> Settings:
         dry_run=dry,
         depth=s.get("depth", {"min": 15, "max": 25, "score_threshold": 0.5}),
         dedup_days=s.get("dedup_days", 14),
+        prerank_keep=s.get("prerank_keep", 180),
         models=s.get("models", {"triage": "haiku", "digest": "sonnet"}),
         ntfy_topic=s.get("ntfy", {}).get("topic", ""),
         schedule=s.get("schedule", {"hour": 7, "minute": 0}),

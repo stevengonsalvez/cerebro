@@ -5,7 +5,7 @@ import datetime
 from .config import Settings
 from .llm import claude, digest, triage
 from .models import RunStats
-from .process import dedup, extract, junkgate
+from .process import dedup, extract, junkgate, prerank
 from .sink import notify, vault
 from .sources import SOURCES
 from .state import State
@@ -37,8 +37,10 @@ def run(settings: Settings) -> tuple[RunStats, dict]:
     # 2. funnel: junk-gate → dedup → triage → extract top-N → digest
     cand = dedup.dedupe(junkgate.filter(raw), state, settings.dedup_days)
     st.after_dedup = len(cand)
+    ranked = prerank.prerank(cand, settings, settings.prerank_keep)   # cheap pre-rank → fewer LLM calls
+    print(f"[prerank] {len(cand)} → {len(ranked)} to triage")
     meter = claude.new_meter()
-    kept = triage.triage(cand, settings, meter=meter)
+    kept = triage.triage(ranked, settings, meter=meter)
     st.after_triage = len(kept)
     top = kept[: settings.depth.get("max", 25)]
     extract.enrich(top)
@@ -50,7 +52,7 @@ def run(settings: Settings) -> tuple[RunStats, dict]:
 
     # 3. write + remember (mark every candidate so tomorrow doesn't re-triage them) + notify
     paths = vault.write(date, briefing, top, settings, st)
-    for s in cand:
+    for s in ranked:        # mark only LLM-evaluated items; pre-rank-dropped tail re-evaluates cheaply tomorrow
         state.mark(s)
     notify.push(st, paths["daily"], settings)
     state.log_run(st)
