@@ -56,6 +56,7 @@ def triage(signals: list[Signal], settings, batch: int = 60, meter: dict | None 
         s.score = float(r.get("score", 0) or 0)
         s.category = r.get("category", "") or ""
         s.tags = r.get("tags") or []
+        s.meta["reason"] = (r.get("reason") or "").strip()
         if s.score >= threshold:
             out.append(s)
     out.sort(key=lambda s: s.score, reverse=True)

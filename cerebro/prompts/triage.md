@@ -14,4 +14,4 @@ ITEMS (JSON):
 {items}
 
 Return ONLY a JSON array — one object per item, no prose, no code fences:
-[{{"id": <int>, "score": <float>, "category": "<category key or empty string>", "tags": ["..."]}}]
+[{{"id": <int>, "score": <float>, "category": "<category key or empty string>", "tags": ["..."], "reason": "<=12 words: why it matters / why this score>"}}]

@@ -9,6 +9,9 @@ def _alias(title: str) -> str:
 
 def _atomic(s: Signal) -> str:
     body = (s.clean_text[:600].strip() or s.title)
+    reason = (s.meta.get("reason") or "").replace('"', "'")
+    rline = f'reason: "{reason}"\n' if reason else ""
+    rquote = f"> {reason}\n\n" if reason else ""
     return (
         f"---\n"
         f"category: {s.category or 'misc'}\n"
@@ -16,9 +19,10 @@ def _atomic(s: Signal) -> str:
         f"source: {s.source}\n"
         f"url: {s.url}\n"
         f"score: {s.score:.2f}\n"
+        f"{rline}"
         f"captured: {s.captured}\n"
         f"---\n"
-        f"# {s.title}\n\n{body}\n\n[Open ↗]({s.url})\n"
+        f"# {s.title}\n\n{rquote}{body}\n\n[Open ↗]({s.url})\n"
     )
 
 
