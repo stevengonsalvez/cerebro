@@ -12,6 +12,8 @@ def _atomic(s: Signal) -> str:
     reason = (s.meta.get("reason") or "").replace('"', "'")
     rline = f'reason: "{reason}"\n' if reason else ""
     rquote = f"> {reason}\n\n" if reason else ""
+    disc = (s.meta.get("discussion") or "").strip()
+    dsec = f"\n\n## Community take\n{disc}\n" if disc else ""
     return (
         f"---\n"
         f"category: {s.category or 'misc'}\n"
@@ -22,7 +24,7 @@ def _atomic(s: Signal) -> str:
         f"{rline}"
         f"captured: {s.captured}\n"
         f"---\n"
-        f"# {s.title}\n\n{rquote}{body}\n\n[Open ↗]({s.url})\n"
+        f"# {s.title}\n\n{rquote}{body}{dsec}\n\n[Open ↗]({s.url})\n"
     )
 
 

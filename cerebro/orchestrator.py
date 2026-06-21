@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from .config import Settings
 from .llm import claude, digest, triage
 from .models import RunStats
-from .process import dedup, extract, junkgate, prerank
+from .process import comments, dedup, extract, junkgate, prerank
 from .sink import notify, vault
 from .sources import SOURCES
 from .state import State
@@ -52,6 +52,7 @@ def run(settings: Settings) -> tuple[RunStats, dict]:
     st.after_triage = len(kept)
     top = kept[: settings.depth.get("max", 25)]
     extract.enrich(top)
+    comments.enrich(top, settings, meter=meter)   # HN community take on the top-N
     briefing = digest.digest(top, settings, meter=meter)
     st.digested = len(top)
     st.input_tokens, st.output_tokens = meter["input_tokens"], meter["output_tokens"]
