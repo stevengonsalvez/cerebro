@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .config import Settings
 from .llm import claude, digest, triage
@@ -16,21 +17,28 @@ def run(settings: Settings) -> tuple[RunStats, dict]:
     date = datetime.date.today().isoformat()
     state = State()
 
-    # 1. fetch all enabled sources (per-source isolation; X failure noted, not fatal)
-    raw, x_ok = [], True
-    for name, cfg in settings.sources.items():
-        if not cfg.get("enabled") or name not in SOURCES:
-            continue
+    # 1. fetch all enabled sources concurrently (per-source isolation; X failure noted, not fatal)
+    jobs = [(n, c) for n, c in settings.sources.items() if c.get("enabled") and n in SOURCES]
+
+    def _run(name, cfg):
         try:
-            got = SOURCES[name](cfg, settings)
+            return name, SOURCES[name](cfg, settings), None
+        except Exception as e:  # noqa: BLE001 — one bad source must not sink the run
+            return name, [], e
+
+    raw, x_ok = [], True
+    with ThreadPoolExecutor(max_workers=max(len(jobs), 1)) as ex:
+        for fut in as_completed([ex.submit(_run, n, c) for n, c in jobs]):
+            name, got, err = fut.result()
+            if err is not None:
+                print(f"[warn] source {name} failed: {type(err).__name__}: {err}")
+                if name == "x":
+                    x_ok = False
+                continue
             raw += got
+            print(f"[src] {name:16} {len(got)}")
             if name == "x" and not got:
                 x_ok = False
-            print(f"[src] {name:16} {len(got)}")
-        except Exception as e:  # noqa: BLE001 — one bad source must not sink the run
-            if name == "x":
-                x_ok = False
-            print(f"[warn] source {name} failed: {type(e).__name__}: {e}")
 
     st = RunStats(run_id=run_id, raw=len(raw), dry_run=settings.dry_run, x_ok=x_ok)
 
