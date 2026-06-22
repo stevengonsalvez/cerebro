@@ -23,6 +23,10 @@ CREATE TABLE IF NOT EXISTS runs (
   raw_count   INTEGER, after_dedup INTEGER, after_triage INTEGER, digested INTEGER,
   dry_run     INTEGER, x_ok INTEGER, error TEXT
 );
+CREATE TABLE IF NOT EXISTS source_health (
+  run_id TEXT, source TEXT, count INTEGER, ok INTEGER, ts TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sh_source ON source_health(source);
 """
 
 
@@ -75,6 +79,20 @@ class State:
              st.cost_usd, st.llm_calls),
         )
         self.db.commit()
+
+    def log_source(self, run_id: str, source: str, count: int, ok: bool) -> None:
+        self.db.execute(
+            "INSERT INTO source_health(run_id,source,count,ok,ts) VALUES(?,?,?,?,datetime('now'))",
+            (run_id, source, count, int(ok)),
+        )
+        self.db.commit()
+
+    def source_summary(self) -> list[tuple]:
+        return self.db.execute(
+            "SELECT source, COUNT(*) AS runs, ROUND(AVG(count),1) AS avg, "
+            "SUM(count=0 OR ok=0) AS zero_or_fail, MAX(ts) AS last_seen "
+            "FROM source_health GROUP BY source ORDER BY source"
+        ).fetchall()
 
     def close(self) -> None:
         self.db.close()

@@ -30,6 +30,7 @@ def run(settings: Settings) -> tuple[RunStats, dict]:
     with ThreadPoolExecutor(max_workers=max(len(jobs), 1)) as ex:
         for fut in as_completed([ex.submit(_run, n, c) for n, c in jobs]):
             name, got, err = fut.result()
+            state.log_source(run_id, name, len(got), err is None)
             if err is not None:
                 print(f"[warn] source {name} failed: {type(err).__name__}: {err}")
                 if name == "x":

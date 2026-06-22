@@ -11,8 +11,19 @@ def main() -> None:
     )
     ap.add_argument("--dry-run", action="store_true",
                     help="write to _scratch/, mute ntfy")
+    ap.add_argument("--health", action="store_true",
+                    help="print per-source yield/failure history and exit")
     ap.add_argument("--version", action="version", version=f"cerebro {__version__}")
     args = ap.parse_args()
+
+    if args.health:
+        from .state import State
+        s = State()
+        print(f"{'source':16}{'runs':>6}{'avg':>8}{'zero/fail':>11}   last_seen")
+        for src, runs, avg, zf, last in s.source_summary():
+            print(f"{src:16}{runs:>6}{avg:>8}{zf:>11}   {last}")
+        s.close()
+        return
 
     from .config import load
     from .orchestrator import run
