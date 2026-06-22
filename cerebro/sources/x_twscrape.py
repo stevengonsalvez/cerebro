@@ -36,6 +36,12 @@ def _firefox_cookies() -> dict:
     return {}
 
 
+def _env_cookies() -> dict:
+    """Portable fallback for machines without Firefox: X_AUTH_TOKEN + X_CT0 from env/.env."""
+    at, ct0 = os.environ.get("X_AUTH_TOKEN"), os.environ.get("X_CT0")
+    return {"auth_token": at, "ct0": ct0} if at and ct0 else {}
+
+
 def _links(t) -> list[str]:
     out = []
     for link in (getattr(t, "links", None) or []):
@@ -68,9 +74,9 @@ def _to_signals(t, query: str, explode_min: int) -> list[Signal]:
 async def _collect(cfg: dict) -> list[Signal]:
     from twscrape import API
 
-    ck = _firefox_cookies()
+    ck = _firefox_cookies() or _env_cookies()
     if not ck:
-        raise RuntimeError("no x.com cookies in Firefox — log into x.com in Firefox")
+        raise RuntimeError("no x.com cookies — log into x.com in Firefox, or set X_AUTH_TOKEN + X_CT0")
     cookie_str = "; ".join(f"{k}={v}" for k, v in ck.items())
 
     api = API(ACCOUNTS_DB)
