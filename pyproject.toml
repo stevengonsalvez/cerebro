@@ -3,7 +3,7 @@ name = "cerebro"
 version = "0.1.0"
 description = "Daily tech-signal intelligence pipeline → Obsidian"
 requires-python = ">=3.11"
-dependencies = ["pyyaml", "requests", "feedparser", "trafilatura"]
+dependencies = ["pyyaml", "requests", "feedparser", "trafilatura", "twscrape"]
 
 [build-system]
 requires = ["setuptools"]
