@@ -1,120 +1,141 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 720" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 760" font-family="ui-sans-serif,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#566"/>
     </marker>
+    <marker id="arrfb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#00897b"/>
+    </marker>
     <style>
-      .t{font-weight:700;font-size:13px;fill:#10243e}
-      .s{font-size:10px;fill:#5b6b7d}
-      .lbl{font-weight:700;font-size:11px;fill:#10243e}
+      .src{font-weight:700;font-size:10px;fill:#10243e}
+      .srcs{font-size:8px;fill:#5b6b7d}
+      .lbl{font-weight:700;font-size:12px;fill:#10243e}
       .sub{font-size:9.5px;fill:#5b6b7d}
       .band{font-size:11px;fill:#33485c}
       .ln{stroke:#566;stroke-width:1.6;fill:none}
+      .fb{stroke:#00897b;stroke-width:1.6;fill:none;stroke-dasharray:5 4}
+      .fbt{font-size:9px;font-weight:700;fill:#00897b}
     </style>
   </defs>
 
-  <rect width="900" height="720" fill="#ffffff"/>
+  <rect width="900" height="760" fill="#ffffff"/>
   <text x="450" y="30" text-anchor="middle" font-weight="800" font-size="19" fill="#10243e">CEREBRO — daily tech-signal pipeline</text>
-  <text x="450" y="48" text-anchor="middle" class="s">local-first · Python · Claude Code (no API keys) → Obsidian</text>
+  <text x="450" y="48" text-anchor="middle" class="srcs" font-size="10">local-first · Python · Claude Code (no API keys) → Obsidian · 10 channels</text>
 
-  <!-- SOURCES -->
+  <!-- SOURCES (10) -->
   <g>
-    <rect x="20"  y="66" width="132" height="50" rx="8" fill="#e7f0fd" stroke="#4a86e8"/>
-    <text x="86"  y="86" text-anchor="middle" class="t">Hacker News</text>
-    <text x="86"  y="103" text-anchor="middle" class="s">top + show · Algolia</text>
-
-    <rect x="164" y="66" width="132" height="50" rx="8" fill="#e7f0fd" stroke="#4a86e8"/>
-    <text x="230" y="86" text-anchor="middle" class="t">Reddit</text>
-    <text x="230" y="103" text-anchor="middle" class="s">6 subs · per-sub RSS</text>
-
-    <rect x="308" y="66" width="132" height="50" rx="8" fill="#e7f0fd" stroke="#4a86e8"/>
-    <text x="374" y="86" text-anchor="middle" class="t">GitHub</text>
-    <text x="374" y="103" text-anchor="middle" class="s">trending · daily+weekly</text>
-
-    <rect x="452" y="66" width="132" height="50" rx="8" fill="#e7f0fd" stroke="#4a86e8"/>
-    <text x="518" y="86" text-anchor="middle" class="t">RSS</text>
-    <text x="518" y="103" text-anchor="middle" class="s">10 curated feeds</text>
-
-    <rect x="596" y="66" width="132" height="50" rx="8" fill="#e7f0fd" stroke="#4a86e8"/>
-    <text x="662" y="86" text-anchor="middle" class="t">Gmail</text>
-    <text x="662" y="103" text-anchor="middle" class="s">newsletters · gws</text>
-
-    <rect x="740" y="66" width="140" height="50" rx="8" fill="#e7f0fd" stroke="#4a86e8"/>
-    <text x="810" y="86" text-anchor="middle" class="t">X</text>
-    <text x="810" y="103" text-anchor="middle" class="s">twscrape · saved cookies</text>
+    <rect x="6"   y="66" width="82" height="46" rx="7" fill="#e7f0fd" stroke="#4a86e8"/>
+    <text x="47"  y="88"  text-anchor="middle" class="src">Hacker News</text><text x="47"  y="103" text-anchor="middle" class="srcs">front-page · Algolia</text>
+    <rect x="95"  y="66" width="82" height="46" rx="7" fill="#e7f0fd" stroke="#4a86e8"/>
+    <text x="136" y="88"  text-anchor="middle" class="src">Show HN</text><text x="136" y="103" text-anchor="middle" class="srcs">Algolia · showcase</text>
+    <rect x="184" y="66" width="82" height="46" rx="7" fill="#e7f0fd" stroke="#4a86e8"/>
+    <text x="225" y="88"  text-anchor="middle" class="src">Launch HN</text><text x="225" y="103" text-anchor="middle" class="srcs">YC launches</text>
+    <rect x="273" y="66" width="82" height="46" rx="7" fill="#e7f0fd" stroke="#4a86e8"/>
+    <text x="314" y="88"  text-anchor="middle" class="src">YC RFS</text><text x="314" y="103" text-anchor="middle" class="srcs">ideas · scrape</text>
+    <rect x="362" y="66" width="82" height="46" rx="7" fill="#e7f0fd" stroke="#4a86e8"/>
+    <text x="403" y="88"  text-anchor="middle" class="src">Reddit</text><text x="403" y="103" text-anchor="middle" class="srcs">6 subs · RSS</text>
+    <rect x="451" y="66" width="82" height="46" rx="7" fill="#e7f0fd" stroke="#4a86e8"/>
+    <text x="492" y="88"  text-anchor="middle" class="src">GitHub</text><text x="492" y="103" text-anchor="middle" class="srcs">trending scrape</text>
+    <rect x="540" y="66" width="82" height="46" rx="7" fill="#e7f0fd" stroke="#4a86e8"/>
+    <text x="581" y="88"  text-anchor="middle" class="src">OSSInsight</text><text x="581" y="103" text-anchor="middle" class="srcs">star-velocity</text>
+    <rect x="629" y="66" width="82" height="46" rx="7" fill="#e7f0fd" stroke="#4a86e8"/>
+    <text x="670" y="88"  text-anchor="middle" class="src">RSS</text><text x="670" y="103" text-anchor="middle" class="srcs">10 feeds</text>
+    <rect x="718" y="66" width="82" height="46" rx="7" fill="#e7f0fd" stroke="#4a86e8"/>
+    <text x="759" y="88"  text-anchor="middle" class="src">Gmail</text><text x="759" y="103" text-anchor="middle" class="srcs">newsletters · gws</text>
+    <rect x="807" y="66" width="82" height="46" rx="7" fill="#e7f0fd" stroke="#4a86e8"/>
+    <text x="848" y="88"  text-anchor="middle" class="src">X</text><text x="848" y="103" text-anchor="middle" class="srcs">twscrape</text>
   </g>
 
   <!-- converge rail -->
-  <path class="ln" d="M86 116 V128 M230 116 V128 M374 116 V128 M518 116 V128 M662 116 V128 M810 116 V128"/>
-  <path class="ln" d="M86 128 H810"/>
-  <path class="ln" d="M450 128 V150" marker-end="url(#arr)"/>
+  <path class="ln" d="M47 112 V124 M136 112 V124 M225 112 V124 M314 112 V124 M403 112 V124 M492 112 V124 M581 112 V124 M670 112 V124 M759 112 V124 M848 112 V124"/>
+  <path class="ln" d="M47 124 H848"/>
+  <path class="ln" d="M448 124 V140" marker-end="url(#arr)"/>
 
   <!-- FETCH -->
-  <rect x="20" y="152" width="860" height="34" rx="7" fill="#f1f4f8" stroke="#9aa7b4"/>
-  <text x="450" y="173" text-anchor="middle" class="lbl">fetch — per-source try/except · X &amp; Gmail graceful-skip · normalize → list[Signal]</text>
-  <path class="ln" d="M450 186 V206" marker-end="url(#arr)"/>
+  <rect x="20" y="142" width="860" height="34" rx="7" fill="#f1f4f8" stroke="#9aa7b4"/>
+  <text x="450" y="163" text-anchor="middle" class="lbl">fetch — concurrent (ThreadPoolExecutor) · per-source try/except · X &amp; Gmail graceful-skip · → list[Signal] · per-source health logged</text>
+  <path class="ln" d="M450 176 V190" marker-end="url(#arr)"/>
 
   <!-- JUNK-GATE -->
-  <rect x="170" y="208" width="560" height="40" rx="8" fill="#ede7f6" stroke="#7e57c2"/>
-  <text x="450" y="226" text-anchor="middle" class="lbl">junk-gate</text>
-  <text x="450" y="240" text-anchor="middle" class="sub">drop empty / non-English titles — lenient; triage does the real filtering</text>
-  <path class="ln" d="M450 248 V268" marker-end="url(#arr)"/>
+  <rect x="190" y="192" width="520" height="34" rx="8" fill="#ede7f6" stroke="#7e57c2"/>
+  <text x="450" y="209" text-anchor="middle" class="lbl">junk-gate</text>
+  <text x="450" y="221" text-anchor="middle" class="sub">drop empty / non-English titles — lenient; triage does the real filtering</text>
+  <path class="ln" d="M450 226 V240" marker-end="url(#arr)"/>
 
   <!-- DEDUP / WATERMARK -->
-  <rect x="170" y="270" width="560" height="66" rx="8" fill="#ede7f6" stroke="#7e57c2"/>
-  <text x="450" y="290" text-anchor="middle" class="lbl">dedup + watermark</text>
-  <text x="450" y="307" text-anchor="middle" class="sub">canonical URL → sha256 url-hash + 63-bit simhash</text>
-  <text x="450" y="322" text-anchor="middle" class="sub">drop in-run dups · anything in the 14-day SQLite <tspan font-weight="700">seen</tspan> window · simhash Hamming ≤ 3 near-dups</text>
-  <path class="ln" d="M450 336 V356" marker-end="url(#arr)"/>
+  <rect x="190" y="242" width="520" height="58" rx="8" fill="#ede7f6" stroke="#7e57c2"/>
+  <text x="450" y="261" text-anchor="middle" class="lbl">dedup + watermark</text>
+  <text x="450" y="277" text-anchor="middle" class="sub">canonical URL → sha256 url-hash + 63-bit simhash</text>
+  <text x="450" y="291" text-anchor="middle" class="sub">drop in-run dups · 14-day SQLite <tspan font-weight="700">seen</tspan> window · simhash Hamming ≤ 3 near-dups</text>
+  <path class="ln" d="M450 300 V314" marker-end="url(#arr)"/>
+
+  <!-- PRE-RANK (software) -->
+  <rect x="190" y="316" width="520" height="42" rx="8" fill="#ede7f6" stroke="#7e57c2"/>
+  <text x="450" y="334" text-anchor="middle" class="lbl">pre-rank — software, no LLM</text>
+  <text x="450" y="349" text-anchor="middle" class="sub">interest-term overlap ± learned feedback · keep top 180 (≈ halves triage tokens)</text>
+  <path class="ln" d="M450 358 V372" marker-end="url(#arr)"/>
 
   <!-- TRIAGE (LLM) -->
-  <rect x="170" y="358" width="560" height="48" rx="8" fill="#fff3e0" stroke="#fb8c00"/>
-  <text x="450" y="378" text-anchor="middle" class="lbl">triage — Claude Code  claude -p --model haiku  (claude-haiku-4-5)</text>
-  <text x="450" y="394" text-anchor="middle" class="sub">batched 60/call · strict-JSON score + category + tags · keep score ≥ 0.5, sort desc</text>
-  <path class="ln" d="M450 406 V426" marker-end="url(#arr)"/>
+  <rect x="190" y="374" width="520" height="44" rx="8" fill="#fff3e0" stroke="#fb8c00"/>
+  <text x="450" y="392" text-anchor="middle" class="lbl">triage — claude -p --model haiku  (claude-haiku-4-5)</text>
+  <text x="450" y="408" text-anchor="middle" class="sub">batched 60/call · JSON score + category + tags + reason · keep ≥ 0.5, sort desc</text>
+  <path class="ln" d="M450 418 V432" marker-end="url(#arr)"/>
 
-  <!-- EXTRACT + DIGEST -->
-  <rect x="170" y="428" width="560" height="56" rx="8" fill="#fff3e0" stroke="#fb8c00"/>
-  <text x="450" y="448" text-anchor="middle" class="lbl">top 25 → trafilatura extract → digest</text>
-  <text x="450" y="465" text-anchor="middle" class="sub">Claude Code  claude -p --model sonnet  (claude-sonnet-4-6)</text>
-  <text x="450" y="478" text-anchor="middle" class="sub">→ themed "explain-to-me" Markdown briefing</text>
-  <path class="ln" d="M450 484 V504" marker-end="url(#arr)"/>
+  <!-- EXTRACT + COMMENTS -->
+  <rect x="190" y="434" width="520" height="44" rx="8" fill="#fff3e0" stroke="#fb8c00"/>
+  <text x="450" y="452" text-anchor="middle" class="lbl">top 25 → trafilatura extract → HN comment-enrich</text>
+  <text x="450" y="468" text-anchor="middle" class="sub">fetch + clean pages · batched Haiku "community take" on HN / Show HN / Launch HN threads</text>
+  <path class="ln" d="M450 478 V492" marker-end="url(#arr)"/>
+
+  <!-- DIGEST -->
+  <rect x="190" y="494" width="520" height="40" rx="8" fill="#fff3e0" stroke="#fb8c00"/>
+  <text x="450" y="512" text-anchor="middle" class="lbl">digest — claude -p --model sonnet  (claude-sonnet-4-6)</text>
+  <text x="450" y="527" text-anchor="middle" class="sub">→ themed "explain-to-me" Markdown briefing</text>
+  <path class="ln" d="M450 534 V548" marker-end="url(#arr)"/>
 
   <!-- VAULT -->
-  <rect x="170" y="506" width="560" height="56" rx="8" fill="#e8f5e9" stroke="#43a047"/>
-  <text x="450" y="526" text-anchor="middle" class="lbl">Obsidian vault  (~/d/git/cerebro-vault)</text>
-  <text x="450" y="543" text-anchor="middle" class="sub">Daily/&lt;date&gt;.md briefing  +  Signals/&lt;hash&gt;.md atomic notes</text>
-  <text x="450" y="556" text-anchor="middle" class="sub">Dataview frontmatter · token usage · wikilinks  ·  dry-run → _scratch/</text>
+  <rect x="190" y="550" width="520" height="58" rx="8" fill="#e8f5e9" stroke="#43a047"/>
+  <text x="450" y="570" text-anchor="middle" class="lbl">Obsidian vault  (~/d/git/cerebro-vault)</text>
+  <text x="450" y="586" text-anchor="middle" class="sub">Daily/&lt;date&gt;.md briefing + Signals/&lt;hash&gt;.md atomic notes (title · reason · rating · community take)</text>
+  <text x="450" y="599" text-anchor="middle" class="sub">Dataview frontmatter · wikilinks · token usage · dry-run → _scratch/</text>
 
   <!-- ntfy -->
-  <rect x="752" y="510" width="128" height="48" rx="8" fill="#fce4ec" stroke="#e91e63"/>
-  <text x="816" y="531" text-anchor="middle" class="lbl">ntfy push</text>
-  <text x="816" y="546" text-anchor="middle" class="sub">curl (muted in dry-run)</text>
-  <path class="ln" d="M730 534 H752" marker-end="url(#arr)"/>
+  <rect x="724" y="556" width="156" height="46" rx="8" fill="#fce4ec" stroke="#e91e63"/>
+  <text x="802" y="576" text-anchor="middle" class="lbl">ntfy push</text>
+  <text x="802" y="591" text-anchor="middle" class="sub">curl (muted in dry-run)</text>
+  <path class="ln" d="M710 579 H724" marker-end="url(#arr)"/>
 
-  <!-- state (left) -->
-  <rect x="20" y="358" width="132" height="128" rx="8" fill="#eef2f6" stroke="#9aa7b4"/>
-  <text x="86" y="378" text-anchor="middle" class="lbl">SQLite state</text>
-  <text x="86" y="398" text-anchor="middle" class="sub">seen — dedup</text>
-  <text x="86" y="412" text-anchor="middle" class="sub">(the watermark)</text>
-  <text x="86" y="432" text-anchor="middle" class="sub">runs — stats</text>
-  <text x="86" y="446" text-anchor="middle" class="sub">+ token usage</text>
-  <text x="86" y="470" text-anchor="middle" class="sub">gitignored</text>
-  <path class="ln" stroke-dasharray="3 3" d="M152 312 H170"/>
-  <path class="ln" stroke-dasharray="3 3" d="M152 382 H170"/>
+  <!-- FEEDBACK LOOP (vault → pre-rank + triage) -->
+  <path class="fb" d="M190 579 H150 V337 H190" marker-end="url(#arrfb)"/>
+  <path class="fb" d="M150 396 H190" marker-end="url(#arrfb)"/>
+  <text x="86"  y="486" text-anchor="middle" class="fbt">feedback loop</text>
+  <text x="86"  y="499" text-anchor="middle" class="fbt">rate notes 1–5 →</text>
+  <text x="86"  y="512" text-anchor="middle" class="fbt">pre-rank + triage</text>
+
+  <!-- SQLite state (right) -->
+  <rect x="724" y="374" width="156" height="120" rx="8" fill="#eef2f6" stroke="#9aa7b4"/>
+  <text x="802" y="394" text-anchor="middle" class="lbl">SQLite state</text>
+  <text x="802" y="414" text-anchor="middle" class="sub"><tspan font-weight="700">seen</tspan> — dedup watermark</text>
+  <text x="802" y="434" text-anchor="middle" class="sub"><tspan font-weight="700">runs</tspan> — stats + tokens</text>
+  <text x="802" y="454" text-anchor="middle" class="sub"><tspan font-weight="700">source_health</tspan> — yield</text>
+  <text x="802" y="474" text-anchor="middle" class="sub">per source (--health)</text>
+  <text x="802" y="488" text-anchor="middle" class="srcs" font-size="8.5">gitignored</text>
+  <path class="ln" stroke-dasharray="3 3" d="M710 271 H724"/>
+  <path class="ln" stroke-dasharray="3 3" d="M710 159 H724 V374"/>
 
   <!-- bottom band -->
-  <rect x="20" y="600" width="860" height="86" rx="10" fill="#f6f8fa" stroke="#dde3ea"/>
-  <text x="40" y="624" class="band" font-weight="700">Scheduler</text>
-  <text x="40" y="642" class="band">launchd · daily 07:00</text>
-  <text x="40" y="658" class="band">(catch-up on wake)</text>
+  <rect x="20" y="628" width="860" height="112" rx="10" fill="#f6f8fa" stroke="#dde3ea"/>
+  <text x="40" y="652" class="band" font-weight="700">Scheduler</text>
+  <text x="40" y="670" class="band">launchd · daily 07:00</text>
+  <text x="40" y="686" class="band">(catch-up on wake)</text>
 
-  <text x="330" y="624" class="band" font-weight="700">Secrets</text>
-  <text x="330" y="642" class="band">no API keys — Claude Code login</text>
-  <text x="330" y="658" class="band">X via saved Firefox cookies · gws OAuth</text>
-  <text x="330" y="674" class="band">scanned by gitleaks + GitGuardian (CI)</text>
+  <text x="330" y="652" class="band" font-weight="700">Secrets</text>
+  <text x="330" y="670" class="band">no API keys — Claude Code login</text>
+  <text x="330" y="686" class="band">X via saved cookies / .env · gws OAuth</text>
+  <text x="330" y="702" class="band">gitleaks + GitGuardian (CI) · .env in Bitwarden</text>
 
-  <text x="650" y="624" class="band" font-weight="700">Cost / run</text>
-  <text x="650" y="642" class="band">~575k tokens · ~10 claude calls</text>
-  <text x="650" y="658" class="band">covered by Claude Code subscription</text>
+  <text x="650" y="652" class="band" font-weight="700">Cost / run</text>
+  <text x="650" y="670" class="band">≈235k tokens cold · ≈109k warm</text>
+  <text x="650" y="686" class="band">2–4 claude calls · ~$0.34–0.59 equiv</text>
+  <text x="650" y="702" class="band">covered by Claude Code subscription</text>
 </svg>
