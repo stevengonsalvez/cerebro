@@ -37,22 +37,26 @@ on the machine. Target: ~10 min/run, covered by your Claude Code subscription.
 ## How it works
 
 ```
-6 sources ─▶ fetch ─▶ junk-gate ─▶ dedup(+watermark) ─▶ Haiku triage
-                                                            │ keep score ≥ 0.5
-                                                            ▼
-   Obsidian vault ◀─ Sonnet digest ◀─ trafilatura extract ◀─ top 25
-   (daily + atomic notes)            (top 25 only)
+7 sources ─▶ fetch ─▶ junk-gate ─▶ dedup(+watermark) ─▶ pre-rank ─▶ Haiku triage
+   (concurrent)                                             ▲           │ keep ≥ 0.5
+                                            feedback ───────┘           ▼
+   Obsidian vault ◀─ Sonnet digest ◀─ HN comment-enrich ◀─ extract ◀─ top 25
+        │ you rate 1-5                                       (top 25)
+        └──▶ feedback: preference profile, fed back into pre-rank + triage next run
 ```
 
 | Stage | What it does | Code |
 |-------|--------------|------|
-| **fetch** | each source runs in its own try/except; X & Gmail skip gracefully if unavailable; everything normalizes to a `Signal` dataclass | `sources/*.py` |
+| **fetch** | every source runs concurrently, each in its own try/except; X & Gmail skip gracefully if unavailable; everything normalizes to a `Signal` dataclass | `sources/*.py` |
 | **junk-gate** | lenient — drops empty / mostly-non-English titles only. Real relevance is the triage pass (cheap enough to over-feed) | `process/junkgate.py` |
 | **dedup + watermark** | see [Watermark](#watermark) below | `process/dedup.py` |
-| **triage** | one `claude -p --model haiku` call per ~60 candidates; returns strict JSON `{score, category, tags}` scored against the interest matrix; keep `score ≥ 0.5`, sort | `llm/triage.py` |
+| **pre-rank** | pure-software gate (no LLM): scores each candidate on interest-matrix term overlap ± learned [feedback](#feedback), keeps the top `prerank_keep` (180). Roughly halves what triage pays for | `process/prerank.py` |
+| **triage** | one `claude -p --model haiku` call per ~60 candidates; returns strict JSON `{score, category, tags, reason}` scored against the interest matrix + your feedback; keep `score ≥ 0.5`, sort | `llm/triage.py` |
 | **extract** | `trafilatura` fetches + cleans the top-N pages (expensive, so post-triage only) | `process/extract.py` |
+| **comment-enrich** | for HN items, one batched Haiku call summarizes the discussion into a "Community take" on the note | `process/comments.py` |
 | **digest** | one `claude -p --model sonnet` call → themed "explain-to-me" Markdown briefing | `llm/digest.py` |
-| **sink** | writes the daily note + one atomic note per signal; `ntfy` push. `dry_run` → `_scratch/`, ntfy muted | `sink/vault.py`, `sink/notify.py` |
+| **sink** | writes the daily note + one atomic note per signal (with `reason`, `Community take`, fillable `rating:`); `ntfy` push. `dry_run` → `_scratch/`, ntfy muted | `sink/vault.py`, `sink/notify.py` |
+| **feedback** | recomputes a preference profile from your rated notes each run; nudges pre-rank + triage. Rated notes are never overwritten | `process/feedback.py` |
 
 ## Sources
 
@@ -89,6 +93,29 @@ after the run:
 
 Tune `dedup_days` in `config/settings.yaml`; the Hamming threshold in `process/dedup.py`.
 Trade-off: an item that scored < 0.5 today won't get a second look for 14 days.
+
+## Feedback
+
+CEREBRO learns from you with **zero extra UI** — you just set a number in Obsidian.
+Every atomic note ships with an empty `rating:` field in its frontmatter; put a **1–5**
+there on notes you loved or hated. Each run, `process/feedback.py` scans your rated
+`Signals/` notes and recomputes a preference profile:
+
+```
+rating ≥ 4  ─▶ liked terms   (title + tags)  ─┐
+rating ≤ 2  ─▶ disliked terms                 ├─▶ pre-rank boost  (+2 liked, −2 disliked)
+per-source / per-category mean rating         ─┴─▶ triage prompt  (source-trust + topic hints)
+```
+
+So a source you consistently rate 5 floats up and a topic you keep rating 1 sinks — no
+config edits. **Rated notes are never overwritten**, so your scores survive re-runs.
+
+## Source health
+
+Every run logs each source's item count and ok/fail into the SQLite `source_health` table.
+`cerebro --health` prints runs / avg-yield / zero-or-fail count / last-seen per source, so a
+source that silently dies (expired X cookie, GitHub layout change) shows up as a string of
+zeros instead of vanishing unnoticed.
 
 ## Configuration
 
@@ -139,6 +166,9 @@ pre-commit install                                     # local secret scanners
 # dry-run (writes to <vault>/_scratch/, ntfy muted)
 .venv/bin/python -m cerebro --dry-run
 
+# per-source yield/failure history (spot a silently-dead source)
+.venv/bin/python -m cerebro --health
+
 # go live (your call, after reviewing the _scratch/ briefing):
 #   1. set dry_run: false in config/settings.yaml
 #   2. load the daily 07:00 job
@@ -157,8 +187,9 @@ Source prerequisites (all self-auth, no keys stored by CEREBRO): **Claude Code**
 └── Signals/<url_hash>.md     # one atomic note per signal (Dataview-queryable)
 ```
 
-Atomic-note frontmatter: `category`, `tags`, `source`, `url`, `score`, `captured`. Filenames
-are the URL hash → idempotent re-runs.
+Atomic-note frontmatter: `title`, `category`, `tags`, `source`, `url`, `score`, `reason`
+(why triage kept it), `captured`, and a fillable `rating:` (see [Feedback](#feedback)).
+Filenames are the URL hash → idempotent re-runs.
 
 ## Cost
 
