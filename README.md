@@ -3,6 +3,10 @@
 > Scans the noise for the signals matching your profile.
 > A local-first, token-minimal daily tech-intelligence pipeline → Obsidian.
 
+<p align="center">
+  <img src="docs/architecture.svg" alt="CEREBRO — daily tech-signal pipeline: 10 sources through fetch, dedup, pre-rank, Haiku triage, comment-enrich, Sonnet digest, into an Obsidian vault, with a feedback loop" width="100%">
+</p>
+
 > 📖 **Read the explainer:** [explainers.stevengonsalvez.com/cerebro](https://explainers.stevengonsalvez.com/cerebro/) — architecture, sources, signals, and the full pipeline in one page.
 
 CEREBRO ingests raw tech signals from ten channels — Hacker News (front-page, **Show HN**,
@@ -12,8 +16,6 @@ X — filters them against a hyper-specific interest matrix, and writes a clean
 every day at 07:00 via `launchd`. The cheap filtering pass runs on Claude Haiku; the readable
 digest on Claude Sonnet. **No API keys** — it drives Claude Code on the machine. Target:
 ~10 min/run, covered by your Claude Code subscription.
-
-![CEREBRO architecture](docs/architecture.svg)
 
 ## Stack
 
