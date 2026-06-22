@@ -30,13 +30,16 @@ def _score(sig: Signal, terms: set[str]) -> int:
     return len(words & terms)
 
 
-def prerank(signals: list[Signal], settings, keep: int) -> list[Signal]:
-    """Keep the top `keep` candidates by interest-term overlap (records the score in meta)."""
+def prerank(signals: list[Signal], settings, keep: int, profile: dict | None = None) -> list[Signal]:
+    """Keep the top `keep` by interest-term overlap, boosted/penalized by learned feedback."""
     if len(signals) <= keep:
         return signals
     terms = _matrix_terms(settings.matrix)
+    liked = set((profile or {}).get("liked", []))
+    disliked = set((profile or {}).get("disliked", []))
     for s in signals:
-        s.meta["prerank"] = _score(s, terms)
+        words = set(re.findall(r"\w+", f"{s.title} {s.clean_text}".lower()))
+        s.meta["prerank"] = len(words & terms) + 2 * len(words & liked) - 2 * len(words & disliked)
     return sorted(signals, key=lambda s: s.meta.get("prerank", 0), reverse=True)[:keep]
 
 

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import re
+
 from ..models import Signal
+
+_RATED = re.compile(r"^rating:\s*[0-9]", re.M)   # a note you've scored — never clobber it
 
 
 def _alias(title: str) -> str:
@@ -16,6 +20,7 @@ def _atomic(s: Signal) -> str:
     dsec = f"\n\n## Community take\n{disc}\n" if disc else ""
     return (
         f"---\n"
+        f'title: "{_alias(s.title).replace(chr(34), chr(39))[:200]}"\n'
         f"category: {s.category or 'misc'}\n"
         f"tags: [{', '.join(s.tags)}]\n"
         f"source: {s.source}\n"
@@ -23,6 +28,7 @@ def _atomic(s: Signal) -> str:
         f"score: {s.score:.2f}\n"
         f"{rline}"
         f"captured: {s.captured}\n"
+        f"rating:\n"               # ← set 1-5 in Obsidian to teach CEREBRO what you value
         f"---\n"
         f"# {s.title}\n\n{rquote}{body}{dsec}\n\n[Open ↗]({s.url})\n"
     )
@@ -58,7 +64,10 @@ def write(date: str, briefing: str, signals: list[Signal], settings, stats=None)
     daily_dir.mkdir(parents=True, exist_ok=True)
     sig_dir.mkdir(parents=True, exist_ok=True)
     for s in signals:
-        (sig_dir / f"{s.url_hash}.md").write_text(_atomic(s))
+        p = sig_dir / f"{s.url_hash}.md"
+        if p.exists() and _RATED.search(p.read_text(errors="replace")[:600]):
+            continue                                  # preserve your rating
+        p.write_text(_atomic(s))
     daily = daily_dir / f"{date}.md"
     daily.write_text(_daily(date, briefing, signals, stats))
     return {"daily": str(daily), "signals_dir": str(sig_dir), "n": len(signals)}

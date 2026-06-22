@@ -36,11 +36,27 @@ def _score_batch(signals, base, matrix, tmpl, model, meter) -> dict:
     return {r["id"]: r for r in results if isinstance(r, dict) and "id" in r}
 
 
-def triage(signals: list[Signal], settings, batch: int = 60, meter: dict | None = None) -> list[Signal]:
+def _prefs_block(profile: dict | None) -> str:
+    if not profile or not profile.get("n"):
+        return ""
+    lines = []
+    if profile.get("liked"):
+        lines.append("rated-high topics (boost): " + ", ".join(profile["liked"][:15]))
+    if profile.get("disliked"):
+        lines.append("rated-low topics (penalize): " + ", ".join(profile["disliked"][:10]))
+    if profile.get("source_score"):
+        lines.append("source trust 1-5: " + ", ".join(f"{k}={v}" for k, v in profile["source_score"].items()))
+    if not lines:
+        return ""
+    return "\n\nUSER FEEDBACK (Stevie rated past signals — weight accordingly):\n- " + "\n- ".join(lines)
+
+
+def triage(signals: list[Signal], settings, batch: int = 60, meter: dict | None = None,
+           profile: dict | None = None) -> list[Signal]:
     """Score + categorize via Claude Code (haiku) in batches, keep score >= threshold, sort desc."""
     if not signals:
         return []
-    matrix = _matrix_block(settings.matrix)
+    matrix = _matrix_block(settings.matrix) + _prefs_block(profile)
     tmpl = (PROMPTS / "triage.md").read_text()
     model = settings.models.get("triage", "haiku")
     by_id: dict = {}

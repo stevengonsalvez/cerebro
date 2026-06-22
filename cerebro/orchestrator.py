@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from .config import Settings
 from .llm import claude, digest, triage
 from .models import RunStats
-from .process import comments, dedup, extract, junkgate, prerank
+from .process import comments, dedup, extract, feedback, junkgate, prerank
 from .sink import notify, vault
 from .sources import SOURCES
 from .state import State
@@ -43,12 +43,15 @@ def run(settings: Settings) -> tuple[RunStats, dict]:
     st = RunStats(run_id=run_id, raw=len(raw), dry_run=settings.dry_run, x_ok=x_ok)
 
     # 2. funnel: junk-gate → dedup → triage → extract top-N → digest
+    profile = feedback.load_profile(settings)   # learned from your rated vault notes
+    if profile["n"]:
+        print(f"[feedback] profile from {profile['n']} rated notes")
     cand = dedup.dedupe(junkgate.filter(raw), state, settings.dedup_days)
     st.after_dedup = len(cand)
-    ranked = prerank.prerank(cand, settings, settings.prerank_keep)   # cheap pre-rank → fewer LLM calls
+    ranked = prerank.prerank(cand, settings, settings.prerank_keep, profile)
     print(f"[prerank] {len(cand)} → {len(ranked)} to triage")
     meter = claude.new_meter()
-    kept = triage.triage(ranked, settings, meter=meter)
+    kept = triage.triage(ranked, settings, meter=meter, profile=profile)
     st.after_triage = len(kept)
     top = kept[: settings.depth.get("max", 25)]
     extract.enrich(top)
