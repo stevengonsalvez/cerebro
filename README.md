@@ -3,12 +3,15 @@
 > Scans the noise for the signals matching your profile.
 > A local-first, token-minimal daily tech-intelligence pipeline → Obsidian.
 
-CEREBRO ingests raw tech signals from six sources (Hacker News, Reddit, GitHub Trending,
-RSS, Gmail newsletters, X), filters them against a hyper-specific interest matrix, and
-writes a clean **"explain-to-me" briefing** plus atomic, Dataview-queryable notes into an
-Obsidian vault — every day at 07:00 via `launchd`. The cheap filtering pass runs on
-Claude Haiku; the readable digest on Claude Sonnet. **No API keys** — it drives Claude Code
-on the machine. Target: ~10 min/run, covered by your Claude Code subscription.
+> 📖 **Read the explainer:** [explainers.stevengonsalvez.com/cerebro](https://explainers.stevengonsalvez.com/cerebro/) — architecture, sources, signals, and the full pipeline in one page.
+
+CEREBRO ingests raw tech signals from ten channels — Hacker News (front-page, **Show HN**,
+**Launch HN**), **YC RFS**, Reddit, GitHub Trending, OSSInsight, RSS, Gmail newsletters, and
+X — filters them against a hyper-specific interest matrix, and writes a clean
+**"explain-to-me" briefing** plus atomic, Dataview-queryable notes into an Obsidian vault —
+every day at 07:00 via `launchd`. The cheap filtering pass runs on Claude Haiku; the readable
+digest on Claude Sonnet. **No API keys** — it drives Claude Code on the machine. Target:
+~10 min/run, covered by your Claude Code subscription.
 
 ![CEREBRO architecture](docs/architecture.svg)
 
@@ -20,9 +23,13 @@ on the machine. Target: ~10 min/run, covered by your Claude Code subscription.
 | LLM | **Claude Code** CLI (`claude -p`) — no API key, uses its own login |
 | ↳ triage model | `--model haiku` → `claude-haiku-4-5-20251001` (cheap, batched JSON scoring) |
 | ↳ digest model | `--model sonnet` → `claude-sonnet-4-6` (the user-facing briefing) |
-| Hacker News | Algolia search API (`front_page` + `show_hn`) |
+| Hacker News | Algolia search API (`front_page`) |
+| Show HN | Algolia `show_hn` — own `showcase` channel (maker launches/demos) |
+| Launch HN | Algolia `query="Launch HN"` — YC company launches + batch tag (W25/S25/P26) |
+| YC RFS | scrape of `ycombinator.com/rfs` — the ideas YC wants funded |
 | Reddit | per-subreddit RSS via `feedparser` (the `.json` API 403s unauth) |
-| GitHub | scrape of `github.com/trending` (daily + weekly windows) |
+| GitHub Trending | scrape of `github.com/trending` (daily + weekly windows) |
+| OSSInsight | `api.ossinsight.io` REST — star-velocity (most stars gained in window) |
 | RSS | `feedparser` over 10 curated feeds |
 | Gmail | `gws` CLI (Google Workspace, own OAuth) |
 | X / Twitter | `twscrape` — free, headless, **your saved Firefox cookies** (no API key) |
@@ -62,9 +69,13 @@ on the machine. Target: ~10 min/run, covered by your Claude Code subscription.
 
 | Source | What we pull | Notes |
 |--------|--------------|-------|
-| **Hacker News** | `front_page` (top stories) + `show_hn` (Show HN), up to `limit` (60) each, via the Algolia API. Captures title, URL, points, comment count. | One request per list — no per-item fetches. We don't filter at fetch; triage scores relevance. |
+| **Hacker News** | `front_page` (top stories), up to `limit` (60), via the Algolia API. Captures title, URL, points, comment count. | One request per list — no per-item fetches. We don't filter at fetch; triage scores relevance. |
+| **Show HN** | Algolia `show_hn` — maker launches & demos as their own lane (`source: show_hn`, tagged `showcase`) | Split out of the HN bucket so launches are a distinct channel. Threads get the HN "community take". |
+| **Launch HN** | YC company launches via Algolia `query="Launch HN"`; batch auto-tagged (`yc/W25`, `yc/P26`…) | The cleanest free "YC-backed ideas space" — structured, dated, AI/agent-heavy. |
+| **YC RFS** | scrape of `ycombinator.com/rfs` — the ideas YC actively wants funded (e.g. *Software for Agents*, *AI-Native Discovery Engines*) | Low-frequency (changes rarely); the watermark dedups it after day one. |
 | **Reddit** | newest posts from 6 subs (`ClaudeAI`, `ChatGPTCoding`, `LocalLLaMA`, `AI_Agents`, `vibecoding`, `cursor`) | Uses each sub's RSS feed (Reddit 403s the unauth `.json` API). Requests spaced 2s + Retry-After (RSS rate-limits). |
 | **GitHub Trending** | repos making the biggest star moves — scrape of `github.com/trending` for **daily + weekly** windows, deduped. Captures `owner/repo`, description, and star count ("N stars today/this week"). | This is the "GitHunt" — discovery of star-gainers. Optional language filter (`languages: []` = all). |
+| **OSSInsight** | repos that *gained* the most stars in the window (≥ `min_stars`) via `api.ossinsight.io` | True star-velocity (vs. trending's snapshot). Period configurable (`past_week`, …). |
 | **RSS** | 10 curated industry feeds: Simon Willison, Latent Space, Interconnects, Claude Code + Codex release feeds, GitHub blog + changelog, OpenAI news, Product Hunt | `feedparser`, `limit` entries each. |
 | **Gmail** | newsletter mail matching `(label:newsletters OR from:<senders>) newer_than:1d` (TLDR, Ben's Bites, ByteByteGo, …) | Via `gws`; each newsletter is treated as a link-aggregator. Intermittent (0 when no new mail in the window). |
 | **X / Twitter** | tweets from your `search_terms` (filtered by `min_likes`) + all tweets from curator/follow accounts; **curator listicles auto-explode into one signal per embedded repo** | `twscrape` with your saved Firefox cookies — free, headless, no API key. Engagement (likes/RTs/replies/views) stored in note frontmatter. Skips gracefully if logged out. |
