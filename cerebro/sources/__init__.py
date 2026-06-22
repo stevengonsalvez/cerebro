@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-from . import github_trending, gmail, hackernews, ossinsight, reddit, rss, x_twscrape
+from . import (
+    github_trending, gmail, hackernews, ossinsight, reddit, rss,
+    showhn, x_twscrape, yclaunches, ycrfs,
+)
 
 # name → fetch(cfg, settings) -> list[Signal]
 SOURCES = {
     "hackernews": hackernews.fetch,
+    "showhn": showhn.fetch,
+    "yc_launches": yclaunches.fetch,
+    "yc_rfs": ycrfs.fetch,
     "reddit": reddit.fetch,
     "github_trending": github_trending.fetch,
     "ossinsight": ossinsight.fetch,

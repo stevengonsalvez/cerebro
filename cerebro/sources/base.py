@@ -14,4 +14,5 @@ def now_iso() -> str:
 
 def http_get(url: str, **kw) -> requests.Response:
     kw.setdefault("timeout", TIMEOUT)
-    return requests.get(url, headers={"User-Agent": UA}, **kw)
+    headers = {"User-Agent": UA, **kw.pop("headers", {})}   # caller may override UA (e.g. YC blocks ours)
+    return requests.get(url, headers=headers, **kw)

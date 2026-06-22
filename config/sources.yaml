@@ -1,8 +1,17 @@
 # Source config. Toggle + tune per source. Lists are seeds — edit freely.
-hackernews:
+hackernews:               # front-page top stories (Show HN is now its own channel below)
   enabled: true
-  lists: [topstories, showstories]
+  lists: [topstories]
   limit: 60
+showhn:                   # Show HN as its own lane — maker launches & demos, tagged `showcase`
+  enabled: true
+  limit: 40
+yc_launches:              # "Launch HN" — YC company launches + batch tag (W25/S25/P26…)
+  enabled: true
+  limit: 30
+yc_rfs:                   # YC Request for Startups — ideas YC wants funded (changes rarely)
+  enabled: true
+  limit: 20
 reddit:
   enabled: true
   subreddits: [ClaudeAI, ChatGPTCoding, LocalLLaMA, AI_Agents, vibecoding, cursor]

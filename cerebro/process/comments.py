@@ -48,7 +48,7 @@ def enrich(top: list[Signal], settings, meter: dict | None = None) -> list[Signa
     """Attach a one-line community discussion summary (meta['discussion']) to top-N HN signals."""
     items = []
     for i, s in enumerate(top):
-        if s.source == "hackernews" and s.meta.get("hn_id"):
+        if s.source in ("hackernews", "show_hn", "yc-launch") and s.meta.get("hn_id"):
             cm = _hn_comments(s.meta["hn_id"])
             if cm:
                 items.append({"id": i, "title": s.title[:120], "comments": cm})
