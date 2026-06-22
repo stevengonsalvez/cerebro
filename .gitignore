@@ -43,3 +43,4 @@ build/
 
 # skill scratch (goals/plans/research/handover) — never commit
 .agents/
+explainers/
