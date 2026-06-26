@@ -61,7 +61,10 @@ def triage(signals: list[Signal], settings, batch: int = 60, meter: dict | None 
     model = settings.models.get("triage", "haiku")
     by_id: dict = {}
     for start in range(0, len(signals), batch):
-        by_id.update(_score_batch(signals[start:start + batch], start, matrix, tmpl, model, meter))
+        try:
+            by_id.update(_score_batch(signals[start:start + batch], start, matrix, tmpl, model, meter))
+        except claude.CerebroLLMError as e:   # a transient batch failure must not discard the whole run
+            print(f"[warn] triage batch {start} failed: {e}")
 
     threshold = settings.depth.get("score_threshold", 0.5)
     out: list[Signal] = []
