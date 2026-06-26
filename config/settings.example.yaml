@@ -1,7 +1,7 @@
 # Copy to config/settings.yaml (gitignored) and fill with real values.
 # This example file contains placeholders ONLY — never put real values here.
 
-vault_path: "~/d/git/cerebro-vault"   # standalone vault root; real path only in gitignored settings.yaml
+vault_path: "./vault"   # the cerebro-vault private submodule (clone --recursive); relative → repo root
 dry_run: true                          # writes to _scratch/, mutes ntfy
 
 depth:

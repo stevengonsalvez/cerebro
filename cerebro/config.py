@@ -56,8 +56,11 @@ def load(dry_run_override: bool | None = None) -> Settings:
     dry = s.get("dry_run", True)
     if dry_run_override is not None:
         dry = dry_run_override
+    vp = pathlib.Path(os.path.expanduser(os.environ.get("CEREBRO_VAULT") or s["vault_path"]))
+    if not vp.is_absolute():               # relative paths (e.g. ./vault submodule) anchor to repo root
+        vp = ROOT / vp
     return Settings(
-        vault_path=pathlib.Path(os.path.expanduser(os.environ.get("CEREBRO_VAULT") or s["vault_path"])),
+        vault_path=vp,
         dry_run=dry,
         depth=s.get("depth", {"min": 15, "max": 25, "score_threshold": 0.5}),
         dedup_days=s.get("dedup_days", 14),
