@@ -25,7 +25,8 @@ def _firefox_cookies() -> dict:
         try:
             con = sqlite3.connect(f"file:{c}?immutable=1", uri=True)
             rows = con.execute(
-                "SELECT name,value FROM moz_cookies WHERE host LIKE '%x.com' OR host LIKE '%twitter.com'"
+                "SELECT name,value FROM moz_cookies WHERE host='x.com' OR host LIKE '%.x.com'"
+                " OR host='twitter.com' OR host LIKE '%.twitter.com'"
             ).fetchall()
             con.close()
         except sqlite3.Error:

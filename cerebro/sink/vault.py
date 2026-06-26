@@ -8,12 +8,14 @@ _RATED = re.compile(r"^rating:\s*[0-9]", re.M)   # a note you've scored — neve
 
 
 def _alias(title: str) -> str:
-    return title.replace("|", " ").replace("[", "(").replace("]", ")")
+    # collapse newlines/whitespace too — x titles are raw tweet text and would otherwise
+    # break the YAML frontmatter scalar and the daily-index wikilink across lines.
+    return " ".join(title.replace("|", " ").replace("[", "(").replace("]", ")").split())
 
 
 def _atomic(s: Signal) -> str:
     body = (s.clean_text[:600].strip() or s.title)
-    reason = (s.meta.get("reason") or "").replace('"', "'")
+    reason = " ".join((s.meta.get("reason") or "").replace('"', "'").split())
     rline = f'reason: "{reason}"\n' if reason else ""
     rquote = f"> {reason}\n\n" if reason else ""
     disc = (s.meta.get("discussion") or "").strip()
@@ -65,8 +67,8 @@ def write(date: str, briefing: str, signals: list[Signal], settings, stats=None)
     sig_dir.mkdir(parents=True, exist_ok=True)
     for s in signals:
         p = sig_dir / f"{s.url_hash}.md"
-        if p.exists() and _RATED.search(p.read_text(errors="replace")[:600]):
-            continue                                  # preserve your rating
+        if p.exists() and _RATED.search(p.read_text(errors="replace")):
+            continue                                  # preserve your rating (scan whole note — it's already in memory)
         p.write_text(_atomic(s))
     daily = daily_dir / f"{date}.md"
     daily.write_text(_daily(date, briefing, signals, stats))

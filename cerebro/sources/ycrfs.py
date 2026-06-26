@@ -13,8 +13,8 @@ RFS_URL = "https://www.ycombinator.com/rfs"
 _BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) cerebro/0.1"
 # h3 idea title + its "#" copy-link anchor, then everything up to the next idea/footer.
 _BLOCK = re.compile(
-    r'<h3[^>]*>(?P<title>.*?)<span[^>]*>.*?href="(?P<anchor>#[^"]+)".*?</h3>'
-    r'(?P<rest>.*?)(?=<h3[^>]*>|<footer|</main)', re.S)
+    r'<h3[^>]*>(?P<title>.*?)<a[^>]*href="(?P<anchor>#[^"]+)".*?</h3>'   # any tag before the # copy-link, not just <span>
+    r'(?P<rest>.*?)(?=<h3[^>]*>|<footer|</main|\Z)', re.S)               # \Z captures the final idea block
 _TAG = re.compile(r"<[^>]+>")
 
 

@@ -18,7 +18,7 @@ def _load_dotenv() -> None:
     if not p.exists():
         return
     for line in p.read_text().splitlines():
-        line = line.strip()
+        line = line.strip().removeprefix("export ").strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         k, v = line.split("=", 1)

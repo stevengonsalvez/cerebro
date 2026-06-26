@@ -46,7 +46,7 @@ def load_profile(settings) -> dict:
                 txt = f.read_text(errors="replace")
             except OSError:
                 continue
-            if not _RATED.search(txt[:600]):     # cheap skip of unrated notes
+            if not _RATED.search(txt):           # skip unrated notes (scan whole — rating: can sit past byte 600)
                 continue
             fm = _frontmatter(txt)
             if not fm:
