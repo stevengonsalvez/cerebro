@@ -28,7 +28,10 @@ def fetch(cfg: dict, settings) -> list[Signal]:
                 repo = row.get("repo_name")
                 if not repo or repo in seen:
                     continue
-                stars = int(float(row.get("stars", 0) or 0))
+                try:
+                    stars = int(float(row.get("stars", 0) or 0))
+                except (TypeError, ValueError):   # one malformed value must not drop the whole source
+                    continue
                 if stars < min_stars:
                     continue
                 seen.add(repo)
