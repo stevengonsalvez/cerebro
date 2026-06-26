@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import os
+import pathlib
 import sqlite3
 
 from .models import RunStats, Signal
+
+_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS seen (
@@ -33,7 +37,10 @@ CREATE INDEX IF NOT EXISTS idx_sh_source ON source_health(source);
 class State:
     """SQLite seen-hash store + run log. The dedup window is enforced here."""
 
-    def __init__(self, db_path: str = "cerebro.sqlite"):
+    def __init__(self, db_path: str | None = None):
+        # anchor to repo ROOT (like vault/.env/accounts.db) so cron/launchd with a different
+        # CWD doesn't open a fresh empty DB and silently reset the dedup watermark.
+        db_path = db_path or os.environ.get("CEREBRO_DB") or str(_ROOT / "cerebro.sqlite")
         self.db = sqlite3.connect(str(db_path))
         self.db.executescript(SCHEMA)
         # migrate older DBs: add token-usage columns if missing
