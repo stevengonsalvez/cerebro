@@ -26,10 +26,11 @@ def run(settings: Settings) -> tuple[RunStats, dict]:
         except Exception as e:  # noqa: BLE001 — one bad source must not sink the run
             return name, [], e
 
-    raw, x_ok = [], True
+    raw, x_ok, per_source = [], True, {}
     with ThreadPoolExecutor(max_workers=max(len(jobs), 1)) as ex:
         for fut in as_completed([ex.submit(_run, n, c) for n, c in jobs]):
             name, got, err = fut.result()
+            per_source[name] = len(got)
             state.log_source(run_id, name, len(got), err is None)
             if err is not None:
                 print(f"[warn] source {name} failed: {type(err).__name__}: {err}")
@@ -41,7 +42,7 @@ def run(settings: Settings) -> tuple[RunStats, dict]:
             if name == "x" and not got:
                 x_ok = False
 
-    st = RunStats(run_id=run_id, raw=len(raw), dry_run=settings.dry_run, x_ok=x_ok)
+    st = RunStats(run_id=run_id, raw=len(raw), dry_run=settings.dry_run, x_ok=x_ok, per_source=per_source)
 
     # 2. funnel: junk-gate → dedup → triage → extract top-N → digest
     profile = feedback.load_profile(settings)   # learned from your rated vault notes

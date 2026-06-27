@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 
 from ..models import Signal
 
@@ -36,6 +37,27 @@ def _atomic(s: Signal) -> str:
     )
 
 
+def _sources_footer(signals: list[Signal], stats=None) -> str:
+    """Provenance footnote: which source fetched what, what reached the briefing, + citations."""
+    in_brief = Counter(s.source for s in signals)
+    fetched = dict(getattr(stats, "per_source", {}) or {})
+    rows = sorted(set(fetched) | set(in_brief), key=lambda k: (-in_brief.get(k, 0), -fetched.get(k, 0), k))
+    table = "\n".join(
+        f"| {k} | {fetched.get(k, '·')} | {in_brief.get(k, 0)} |" for k in rows
+    )
+    total_fetched = sum(fetched.values())
+    cites = "\n".join(
+        f"{i}. `{s.source}` · [{_alias(s.title)[:90]}]({s.url}) · score {s.score:.2f}"
+        for i, s in enumerate(signals, 1)
+    )
+    return (
+        "\n---\n\n## Sources & citations\n\n"
+        "| source | fetched | in briefing |\n|---|--:|--:|\n"
+        f"{table}\n| **total** | **{total_fetched}** | **{len(signals)}** |\n\n"
+        f"### Citations\n{cites}\n"
+    )
+
+
 def _daily(date: str, briefing: str, signals: list[Signal], stats=None) -> str:
     index = "\n".join(
         f"- [[{s.url_hash}|{_alias(s.title)}]] · {s.source} · {s.score:.2f}"
@@ -55,6 +77,7 @@ def _daily(date: str, briefing: str, signals: list[Signal], stats=None) -> str:
     return (
         f"---\ndate: {date}\ntype: cerebro-briefing\ncount: {len(signals)}\n{usage}---\n"
         f"# CEREBRO — {date}\n\n{briefing}\n\n## Signals\n{index}\n"
+        f"{_sources_footer(signals, stats)}"
     )
 
 
