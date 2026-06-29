@@ -53,12 +53,18 @@ def run(settings: Settings) -> tuple[RunStats, dict]:
         print(f"[feedback] profile from {profile['n']} rated notes")
     cand = dedup.dedupe(junkgate.filter(raw), state, settings.dedup_days)
     st.after_dedup = len(cand)
-    ranked = prerank.prerank(cand, settings, settings.prerank_keep, profile)
-    print(f"[prerank] {len(cand)} → {len(ranked)} to triage")
+    beast = bool(settings.sources.get("x", {}).get("beast"))
+    x_cand = [s for s in cand if s.source == "x"] if beast else []
+    rest   = [s for s in cand if s.source != "x"] if beast else cand
+    ranked = prerank.prerank(rest, settings, settings.prerank_keep, profile) + x_cand
+    print(f"[prerank] {len(cand)} → {len(ranked)} to triage" + (" (beast: X exempt)" if beast else ""))
     meter = claude.new_meter()
-    kept = triage.triage(ranked, settings, meter=meter, profile=profile)
+    kept = triage.triage(ranked, settings, meter=meter, profile=profile,
+                         keep_sources={"x"} if beast else None)
     st.after_triage = len(kept)
-    top = kept[: settings.depth.get("max", 25)]
+    maxn = settings.depth.get("max", 25)
+    top = ([s for s in kept if s.source != "x"][:maxn] + [s for s in kept if s.source == "x"]) \
+          if beast else kept[: maxn]
     extract.enrich(top)
     comments.enrich(top, settings, meter=meter)   # HN community take on the top-N
     briefing = digest.digest(top, settings, meter=meter)
