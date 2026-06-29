@@ -79,6 +79,8 @@ def triage(signals: list[Signal], settings, batch: int = 60, meter: dict | None 
     for i, s in enumerate(signals):
         r = by_id.get(i)
         if not r:
+            if s.source in keep_sources:   # beast: a failed/empty triage batch must not silently drop X
+                out.append(s)
             continue
         s.score = float(r.get("score", 0) or 0)
         s.category = r.get("category", "") or ""

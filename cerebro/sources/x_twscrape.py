@@ -136,11 +136,11 @@ async def _collect(cfg: dict) -> list[Signal]:
             if (t.replyCount or 0) > 0 and walks < max_threads:
                 walks += 1
                 extra, thread_text = await _walk_thread(api, t, cfg, explode_min)
-                if thread_text and sigs:
-                    sigs[0].clean_text += thread_text   # append to root signal
+                # attach thread text only to a non-exploded root; an exploded tweet has no single
+                # root signal to own it (sigs[0] is the first embedded link, not the tweet)
+                if thread_text and sigs and not sigs[0].meta.get("exploded"):
+                    sigs[0].clean_text += thread_text
                 sigs += extra
-            for s in sigs:
-                s.meta["beast"] = True
             push(sigs)
 
         for term in cfg.get("search_terms", []):
