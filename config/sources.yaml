@@ -62,6 +62,10 @@ x:                      # free headless reads via twscrape (your Firefox cookies
   beast_max_per: 500        # safety ceiling per term/account (stop runaway pagination)
   beast_thread_replies: 15  # replies pulled per thread (link-bearing prioritized)
   beast_max_threads: 100    # ceiling on roots we thread-walk (request-budget guard)
+  beast_feed: true          # also pull your following-graph feed (only active when beast is on)
+  feed_account: stevengonsalvez   # your x handle (whose follow-graph to expand; defaults to `account`)
+  beast_feed_max_accounts: 150    # cap accounts expanded — one user_tweets call each (fan-out guard)
+  beast_feed_max_per: 100         # tweets per followed account (lower than beast_max_per to avoid a lock)
 gmail:
   enabled: true
   label: newsletters
