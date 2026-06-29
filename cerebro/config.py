@@ -38,6 +38,7 @@ class Settings:
     models: dict
     ntfy_topic: str
     schedule: dict
+    github: dict
     sources: dict
     matrix: dict
 
@@ -51,8 +52,13 @@ def _load(name: str) -> dict:
     return yaml.safe_load(p.read_text()) or {}
 
 
-def load(dry_run_override: bool | None = None) -> Settings:
-    s = _load("settings.yaml")
+def load(dry_run_override: bool | None = None, allow_example: bool = False) -> Settings:
+    try:
+        s = _load("settings.yaml")
+    except FileNotFoundError:
+        if not allow_example:
+            raise
+        s = _load("settings.example.yaml")
     dry = s.get("dry_run", True)
     if dry_run_override is not None:
         dry = dry_run_override
@@ -68,6 +74,13 @@ def load(dry_run_override: bool | None = None) -> Settings:
         models=s.get("models", {"triage": "haiku", "digest": "sonnet"}),
         ntfy_topic=os.environ.get("NTFY_TOPIC") or s.get("ntfy", {}).get("topic", ""),
         schedule=s.get("schedule", {"hour": 7, "minute": 0}),
+        github=s.get("github", {
+            "token_env": "GITHUB_TOKEN",
+            "cache_path": "cerebro-gitintel.sqlite",
+            "cache_ttl_hours": 24,
+            "request_timeout_seconds": 20,
+            "max_enrich": 8,
+        }),
         sources=_load("sources.yaml"),
         matrix=_load("interest-matrix.yaml"),
     )
