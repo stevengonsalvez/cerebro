@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from collections.abc import Mapping
 
 from ..models import Signal
 
@@ -14,7 +15,37 @@ def _alias(title: str) -> str:
     return " ".join(title.replace("|", " ").replace("[", "(").replace("]", ")").split())
 
 
+def _yaml_value(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    text = str(value).replace('"', "'")
+    return f'"{" ".join(text.split())}"'
+
+
+def _yaml_list(values: list[str]) -> str:
+    return "[" + ", ".join(str(v) for v in values if str(v).strip()) + "]"
+
+
+def _meta_frontmatter(meta: Mapping) -> str:
+    allowed = (
+        "author", "likes", "retweets", "replies", "views", "query", "via_tweet",
+        "exploded", "repo", "stars", "forks", "language", "entity_type",
+        "entity_id", "github_query", "explore_score", "explore_angle", "why_now",
+    )
+    rows = []
+    for key in allowed:
+        if key in meta and meta[key] not in (None, "", [], {}):
+            rows.append(f"{key}: {_yaml_value(meta[key])}")
+    return ("\n".join(rows) + "\n") if rows else ""
+
+
 def _atomic(s: Signal) -> str:
+    s.artifact_tags = sorted(set((s.artifact_tags or []) + ["cerebro/signal"]))
+    s.merge_tags()
     body = (s.clean_text[:600].strip() or s.title)
     reason = " ".join((s.meta.get("reason") or "").replace('"', "'").split())
     rline = f'reason: "{reason}"\n' if reason else ""
@@ -25,11 +56,17 @@ def _atomic(s: Signal) -> str:
         f"---\n"
         f'title: "{_alias(s.title).replace(chr(34), chr(39))[:200]}"\n'
         f"category: {s.category or 'misc'}\n"
-        f"tags: [{', '.join(s.tags)}]\n"
+        f"tags: {_yaml_list(s.tags)}\n"
+        f"topic_tags: {_yaml_list(s.topic_tags)}\n"
+        f"source_tags: {_yaml_list(s.source_tags)}\n"
+        f"entity_tags: {_yaml_list(s.entity_tags)}\n"
+        f"artifact_tags: {_yaml_list(s.artifact_tags)}\n"
+        f"workflow_tags: {_yaml_list(s.workflow_tags)}\n"
         f"source: {s.source}\n"
         f"url: {s.url}\n"
         f"score: {s.score:.2f}\n"
         f"{rline}"
+        f"{_meta_frontmatter(s.meta)}"
         f"captured: {s.captured}\n"
         f"rating:\n"               # ← set 1-5 in Obsidian to teach CEREBRO what you value
         f"---\n"
