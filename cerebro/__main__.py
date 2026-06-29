@@ -47,6 +47,9 @@ def main() -> None:
     cd_user.add_argument("--install", choices=["repo", "global"])
     cd_user.add_argument("--dry-run", action="store_true")
 
+    serve = sub.add_parser("serve", help="serve local Cerebro UI")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=4317)
     args = ap.parse_args()
 
     if args.command == "health" or args.health:
@@ -101,6 +104,13 @@ def main() -> None:
         if written:
             result["written_artifacts"] = written
         print(json.dumps(result, indent=2))
+        return
+
+    if args.command == "serve":
+        settings = load(allow_example=True)
+        from .ui.server import create_app
+        import uvicorn
+        uvicorn.run(create_app(settings), host=args.host, port=args.port)
         return
 
     from .orchestrator import run
