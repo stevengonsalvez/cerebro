@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import glob
 import os
 import pathlib
@@ -72,6 +73,27 @@ def _to_signals(t, query: str, explode_min: int) -> list[Signal]:
                    captured=now_iso(), meta={**_eng(t), "query": query})]
 
 
+def _within(date, cutoff) -> bool:
+    """tweet within the beast window. None date → keep (don't break the < comparison)."""
+    if date is None:
+        return True
+    return date >= cutoff
+
+
+async def _walk_thread(api, root, cfg, explode_min):
+    extra_sigs, ctx = [], []
+    n = cfg.get("beast_thread_replies", 15)
+    try:
+        async for r in api.tweet_replies(root.id, limit=n):
+            ctx.append(f"@{r.user.username}: {r.rawContent}")     # text only — ignore media
+            if _links(r):                                          # link-bearing reply → own signal(s)
+                extra_sigs.extend(_to_signals(r, f"thread:{root.id}", explode_min))
+    except Exception:  # noqa: BLE001 — thread fetch failure must not sink the tweet
+        pass
+    thread_text = ("\n\n— thread —\n" + "\n".join(ctx)) if ctx else ""
+    return extra_sigs, thread_text
+
+
 async def _collect(cfg: dict) -> list[Signal]:
     from twscrape import API
 
@@ -101,6 +123,47 @@ async def _collect(cfg: dict) -> list[Signal]:
                 seen.add(s.url)
                 out.append(s)
 
+    if cfg.get("beast"):                          # firehose: every tweet in window, walk threads
+        window = cfg.get("beast_window_hours", 24)
+        beast_max_per = cfg.get("beast_max_per", 500)
+        max_threads = cfg.get("beast_max_threads", 100)
+        cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=window)
+        walks = 0  # roots thread-walked so far (bounded by beast_max_threads request budget)
+
+        async def ingest(t, query):
+            nonlocal walks
+            sigs = _to_signals(t, query, explode_min)   # NO min_likes filter in beast
+            if (t.replyCount or 0) > 0 and walks < max_threads:
+                walks += 1
+                extra, thread_text = await _walk_thread(api, t, cfg, explode_min)
+                if thread_text and sigs:
+                    sigs[0].clean_text += thread_text   # append to root signal
+                sigs += extra
+            for s in sigs:
+                s.meta["beast"] = True
+            push(sigs)
+
+        for term in cfg.get("search_terms", []):
+            try:
+                async for t in api.search(term, limit=beast_max_per, kv={"product": "Latest"}):
+                    if not _within(getattr(t, "date", None), cutoff):
+                        break                          # Latest → reverse-chron, first old tweet ends the page
+                    await ingest(t, term)
+            except Exception:  # noqa: BLE001
+                continue
+        for handle in cfg.get("accounts", []):
+            try:
+                u = await api.user_by_login(handle)
+                if not u:
+                    continue
+                async for t in api.user_tweets(u.id, limit=beast_max_per):
+                    if not _within(getattr(t, "date", None), cutoff):
+                        continue   # user_tweets puts the pinned tweet first (often old) → skip, don't break; beast_max_per caps the scan
+                    await ingest(t, f"@{handle}")
+            except Exception:  # noqa: BLE001
+                continue
+        return out
+
     for term in cfg.get("search_terms", []):      # search: drop low-engagement noise
         try:
             async for t in api.search(term, limit=per):
@@ -126,3 +189,27 @@ def fetch(cfg: dict, settings) -> list[Signal]:
         return asyncio.run(_collect(cfg))
     except Exception:  # noqa: BLE001 — stale cookies / X change → skip, like the bird-fail path
         return []
+
+
+if __name__ == "__main__":   # offline: no twscrape, no network
+    from types import SimpleNamespace as NS
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    cutoff = now - datetime.timedelta(hours=24)
+    # (a) date-window predicate keeps recent / drops old, survives None
+    assert _within(now - datetime.timedelta(hours=1), cutoff)       # recent → keep
+    assert not _within(now - datetime.timedelta(hours=48), cutoff)  # old → drop
+    assert _within(None, cutoff)                                    # None → keep, no crash
+
+    # (b) link-bearing tweet with >=explode_min links explodes (one signal per link)
+    t = NS(id=1, rawContent="three repos", user=NS(id=9, username="bob"),
+           links=[NS(url="https://github.com/a/b"), NS(url="https://github.com/c/d"),
+                  NS(url="https://example.com/x")],
+           likeCount=5, retweetCount=1, replyCount=2, viewCount=10)
+    sigs = _to_signals(t, "q", 3)
+    assert len(sigs) == 3 and all(s.source == "x" for s in sigs), "3 links → 3 exploded signals"
+
+    # (c) thread-text concatenation format
+    ctx = ["@x: hi", "@y: yo"]
+    assert ("\n\n— thread —\n" + "\n".join(ctx)) == "\n\n— thread —\n@x: hi\n@y: yo"
+    print("x beast self-check OK")
