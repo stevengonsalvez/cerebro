@@ -162,6 +162,28 @@ async def _collect(cfg: dict) -> list[Signal]:
                     await ingest(t, f"@{handle}")
             except Exception:  # noqa: BLE001
                 continue
+
+        if cfg.get("beast_feed"):                 # your following-graph feed: expand who you follow
+            handle = cfg.get("feed_account") or cfg.get("account", "")
+            feed_cap = cfg.get("beast_feed_max_accounts", 150)
+            try:
+                me = await api.user_by_login(handle)
+                follows = []
+                if me:
+                    async for u in api.following(me.id, limit=feed_cap):
+                        follows.append(u)
+                        if len(follows) >= feed_cap:  # bound the fan-out (one user_tweets call per follow)
+                            break
+                for u in follows:
+                    try:
+                        async for t in api.user_tweets(u.id, limit=beast_max_per):
+                            if not _within(getattr(t, "date", None), cutoff):
+                                continue
+                            await ingest(t, f"feed:@{u.username}")   # dedup vs explicit accounts via `seen`
+                    except Exception:  # noqa: BLE001
+                        continue
+            except Exception:  # noqa: BLE001 — feed unavailable (stale cookies / handle change) → skip
+                pass
         return out
 
     for term in cfg.get("search_terms", []):      # search: drop low-engagement noise
