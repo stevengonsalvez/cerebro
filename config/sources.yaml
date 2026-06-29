@@ -27,6 +27,15 @@ ossinsight:             # GitHub star-velocity (most stars GAINED in the window)
   languages: [All]
   min_stars: 20          # min stars gained in the period
   max_items: 40
+github_search:          # Natural-language GitHub repo/person search, enriched into Signals/Entities
+  enabled: true
+  queries:
+    - "github profile into cursor skill generator"
+    - "agent skills marketplace claude code cursor codex"
+  target: mixed
+  max_items: 20
+  enrich_top: 8
+  write_entities: false
 rss:
   enabled: true
   limit: 20
