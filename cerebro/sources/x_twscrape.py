@@ -166,6 +166,7 @@ async def _collect(cfg: dict) -> list[Signal]:
         if cfg.get("beast_feed"):                 # your following-graph feed: expand who you follow
             handle = cfg.get("feed_account") or cfg.get("account", "")
             feed_cap = cfg.get("beast_feed_max_accounts", 150)
+            feed_per = cfg.get("beast_feed_max_per", 100)   # lower than beast_max_per: 150 follows × 500 risks a lock
             try:
                 me = await api.user_by_login(handle)
                 follows = []
@@ -176,7 +177,7 @@ async def _collect(cfg: dict) -> list[Signal]:
                             break
                 for u in follows:
                     try:
-                        async for t in api.user_tweets(u.id, limit=beast_max_per):
+                        async for t in api.user_tweets(u.id, limit=feed_per):
                             if not _within(getattr(t, "date", None), cutoff):
                                 continue
                             await ingest(t, f"feed:@{u.username}")   # dedup vs explicit accounts via `seen`
