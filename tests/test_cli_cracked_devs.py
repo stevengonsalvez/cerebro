@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -58,8 +59,9 @@ def test_cracked_devs_repo_cli_writes_entity_brief_and_skill(monkeypatch, tmp_pa
     main()
 
     result = json.loads(capsys.readouterr().out)
+    today = date.today().isoformat()
     repo_path = tmp_path / "vault/_scratch/Entities/repos/filiksyos--gittoskill.md"
-    brief_path = tmp_path / "vault/_scratch/Briefs/2026-06-29-repo-intelligence-filiksyos-gittoskill.md"
+    brief_path = tmp_path / f"vault/_scratch/Briefs/{today}-repo-intelligence-filiksyos-gittoskill.md"
     assert repo_path.exists()
     assert brief_path.exists()
     assert result["written_artifacts"][0]["path"] == str(repo_path)
@@ -112,8 +114,9 @@ def test_cracked_devs_user_cli_writes_entity_brief_and_skill(monkeypatch, tmp_pa
     main()
 
     result = json.loads(capsys.readouterr().out)
+    today = date.today().isoformat()
     developer_path = tmp_path / "vault/_scratch/Entities/developers/filiksyos.md"
-    brief_path = tmp_path / "vault/_scratch/Briefs/2026-06-29-developer-intelligence-filiksyos.md"
+    brief_path = tmp_path / f"vault/_scratch/Briefs/{today}-developer-intelligence-filiksyos.md"
     assert developer_path.exists()
     assert brief_path.exists()
     assert result["written_artifacts"][0]["path"] == str(developer_path)
