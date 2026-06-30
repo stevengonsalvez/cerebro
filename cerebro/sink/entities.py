@@ -38,7 +38,7 @@ write_developer_entity = write_developer
 def repo_markdown(repo: Any) -> str:
     owner, name, full_name = _repo_identity(repo)
     generated_at = _text(_get(repo, "generated_at"), default=date.today().isoformat())
-    tags = _typed_tags(repo, "repo", [f"github/{owner}", f"repo/{name}"])
+    tags = _typed_tags(repo, "repo", [f"github/{owner}", f"repo/{full_name}", f"repo/{name}"])
     frontmatter = _frontmatter(
         [
             ("type", "cerebro-entity"),

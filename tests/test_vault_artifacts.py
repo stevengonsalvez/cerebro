@@ -63,7 +63,10 @@ def test_entity_writers_create_dry_run_repo_and_developer_notes(tmp_path: Path) 
     }
     repo_text = repo_path.read_text()
     assert repo_text.startswith('---\ntype: "cerebro-entity"\nentity_type: "repo"')
-    assert 'tags: ["agents", "cerebro/entity", "entity/repo", "github/filiksyos", "repo/gittoskill", "skills"]' in repo_text
+    assert (
+        'tags: ["agents", "cerebro/entity", "entity/repo", "github/filiksyos", '
+        '"repo/filiksyos/gittoskill", "repo/gittoskill", "skills"]'
+    ) in repo_text
     assert "## Search Evidence" in repo_text
     assert "| github | [GitToSkill](https://github.com/filiksyos/gittoskill) | exact repo match | 0.97 |" in repo_text
     assert "## Generated Skills" in repo_text
