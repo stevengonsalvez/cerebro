@@ -24,15 +24,16 @@ class GitHubClient:
         self.token = token if token is not None else os.environ.get(token_env, "")
         self.timeout = int(cfg.get("request_timeout_seconds", 20))
         self.cache = cache or GitIntelCache(cfg.get("cache_path"), int(cfg.get("cache_ttl_hours", 24)))
+        self.cache_namespace = _cache_namespace(self.token)
         self.rate_limit: dict[str, Any] = {}
 
     def _cache_key(self, method: str, path: str, params: dict | None) -> str:
         payload = json.dumps({
-            "v": 1,
+            "v": 2,
             "method": method,
             "path": path,
             "params": params or {},
-            "auth": bool(self.token),
+            "auth": self.cache_namespace,
         }, sort_keys=True)
         return hashlib.sha256(payload.encode()).hexdigest()
 
@@ -114,3 +115,10 @@ class GitHubClient:
             "direction": "desc",
         })
         return data if isinstance(data, list) else []
+
+
+def _cache_namespace(token: str) -> str:
+    if not token:
+        return "anonymous"
+    digest = hashlib.sha256(token.encode()).hexdigest()[:24]
+    return f"token:{digest}"
