@@ -210,3 +210,19 @@ def test_artifact_scan_rejects_secret_like_content(tmp_path: Path) -> None:
 
     with pytest.raises(cracked_devs.ArtifactScanError, match="secret material"):
         cracked_devs.scan_artifact_bundle(root)
+
+
+def test_rejected_repo_skill_bundle_is_not_left_on_disk(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    repo = _repo() | {
+        "references": {
+            "leak.md": "token: ghp_1234567890abcdefghijklmnop\n",
+        }
+    }
+    bundle = tmp_path / "vault/_scratch/Skills/cracked-devs/repos/filiksyos--gittoskill"
+
+    with pytest.raises(cracked_devs.ArtifactScanError, match="secret material"):
+        cracked_devs.write_repo_skill(repo, settings)
+
+    assert not bundle.exists()
+    assert not list(bundle.parent.glob(".filiksyos--gittoskill.*"))

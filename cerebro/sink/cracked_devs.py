@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import tempfile
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
@@ -53,8 +55,7 @@ def write_repo_skill(repo: Any, settings_or_path: Any, *, dry_run: bool | None =
         "manifest.json": _manifest("repo", full_name, repo, generated_at),
     }
     files.update(_reference_files(_get(repo, "references")))
-    written = _write_files(bundle_dir, files)
-    scan = scan_artifact_bundle(bundle_dir)
+    written, scan = _write_scanned_bundle(bundle_dir, files)
     return {
         "kind": "repo",
         "target": full_name,
@@ -85,8 +86,7 @@ def write_user_skill(profile: Any, settings_or_path: Any, *, dry_run: bool | Non
             continue
         files[f"references/repos/{owner}--{name}.md"] = _repo_summary_markdown(repo, generated_at)
     files.update(_reference_files(_get(profile, "references")))
-    written = _write_files(bundle_dir, files)
-    scan = scan_artifact_bundle(bundle_dir)
+    written, scan = _write_scanned_bundle(bundle_dir, files)
     return {
         "kind": "user",
         "target": login,
@@ -295,6 +295,22 @@ def _write_files(bundle_dir: Path, files: Mapping[str, str]) -> list[str]:
         path.write_text(_text_content(content), encoding="utf-8")
         written.append(relative.as_posix())
     return written
+
+
+def _write_scanned_bundle(bundle_dir: Path, files: Mapping[str, str]) -> tuple[list[str], dict]:
+    bundle_dir.parent.mkdir(parents=True, exist_ok=True)
+    tmp_dir = Path(tempfile.mkdtemp(prefix=f".{bundle_dir.name}.", dir=bundle_dir.parent))
+    try:
+        written = _write_files(tmp_dir, files)
+        scan = scan_artifact_bundle(tmp_dir)
+        if bundle_dir.exists():
+            shutil.rmtree(bundle_dir)
+        tmp_dir.rename(bundle_dir)
+        scan["root"] = str(bundle_dir)
+        return written, scan
+    except Exception:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
 
 
 def _reference_files(value: Any) -> dict[str, str]:
