@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 
 from .github_client import GitHubClient, GitHubClientError
+from .metrics import enrich_repo_metrics, enrich_user_metrics
 from .models import GitHubRepoCandidate, SearchResult
 from .profile_inspect import user_from_api
 from .query_plan import extract_owner_repos, plan_query
@@ -77,6 +78,12 @@ def search_github(query: str, settings=None, target: str = "mixed", limit: int =
         enriched.append(inspect_repo(cand, client))
     repos = enriched + repos[enrich_top:]
     stages.append({"stage": "repo_inspection", "count": len(enriched)})
+
+    for cand in repos:
+        enrich_repo_metrics(cand, client.cache)
+    for user in users:
+        enrich_user_metrics(user, client.cache)
+    stages.append({"stage": "growth_metrics", "repositories": len(repos), "users": len(users)})
 
     ranked_repos = rank_repositories(repos, plan)[:limit]
     ranked_users = rank_users(users, plan)[:limit]

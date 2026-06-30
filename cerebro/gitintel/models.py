@@ -22,6 +22,11 @@ class GitHubRepoCandidate:
     activity_score: float = 0.0
     semantic_score: float = 0.0
     exact_score: float = 0.0
+    growth_score: float = 0.0
+    momentum_score: float = 0.0
+    stars_gained_7d: int | None = None
+    stars_gained_30d: int | None = None
+    growth_reason: str = ""
     score: float = 0.0
     reason: str = ""
 
@@ -38,6 +43,12 @@ class GitHubUserCandidate:
     followers: int = 0
     public_repos: int = 0
     track: str = "semantic"
+    growth_score: float = 0.0
+    portfolio_momentum_score: float = 0.0
+    momentum_score: float = 0.0
+    followers_gained_7d: int | None = None
+    followers_gained_30d: int | None = None
+    growth_reason: str = ""
     score: float = 0.0
     reason: str = ""
 
@@ -69,6 +80,12 @@ class ProfileInspection:
     readme_excerpt: str = ""
     repos: list[GitHubRepoCandidate] = field(default_factory=list)
     primary_languages: list[str] = field(default_factory=list)
+    followers_gained_7d: int | None = None
+    followers_gained_30d: int | None = None
+    growth_score: float = 0.0
+    portfolio_momentum_score: float = 0.0
+    momentum_score: float = 0.0
+    growth_reason: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)

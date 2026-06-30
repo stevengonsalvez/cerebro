@@ -4,6 +4,7 @@ import re
 from collections import Counter
 
 from .github_client import GitHubClient, GitHubClientError
+from .metrics import enrich_repo_metrics, enrich_user_metrics, portfolio_momentum
 from .models import GitHubRepoCandidate, GitHubUserCandidate, ProfileInspection
 from .repo_inspect import inspect_repo, repo_from_api
 
@@ -33,17 +34,26 @@ def inspect_profile(value: str, client: GitHubClient, repo_limit: int = 8) -> Pr
     login = parse_login(value)
     data = client.get_user(login) or {}
     user = user_from_api(data or {"login": login, "html_url": f"https://github.com/{login}"}, "exact")
+    enrich_user_metrics(user, client.cache)
     repos = []
     langs = Counter()
     try:
         raw_repos = client.get_user_repos(login, limit=repo_limit * 2)
+        candidates = [
+            enrich_repo_metrics(repo_from_api(raw, "profile"), client.cache)
+            for raw in raw_repos
+            if not raw.get("archived")
+        ]
         ranked = sorted(
-            [r for r in raw_repos if not r.get("archived")],
-            key=lambda r: int(r.get("stargazers_count") or 0) + int(r.get("forks_count") or 0) * 2,
+            candidates,
+            key=lambda r: (
+                r.momentum_score,
+                int(r.stars or 0) + int(r.forks or 0) * 2,
+            ),
             reverse=True,
         )[:repo_limit]
-        for raw in ranked:
-            cand = inspect_repo(repo_from_api(raw, "profile"), client)
+        for cand in ranked:
+            cand = enrich_repo_metrics(inspect_repo(cand, client), client.cache)
             repos.append(cand)
             if cand.language:
                 langs[cand.language] += 1
@@ -64,4 +74,10 @@ def inspect_profile(value: str, client: GitHubClient, repo_limit: int = 8) -> Pr
         readme_excerpt=" ".join(readme[:4000].split()),
         repos=repos,
         primary_languages=[name for name, _ in langs.most_common(5)],
+        followers_gained_7d=user.followers_gained_7d,
+        followers_gained_30d=user.followers_gained_30d,
+        growth_score=user.growth_score,
+        portfolio_momentum_score=portfolio_momentum(repos),
+        momentum_score=max(user.momentum_score, portfolio_momentum(repos)),
+        growth_reason=user.growth_reason,
     )

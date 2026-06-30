@@ -32,6 +32,24 @@ CREATE TABLE IF NOT EXISTS search_runs (
   result_json TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS repo_metric_snapshots (
+  full_name TEXT NOT NULL,
+  captured_at TEXT NOT NULL,
+  stars INTEGER NOT NULL,
+  forks INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(full_name, captured_at)
+);
+CREATE INDEX IF NOT EXISTS idx_repo_metric_snapshots_lookup
+  ON repo_metric_snapshots(full_name, captured_at);
+CREATE TABLE IF NOT EXISTS developer_metric_snapshots (
+  login TEXT NOT NULL,
+  captured_at TEXT NOT NULL,
+  followers INTEGER NOT NULL,
+  public_repos INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(login, captured_at)
+);
+CREATE INDEX IF NOT EXISTS idx_developer_metric_snapshots_lookup
+  ON developer_metric_snapshots(login, captured_at);
 """
 
 
@@ -80,5 +98,75 @@ class GitIntelCache:
             return None
         return json.loads(row[0])
 
+    def record_repo_metrics(
+        self,
+        full_name: str,
+        *,
+        stars: int,
+        forks: int = 0,
+        captured_at: str | None = None,
+    ) -> None:
+        if not full_name:
+            return
+        self.db.execute(
+            "INSERT OR REPLACE INTO repo_metric_snapshots VALUES(?,?,?,?)",
+            (full_name.lower(), captured_at or _now_iso(), int(stars), int(forks)),
+        )
+        self.db.commit()
+
+    def repo_metric_snapshots(self, full_name: str) -> list[dict[str, Any]]:
+        rows = self.db.execute(
+            """
+            SELECT captured_at,stars,forks
+            FROM repo_metric_snapshots
+            WHERE full_name=?
+            ORDER BY captured_at ASC
+            """,
+            (full_name.lower(),),
+        ).fetchall()
+        return [
+            {"captured_at": row[0], "stars": int(row[1]), "forks": int(row[2])}
+            for row in rows
+        ]
+
+    def record_developer_metrics(
+        self,
+        login: str,
+        *,
+        followers: int,
+        public_repos: int = 0,
+        captured_at: str | None = None,
+    ) -> None:
+        if not login:
+            return
+        self.db.execute(
+            "INSERT OR REPLACE INTO developer_metric_snapshots VALUES(?,?,?,?)",
+            (login.lower(), captured_at or _now_iso(), int(followers), int(public_repos)),
+        )
+        self.db.commit()
+
+    def developer_metric_snapshots(self, login: str) -> list[dict[str, Any]]:
+        rows = self.db.execute(
+            """
+            SELECT captured_at,followers,public_repos
+            FROM developer_metric_snapshots
+            WHERE login=?
+            ORDER BY captured_at ASC
+            """,
+            (login.lower(),),
+        ).fetchall()
+        return [
+            {
+                "captured_at": row[0],
+                "followers": int(row[1]),
+                "public_repos": int(row[2]),
+            }
+            for row in rows
+        ]
+
     def close(self) -> None:
         self.db.close()
+
+
+def _now_iso() -> str:
+    return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()

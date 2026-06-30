@@ -21,15 +21,27 @@ def rank_repositories(candidates: list[GitHubRepoCandidate], plan: SearchPlan) -
         coverage = len(set(matches)) / max(len(set(terms)), 1)
         popularity = min(math.log10(max(c.stars, 0) + 1) / 5, 1)
         activity = 0.2 if c.pushed_at or c.updated_at else 0
+        momentum = max(c.momentum_score, c.growth_score)
+        novelty = max(1 - popularity, 0) if momentum else 0
         c.exact_score = exact
         c.semantic_score = coverage
         c.activity_score = activity
-        c.score = round(exact * 0.45 + coverage * 0.35 + popularity * 0.15 + activity * 0.05, 4)
+        c.score = round(
+            exact * 0.25
+            + coverage * 0.25
+            + momentum * 0.30
+            + popularity * 0.10
+            + activity * 0.05
+            + novelty * 0.05,
+            4,
+        )
         reasons = []
         if exact:
             reasons.append("exact name/entity match")
         if matches:
             reasons.append("matched " + ", ".join(sorted(set(matches))[:5]))
+        if c.growth_reason:
+            reasons.append(c.growth_reason)
         if c.stars:
             reasons.append(f"{c.stars} stars")
         if c.language:
@@ -46,12 +58,24 @@ def rank_users(candidates: list[GitHubUserCandidate], plan: SearchPlan) -> list[
         exact = 1.0 if any(t.lower() == c.login.lower() for t in plan.exact_terms) else 0.0
         coverage = len(set(matches)) / max(len(set(terms)), 1)
         popularity = min(math.log10(max(c.followers, 0) + 1) / 5, 1)
-        c.score = round(exact * 0.45 + coverage * 0.35 + popularity * 0.2, 4)
+        momentum = max(c.momentum_score, c.growth_score, c.portfolio_momentum_score)
+        c.score = round(
+            exact * 0.30
+            + coverage * 0.25
+            + momentum * 0.25
+            + popularity * 0.10
+            + c.portfolio_momentum_score * 0.10,
+            4,
+        )
         bits = []
         if exact:
             bits.append("exact login match")
         if matches:
             bits.append("matched " + ", ".join(sorted(set(matches))[:5]))
+        if c.growth_reason:
+            bits.append(c.growth_reason)
+        if c.portfolio_momentum_score:
+            bits.append(f"portfolio momentum {c.portfolio_momentum_score:.2f}")
         if c.followers:
             bits.append(f"{c.followers} followers")
         c.reason = "; ".join(bits) or "GitHub user candidate"
