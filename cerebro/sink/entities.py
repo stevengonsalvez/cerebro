@@ -85,6 +85,10 @@ def developer_markdown(developer: Any) -> str:
             ("display_name", display_name),
             ("profile_url", _first(developer, "profile_url", "html_url", "url", default=f"https://github.com/{login}")),
             ("followers", _get(developer, "followers")),
+            ("followers_gained_7d", _get(developer, "followers_gained_7d")),
+            ("followers_gained_30d", _get(developer, "followers_gained_30d")),
+            ("momentum_score", _get(developer, "momentum_score")),
+            ("portfolio_momentum_score", _get(developer, "portfolio_momentum_score")),
             ("tags", tags["tags"]),
             ("topic_tags", tags["topic_tags"]),
             ("source_tags", tags["source_tags"]),
@@ -252,6 +256,9 @@ def _paragraphs(value: Any) -> str:
 def _repo_activity(repo: Any) -> str:
     fields = [
         ("Stars", _first(repo, "stars", "stargazers_count")),
+        ("Stars gained 7d", _get(repo, "stars_gained_7d")),
+        ("Stars gained 30d", _get(repo, "stars_gained_30d")),
+        ("Momentum score", _get(repo, "momentum_score")),
         ("Forks", _get(repo, "forks")),
         ("Open issues", _first(repo, "open_issues", "open_issues_count")),
         ("Primary language", _first(repo, "language", "primary_language")),

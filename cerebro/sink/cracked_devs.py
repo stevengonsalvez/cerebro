@@ -361,6 +361,9 @@ def _repo_snapshot(repo: Any) -> str:
         ("URL", _first(repo, "url", "html_url")),
         ("Language", _first(repo, "language", "primary_language")),
         ("Stars", _first(repo, "stars", "stargazers_count")),
+        ("Stars gained 7d", _get(repo, "stars_gained_7d")),
+        ("Stars gained 30d", _get(repo, "stars_gained_30d")),
+        ("Momentum score", _get(repo, "momentum_score")),
         ("Forks", _get(repo, "forks")),
         ("Updated", _first(repo, "updated_at", "pushed_at")),
     ]
@@ -376,6 +379,10 @@ def _profile_snapshot(profile: Any) -> str:
         ("Name", _first(profile, "display_name", "name")),
         ("URL", _first(profile, "profile_url", "html_url", "url")),
         ("Followers", _get(profile, "followers")),
+        ("Followers gained 7d", _get(profile, "followers_gained_7d")),
+        ("Followers gained 30d", _get(profile, "followers_gained_30d")),
+        ("Momentum score", _get(profile, "momentum_score")),
+        ("Portfolio momentum", _get(profile, "portfolio_momentum_score")),
     ]
     rows = [f"- **{label}:** {_text(value)}" for label, value in fields if value not in (None, "", [])]
     languages = _text_list(_get(profile, "primary_languages"))

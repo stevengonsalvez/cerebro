@@ -34,7 +34,10 @@ def _meta_frontmatter(meta: Mapping) -> str:
     allowed = (
         "author", "likes", "retweets", "replies", "views", "query", "via_tweet",
         "exploded", "repo", "stars", "forks", "language", "entity_type",
-        "entity_id", "github_query", "explore_score", "explore_angle", "why_now",
+        "entity_id", "github_query", "stars_gained_7d", "stars_gained_30d",
+        "followers_gained_7d", "followers_gained_30d", "growth_score",
+        "momentum_score", "portfolio_momentum_score", "explore_score",
+        "explore_angle", "why_now",
     )
     rows = []
     for key in allowed:

@@ -32,6 +32,10 @@ def fetch(cfg: dict, settings) -> list[Signal]:
                     "repo_meta": repo,
                     "reason": repo.get("reason", ""),
                     "stars": repo.get("stars"),
+                    "stars_gained_7d": repo.get("stars_gained_7d"),
+                    "stars_gained_30d": repo.get("stars_gained_30d"),
+                    "growth_score": repo.get("growth_score"),
+                    "momentum_score": repo.get("momentum_score"),
                     "language": repo.get("language"),
                 },
             )
@@ -55,6 +59,11 @@ def fetch(cfg: dict, settings) -> list[Signal]:
                     "github_query": query,
                     "user_meta": user,
                     "reason": user.get("reason", ""),
+                    "followers_gained_7d": user.get("followers_gained_7d"),
+                    "followers_gained_30d": user.get("followers_gained_30d"),
+                    "growth_score": user.get("growth_score"),
+                    "portfolio_momentum_score": user.get("portfolio_momentum_score"),
+                    "momentum_score": user.get("momentum_score"),
                 },
             )
             sig.merge_tags()
