@@ -22,3 +22,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["cerebro*"]
+
+[tool.setuptools.package-data]
+cerebro = ["ui/static/*"]
