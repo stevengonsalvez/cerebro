@@ -5,7 +5,7 @@ import time
 from .github_client import GitHubClient, GitHubClientError
 from .models import GitHubRepoCandidate, SearchResult
 from .profile_inspect import user_from_api
-from .query_plan import OWNER_REPO, plan_query
+from .query_plan import extract_owner_repos, plan_query
 from .rank import rank_repositories, rank_users
 from .repo_inspect import inspect_repo, repo_from_api
 
@@ -32,7 +32,7 @@ def search_github(query: str, settings=None, target: str = "mixed", limit: int =
     errors = []
 
     if target in ("mixed", "repositories", "repos"):
-        for owner_repo in OWNER_REPO.findall(query):
+        for owner_repo in extract_owner_repos(query):
             owner, repo = owner_repo.split("/", 1)
             try:
                 data = client.get_repo(owner, repo)

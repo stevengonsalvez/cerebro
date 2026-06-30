@@ -5,6 +5,9 @@ import re
 from .models import SearchPlan
 
 OWNER_REPO = re.compile(r"\b([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)\b")
+GITHUB_REPO_URL = re.compile(
+    r"\b(?:https?://)?(?:www\.)?github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(?:[/?#\s]|$)"
+)
 TOKEN = re.compile(r"[A-Za-z0-9_.-]+")
 STOP = {
     "a", "an", "and", "are", "being", "for", "from", "in", "into", "of", "on",
@@ -15,7 +18,7 @@ GITHUBISH = {"github", "repo", "repos", "repository", "cli", "skill", "agent", "
 
 def plan_query(query: str, target: str = "mixed") -> SearchPlan:
     quoted = re.findall(r'"([^"]+)"', query)
-    owner_repos = OWNER_REPO.findall(query)
+    owner_repos = extract_owner_repos(query)
     raw = TOKEN.findall(query)
     tokens = [t.lower() for t in raw if t.lower() not in STOP]
     exact = []
@@ -56,3 +59,26 @@ def plan_query(query: str, target: str = "mixed") -> SearchPlan:
         must_keep=list(dict.fromkeys(exact)),
         github_queries=github_queries,
     )
+
+
+def extract_owner_repos(query: str) -> list[str]:
+    repos = []
+    consumed: list[tuple[int, int]] = []
+    for match in GITHUB_REPO_URL.finditer(query):
+        repos.append(_clean_owner_repo(match.group(1)))
+        consumed.append(match.span())
+
+    scrubbed = list(query)
+    for start, end in consumed:
+        scrubbed[start:end] = " " * (end - start)
+    for owner_repo in OWNER_REPO.findall("".join(scrubbed)):
+        repos.append(_clean_owner_repo(owner_repo))
+    return list(dict.fromkeys(repo for repo in repos if repo))
+
+
+def _clean_owner_repo(value: str) -> str:
+    owner_repo = value.strip().removesuffix(".git").strip("/")
+    parts = owner_repo.split("/", 1)
+    if len(parts) != 2 or parts[0].lower() == "github.com":
+        return ""
+    return owner_repo

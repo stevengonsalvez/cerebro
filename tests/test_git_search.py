@@ -18,6 +18,13 @@ def test_query_plan_preserves_exact_owner_repo_and_rare_token():
     assert "cursor" in plan.semantic_terms
 
 
+def test_query_plan_extracts_repo_from_github_url():
+    plan = plan_query("inspect https://github.com/foo/bar/tree/main")
+
+    assert "foo/bar" in plan.exact_terms
+    assert "github.com/foo" not in plan.exact_terms
+
+
 def test_search_github_returns_gittoskill(monkeypatch):
     def fake_search_repositories(self, query, limit=10):
         return {
@@ -49,3 +56,29 @@ def test_search_github_returns_gittoskill(monkeypatch):
     assert result["repositories"][0]["full_name"] == "filiksyos/gittoskill"
     assert "exact_terms" in result["query_plan"]
     assert result["repositories"][0]["reason"]
+
+
+def test_search_github_exact_lookup_uses_repo_from_url(monkeypatch):
+    lookups = []
+
+    def fake_get_repo(self, owner, repo):
+        lookups.append((owner, repo))
+        return {
+            "full_name": f"{owner}/{repo}",
+            "html_url": f"https://github.com/{owner}/{repo}",
+            "description": "URL exact match",
+        }
+
+    monkeypatch.setattr(GitHubClient, "get_repo", fake_get_repo)
+    monkeypatch.setattr(GitHubClient, "search_repositories", lambda self, query, limit=10: {"total_count": 0, "items": []})
+    monkeypatch.setattr(GitHubClient, "search_users", lambda self, query, limit=10: {"total_count": 0, "items": []})
+    monkeypatch.setattr(GitHubClient, "get_readme", lambda self, owner, repo: "")
+    monkeypatch.setattr(GitHubClient, "get_languages", lambda self, owner, repo: {})
+    monkeypatch.setattr(GitHubClient, "get_topics", lambda self, owner, repo: [])
+    monkeypatch.setattr(GitHubClient, "get_repo_contents", lambda self, owner, repo, path="": [])
+
+    result = search_github("inspect https://github.com/foo/bar", settings=Settings(), target="repositories")
+
+    assert lookups[0] == ("foo", "bar")
+    assert ("github.com", "foo") not in lookups
+    assert result["repositories"][0]["full_name"] == "foo/bar"
