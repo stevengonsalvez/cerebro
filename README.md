@@ -9,8 +9,8 @@
 
 > 📖 **Read the explainer:** [explainers.stevengonsalvez.com/cerebro](https://explainers.stevengonsalvez.com/cerebro/) — architecture, sources, signals, and the full pipeline in one page.
 
-CEREBRO ingests raw tech signals from ten channels — Hacker News (front-page, **Show HN**,
-**Launch HN**), **YC RFS**, Reddit, GitHub Trending, OSSInsight, RSS, Gmail newsletters, and
+CEREBRO ingests raw tech signals from eleven channels — Hacker News (front-page, **Show HN**,
+**Launch HN**), **YC RFS**, Reddit, GitHub Trending, OSSInsight, RSS, pinned seed URLs, Gmail newsletters, and
 X — filters them against a hyper-specific interest matrix, and writes a clean
 **"explain-to-me" briefing** plus atomic, Dataview-queryable notes into an Obsidian vault —
 every day at 07:00 via `launchd`. The cheap filtering pass runs on Claude Haiku; the readable
@@ -79,6 +79,7 @@ digest on Claude Sonnet. **No API keys** — it drives Claude Code on the machin
 | **GitHub Trending** | repos making the biggest star moves — scrape of `github.com/trending` for **daily + weekly** windows, deduped. Captures `owner/repo`, description, and star count ("N stars today/this week"). | This is the "GitHunt" — discovery of star-gainers. Optional language filter (`languages: []` = all). |
 | **OSSInsight** | repos that *gained* the most stars in the window (≥ `min_stars`) via `api.ossinsight.io` | True star-velocity (vs. trending's snapshot). Period configurable (`past_week`, …). |
 | **RSS** | 10 curated industry feeds: Simon Willison, Latent Space, Interconnects, Claude Code + Codex release feeds, GitHub blog + changelog, OpenAI news, Product Hunt | `feedparser`, `limit` entries each. |
+| **Seed URLs** | pinned one-off links Stevie explicitly wants Cerebro to ingest, starting with Simon Willison's `shot-scraper video` article | Use when a specific blog/repo/post matters even if its parent feed is already watched; dedup watermark keeps it from repeating forever. |
 | **Gmail** | newsletter mail matching `(label:newsletters OR from:<senders>) newer_than:1d` (TLDR, Ben's Bites, ByteByteGo, …) | Via `gws`; each newsletter is treated as a link-aggregator. Intermittent (0 when no new mail in the window). |
 | **X / Twitter** | tweets from your `search_terms` (filtered by `min_likes`) + all tweets from curator/follow accounts; **curator listicles auto-explode into one signal per embedded repo** | `twscrape` with your saved Firefox cookies — free, headless, no API key. Engagement (likes/RTs/replies/views) stored in note frontmatter. Skips gracefully if logged out. |
 
