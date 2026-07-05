@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from . import (
     github_search, github_trending, gmail, hackernews, ossinsight, reddit, rss,
-    showhn, x_twscrape, yclaunches, ycrfs,
+    seed_urls, showhn, x_twscrape, yclaunches, ycrfs,
 )
 
 # name → fetch(cfg, settings) -> list[Signal]
@@ -16,6 +16,7 @@ SOURCES = {
     "github_search": github_search.fetch,
     "ossinsight": ossinsight.fetch,
     "rss": rss.fetch,
+    "seed_urls": seed_urls.fetch,
     "gmail": gmail.fetch,
     "x": x_twscrape.fetch,
 }

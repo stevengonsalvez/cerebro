@@ -52,6 +52,13 @@ rss:
     - https://openai.com/news/rss.xml
     # product launches — topic-filtered downstream by triage ("ProductHunt, not everything")
     - https://www.producthunt.com/feed
+seed_urls:                # one-off pinned links Stevie explicitly wants Cerebro to ingest
+  enabled: true
+  items:
+    - title: "Have your agent record video demos of its work with shot-scraper video"
+      url: https://simonwillison.net/2026/Jun/30/shot-scraper-video/?utm_source=substack&utm_medium=email
+      tags: [agent-evidence, demo-video, shot-scraper, browser-automation]
+      note: "Simon Willison source: use shot-scraper video so agents can record browser demo proof-of-work for UI changes, bug repros, and PR evidence."
 x:                      # free headless reads via twscrape (your Firefox cookies; no API key)
   enabled: true
   account: stevengonsalvez   # label for the twscrape account (loads your saved x.com cookies)
