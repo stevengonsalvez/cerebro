@@ -27,6 +27,10 @@ def _settings(tmp_path: Path) -> SimpleNamespace:
     return SimpleNamespace(vault_path=tmp_path / "vault", dry_run=True)
 
 
+def _fake_github_token() -> str:
+    return "ghp_" + "1234567890abcdefghijklmnop"
+
+
 def _repo() -> dict:
     return {
         "full_name": "filiksyos/gittoskill",
@@ -209,7 +213,7 @@ def test_artifact_scan_rejects_oversized_files(tmp_path: Path) -> None:
 def test_artifact_scan_rejects_secret_like_content(tmp_path: Path) -> None:
     root = tmp_path / "bundle"
     root.mkdir()
-    (root / "SKILL.md").write_text("token: ghp_1234567890abcdefghijklmnop\n")
+    (root / "SKILL.md").write_text(f"token: {_fake_github_token()}\n")
 
     with pytest.raises(cracked_devs.ArtifactScanError, match="secret material"):
         cracked_devs.scan_artifact_bundle(root)
@@ -219,7 +223,7 @@ def test_rejected_repo_skill_bundle_is_not_left_on_disk(tmp_path: Path) -> None:
     settings = _settings(tmp_path)
     repo = _repo() | {
         "references": {
-            "leak.md": "token: ghp_1234567890abcdefghijklmnop\n",
+            "leak.md": f"token: {_fake_github_token()}\n",
         }
     }
     bundle = tmp_path / "vault/_scratch/Skills/cracked-devs/repos/filiksyos--gittoskill"
