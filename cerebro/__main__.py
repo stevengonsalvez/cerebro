@@ -15,6 +15,8 @@ def main() -> None:
                     help="write to _scratch/, mute ntfy")
     ap.add_argument("--health", action="store_true",
                     help="print per-source yield/failure history and exit")
+    ap.add_argument("--beast", action="store_true",
+                    help="X firehose: pull every tweet in window, analyse all, walk threads (heavy tokens)")
     ap.add_argument("--version", action="version", version=f"cerebro {__version__}")
     sub = ap.add_subparsers(dest="command")
 
@@ -120,6 +122,8 @@ def main() -> None:
         dry_run_override=True if dry_run_requested else None,
         allow_example=dry_run_requested,
     )
+    if args.beast:
+        settings.sources.setdefault("x", {})["beast"] = True
     st, paths = run(settings)
     total = st.input_tokens + st.output_tokens + st.cache_read + st.cache_creation
     print(

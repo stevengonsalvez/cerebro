@@ -14,6 +14,8 @@ def enrich(signals: list[Signal]) -> list[Signal]:
     for s in signals:
         if len(s.clean_text) > 200:
             continue
+        if "x.com/" in s.url or "twitter.com/" in s.url:
+            continue   # tweet status pages 403 unauth & add nothing past rawContent (beast firehose: avoid a serial fetch storm)
         html = s.raw_html
         if not html and s.url.startswith("http"):
             try:
