@@ -82,9 +82,16 @@ def triage(signals: list[Signal], settings, batch: int = 60, meter: dict | None 
             if s.source in keep_sources:   # beast: a failed/empty triage batch must not silently drop X
                 out.append(s)
             continue
+        pre_source_tags = list(s.source_tags or s.tags or [])
         s.score = float(r.get("score", 0) or 0)
         s.category = r.get("category", "") or ""
-        s.tags = r.get("tags") or []
+        s.topic_tags = r.get("topic_tags") or r.get("tags") or []
+        s.source_tags = pre_source_tags
+        s.entity_tags = r.get("entities") or s.entity_tags
+        s.meta["explore_score"] = r.get("explore_score", s.meta.get("explore_score"))
+        s.meta["explore_angle"] = r.get("explore_angle", s.meta.get("explore_angle", ""))
+        s.meta["why_now"] = r.get("why_now", s.meta.get("why_now", ""))
+        s.merge_tags()
         s.meta["reason"] = (r.get("reason") or "").strip()
         if _keep(s, threshold, keep_sources):
             out.append(s)

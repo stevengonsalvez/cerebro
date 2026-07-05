@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cerebro</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Cerebro</p>
+          <h1>Cerebro signal workbench</h1>
+        </div>
+        <div class="status-pill" id="healthStatus">Checking</div>
+      </header>
+
+      <section class="workspace" aria-label="Cerebro workbench">
+        <form class="search-panel" id="searchForm">
+          <div class="query-row">
+            <label class="query-label" for="queryInput">Search</label>
+            <div class="query-control">
+              <input
+                id="queryInput"
+                name="query"
+                type="search"
+                autocomplete="off"
+                placeholder="repos, builders, patterns"
+                required
+              />
+              <button class="primary-button" type="submit">Search</button>
+            </div>
+          </div>
+
+          <div class="toolbar" role="group" aria-label="Search controls">
+            <div class="segmented" id="targetControl" role="radiogroup" aria-label="Target">
+              <label>
+                <input type="radio" name="target" value="mixed" checked />
+                <span>Mixed</span>
+              </label>
+              <label>
+                <input type="radio" name="target" value="repositories" />
+                <span>Repos</span>
+              </label>
+              <label>
+                <input type="radio" name="target" value="users" />
+                <span>Users</span>
+              </label>
+            </div>
+
+            <label class="toggle">
+              <input id="deepToggle" name="deep" type="checkbox" />
+              <span>Deep</span>
+            </label>
+
+            <label class="limit-control">
+              <span>Limit</span>
+              <input id="limitInput" name="limit" type="number" min="1" max="50" value="10" />
+            </label>
+          </div>
+        </form>
+
+        <section class="results-panel" aria-label="Search results">
+          <div class="panel-header">
+            <h2>Results</h2>
+            <span id="resultCount">0</span>
+          </div>
+          <div class="results-list" id="resultsList"></div>
+        </section>
+
+        <aside class="detail-panel" aria-label="Candidate details">
+          <div class="panel-header">
+            <h2>Detail</h2>
+            <button class="ghost-button" id="openVaultButton" type="button" disabled>Open artifact</button>
+          </div>
+          <div class="detail-body" id="detailBody">
+            <p class="muted">Run search.</p>
+          </div>
+
+          <div class="action-grid">
+            <button class="secondary-button" id="repoSkillButton" type="button" disabled>
+              Repo artifact
+            </button>
+            <button class="secondary-button" id="userSkillButton" type="button" disabled>
+              Builder artifact
+            </button>
+          </div>
+
+          <div class="artifact-output" id="artifactOutput"></div>
+        </aside>
+
+        <section class="stage-panel" aria-label="Stage log">
+          <div class="panel-header">
+            <h2>Stage log</h2>
+            <span id="modeLabel">Quick</span>
+          </div>
+          <ol id="stageLog" class="stage-log"></ol>
+        </section>
+      </section>
+    </main>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

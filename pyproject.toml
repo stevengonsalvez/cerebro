@@ -3,7 +3,18 @@ name = "cerebro"
 version = "0.1.0"
 description = "Daily tech-signal intelligence pipeline → Obsidian"
 requires-python = ">=3.11"
-dependencies = ["pyyaml", "requests", "feedparser", "trafilatura", "twscrape"]
+dependencies = [
+  "pyyaml",
+  "requests",
+  "feedparser",
+  "trafilatura",
+  "twscrape",
+  "fastapi",
+  "uvicorn",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
 
 [build-system]
 requires = ["setuptools"]
@@ -11,3 +22,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["cerebro*"]
+
+[tool.setuptools.package-data]
+cerebro = ["ui/static/*"]

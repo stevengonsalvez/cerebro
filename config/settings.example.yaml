@@ -23,3 +23,10 @@ ntfy:
 schedule:
   hour: 7
   minute: 0
+
+github:
+  token_env: GITHUB_TOKEN        # never store the token value here; .env or shell env only
+  cache_path: cerebro-gitintel.sqlite
+  cache_ttl_hours: 24
+  request_timeout_seconds: 20
+  max_enrich: 8
