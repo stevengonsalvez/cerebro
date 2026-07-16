@@ -51,9 +51,17 @@ def _prefs_block(profile: dict | None) -> str:
     return "\n\nUSER FEEDBACK (Stevie rated past signals — weight accordingly):\n- " + "\n- ".join(lines)
 
 
+def _keep(s: Signal, threshold: float, keep_sources) -> bool:
+    """beast: keep all keep_sources regardless of score (still scored)."""
+    return s.score >= threshold or s.source in keep_sources
+
+
 def triage(signals: list[Signal], settings, batch: int = 60, meter: dict | None = None,
-           profile: dict | None = None) -> list[Signal]:
-    """Score + categorize via Claude Code (haiku) in batches, keep score >= threshold, sort desc."""
+           profile: dict | None = None, keep_sources=None) -> list[Signal]:
+    """Score + categorize via Claude Code (haiku) in batches, keep score >= threshold, sort desc.
+
+    keep_sources: sources exempt from the score-drop (still scored, never cut). beast: {"x"}."""
+    keep_sources = keep_sources or set()
     if not signals:
         return []
     matrix = _matrix_block(settings.matrix) + _prefs_block(profile)
@@ -71,12 +79,32 @@ def triage(signals: list[Signal], settings, batch: int = 60, meter: dict | None 
     for i, s in enumerate(signals):
         r = by_id.get(i)
         if not r:
+            if s.source in keep_sources:   # beast: a failed/empty triage batch must not silently drop X
+                out.append(s)
             continue
+        pre_source_tags = list(s.source_tags or s.tags or [])
         s.score = float(r.get("score", 0) or 0)
         s.category = r.get("category", "") or ""
-        s.tags = r.get("tags") or []
+        s.topic_tags = r.get("topic_tags") or r.get("tags") or []
+        s.source_tags = pre_source_tags
+        s.entity_tags = r.get("entities") or s.entity_tags
+        s.meta["explore_score"] = r.get("explore_score", s.meta.get("explore_score"))
+        s.meta["explore_angle"] = r.get("explore_angle", s.meta.get("explore_angle", ""))
+        s.meta["why_now"] = r.get("why_now", s.meta.get("why_now", ""))
+        s.merge_tags()
         s.meta["reason"] = (r.get("reason") or "").strip()
-        if s.score >= threshold:
+        if _keep(s, threshold, keep_sources):
             out.append(s)
     out.sort(key=lambda s: s.score, reverse=True)
     return out
+
+
+if __name__ == "__main__":   # offline self-check: keep_sources exempts low-score signals from the drop
+    lo_x = Signal(url="x1", title="t", source="x"); lo_x.score = 0.1
+    lo_rss = Signal(url="r1", title="t", source="rss"); lo_rss.score = 0.1
+    threshold = 0.5
+    keep_sources = {"x"}
+    out = [s for s in (lo_x, lo_rss) if _keep(s, threshold, keep_sources)]
+    assert lo_x in out, "low-score X must survive when x in keep_sources"
+    assert lo_rss not in out, "low-score rss must be dropped"
+    print("triage self-check OK")

@@ -20,6 +20,8 @@ accounts.db
 *.sqlite3
 *.db
 *.log
+.codex/
+.tmux-dev-session.json
 logs/
 _scratch/
 cerebro/_scratch/

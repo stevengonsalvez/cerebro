@@ -18,8 +18,30 @@ class Signal:
     score: float = 0.0                # set by triage (0..1)
     category: str = ""                # set by triage
     tags: list[str] = field(default_factory=list)
+    topic_tags: list[str] = field(default_factory=list)
+    source_tags: list[str] = field(default_factory=list)
+    entity_tags: list[str] = field(default_factory=list)
+    artifact_tags: list[str] = field(default_factory=list)
+    workflow_tags: list[str] = field(default_factory=list)
     captured: str = ""                # ISO8601, set at fetch
     meta: dict = field(default_factory=dict)   # points/author/stars/sender
+
+    def merge_tags(self) -> list[str]:
+        """Return Obsidian-compatible tags while preserving typed tag layers."""
+        if not self.source_tags and self.tags and not self.topic_tags:
+            self.source_tags = list(self.tags)
+        merged = []
+        for values in (
+            self.topic_tags,
+            self.source_tags,
+            self.entity_tags,
+            self.artifact_tags,
+            self.workflow_tags,
+            self.tags,
+        ):
+            merged.extend(values or [])
+        self.tags = sorted({str(t).strip() for t in merged if str(t).strip()})
+        return self.tags
 
 
 @dataclass

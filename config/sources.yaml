@@ -27,6 +27,15 @@ ossinsight:             # GitHub star-velocity (most stars GAINED in the window)
   languages: [All]
   min_stars: 20          # min stars gained in the period
   max_items: 40
+github_search:          # Natural-language GitHub repo/person search, enriched into Signals/Entities
+  enabled: true
+  queries:
+    - "github profile into cursor skill generator"
+    - "agent skills marketplace claude code cursor codex"
+  target: mixed
+  max_items: 20
+  enrich_top: 8
+  write_entities: false
 rss:
   enabled: true
   limit: 20
@@ -43,6 +52,13 @@ rss:
     - https://openai.com/news/rss.xml
     # product launches — topic-filtered downstream by triage ("ProductHunt, not everything")
     - https://www.producthunt.com/feed
+seed_urls:                # one-off pinned links Stevie explicitly wants Cerebro to ingest
+  enabled: true
+  items:
+    - title: "Have your agent record video demos of its work with shot-scraper video"
+      url: https://simonwillison.net/2026/Jun/30/shot-scraper-video/?utm_source=substack&utm_medium=email
+      tags: [agent-evidence, demo-video, shot-scraper, browser-automation]
+      note: "Simon Willison source: use shot-scraper video so agents can record browser demo proof-of-work for UI changes, bug repros, and PR evidence."
 x:                      # free headless reads via twscrape (your Firefox cookies; no API key)
   enabled: true
   account: stevengonsalvez   # label for the twscrape account (loads your saved x.com cookies)
@@ -57,6 +73,15 @@ x:                      # free headless reads via twscrape (your Firefox cookies
     - mattpocockuk
   per_query: 12
   explode_min_links: 3  # tweets with >=N external links → one signal per embedded link (listicle explode)
+  beast: false              # firehose: pull every tweet in window, analyse all, walk threads
+  beast_window_hours: 24    # pull tweets newer than this
+  beast_max_per: 500        # safety ceiling per term/account (stop runaway pagination)
+  beast_thread_replies: 15  # replies pulled per thread (link-bearing prioritized)
+  beast_max_threads: 100    # ceiling on roots we thread-walk (request-budget guard)
+  beast_feed: true          # also pull your following-graph feed (only active when beast is on)
+  feed_account: stevengonsalvez   # your x handle (whose follow-graph to expand; defaults to `account`)
+  beast_feed_max_accounts: 150    # cap accounts expanded — one user_tweets call each (fan-out guard)
+  beast_feed_max_per: 100         # tweets per followed account (lower than beast_max_per to avoid a lock)
 gmail:
   enabled: true
   label: newsletters

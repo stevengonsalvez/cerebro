@@ -24,6 +24,13 @@ schedule:
   hour: 7
   minute: 0
 
+github:
+  token_env: GITHUB_TOKEN        # never store the token value here; .env or shell env only
+  cache_path: cerebro-gitintel.sqlite
+  cache_ttl_hours: 24
+  request_timeout_seconds: 20
+  max_enrich: 8
+
 # Optional autoresearch signal-export sink (the self-improvement loop's input
 # producer, SPEC 3.1 / 5.1). Entirely opt-in: with enabled:false cerebro behaves
 # exactly as a standalone install. When enabled, each digest-surviving signal is
