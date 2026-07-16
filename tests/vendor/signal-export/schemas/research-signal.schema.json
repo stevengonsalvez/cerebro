@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fleet-lambda/specs/signal-export/schemas/research-signal.schema.json",
+  "schemaVersion": 1,
+  "title": "research-signal",
+  "description": "One improvement signal in structured form (autoresearch goal 09, SPEC Section 3.1). The open bridge into the self-improvement loop from any signal producer (cerebro, reflect). fingerprint is 'sha256:' + a 64-char hex digest computed per SPEC Section 5.1; the service recomputes it from the payload and rejects a mismatch. excerpt is untrusted data.",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "tenant_id": { "type": "string", "minLength": 1 },
+    "fingerprint": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "fingerprint_basis": { "enum": ["url", "content", "reflect"] },
+    "source": {
+      "enum": ["reflect", "hackernews", "showhn", "yclaunches", "ycrfs", "reddit",
+               "github_trending", "ossinsight", "rss", "gmail", "x", "manual"]
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "category": { "type": "string", "minLength": 1 },
+    "score": { "type": "number", "minimum": 0.0, "maximum": 10.0 },
+    "reason": { "type": "string", "minLength": 1 },
+    "captured_at": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$", "format": "date-time" },
+    "url": { "type": "string" },
+    "simhash": { "type": "string", "pattern": "^[0-9]+$" },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "rating": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "excerpt": { "type": "string", "maxLength": 4000 },
+    "run_id": { "type": "string" }
+  },
+  "required": ["schemaVersion", "id", "tenant_id", "fingerprint", "fingerprint_basis", "source", "title", "category", "score", "reason", "captured_at"],
+  "additionalProperties": false
+}

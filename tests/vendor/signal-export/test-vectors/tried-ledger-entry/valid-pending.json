@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "led-1751600000000",
+  "tenant_id": "meridian",
+  "fingerprint": "sha256:fbe9b51ec5c338101e13f2a96e993842b06d171a155c0281d4a1590fa8598098",
+  "status": "pending",
+  "asset_scope": "tenant",
+  "signal_id": "sig-1751600000000",
+  "decided_at": "2026-07-16T09:00:00Z"
+}

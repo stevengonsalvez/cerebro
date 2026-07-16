@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "sig-1751600000002",
+  "tenant_id": "meridian",
+  "fingerprint": "sha256:fb94c42d25366efd99ffe9a55aceb3b283e13c6d3a9d0714e9b076a0d5d650d2",
+  "fingerprint_basis": "reflect",
+  "source": "reflect",
+  "title": "repeated skill-library pass drift",
+  "category": "strike",
+  "score": 10.0,
+  "reason": "reflect correction cluster",
+  "captured_at": "2026-07-11T09:01:16Z",
+  "excerpt": "correction text"
+}

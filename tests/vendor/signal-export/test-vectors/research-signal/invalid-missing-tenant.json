@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "sig-1751600000000",
+  "fingerprint": "sha256:fbe9b51ec5c338101e13f2a96e993842b06d171a155c0281d4a1590fa8598098",
+  "fingerprint_basis": "url",
+  "source": "github_trending",
+  "title": "Inspect AI is trending",
+  "category": "coding-agents",
+  "score": 8.5,
+  "reason": "eval-authoring guidance is behind upstream",
+  "captured_at": "2026-07-16T09:00:00Z",
+  "url": "https://github.com/UKGovernmentBEIS/inspect_ai",
+  "simhash": "4611686018427387900",
+  "tags": [
+    "evals",
+    "inspect"
+  ],
+  "excerpt": "Inspect AI adds new scorers.",
+  "run_id": "cerebro-2026-07-16"
+}

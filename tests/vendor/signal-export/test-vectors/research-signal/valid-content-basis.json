@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "sig-1751600000001",
+  "tenant_id": "meridian",
+  "fingerprint": "sha256:e4fe2df45d946b18b28e595e6e2a80ee7f3fb7f7fe9646f952954d9cfebf9eb6",
+  "fingerprint_basis": "content",
+  "source": "gmail",
+  "title": "A URL-less gmail signal about agent evals",
+  "category": "coding-agents",
+  "score": 3.0,
+  "reason": "newsletter mention",
+  "captured_at": "2026-07-16T09:00:00Z",
+  "excerpt": "body text"
+}
