@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import pathlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import yaml
 
@@ -40,6 +40,9 @@ class Settings:
     schedule: dict
     sources: dict
     matrix: dict
+    # Opt-in autoresearch signal-export sink; off by default so standalone
+    # cerebro users are untouched (autoresearch SPEC 3.1 / 5.1).
+    export: dict = field(default_factory=lambda: {"enabled": False})
 
 
 def _load(name: str) -> dict:
@@ -70,4 +73,5 @@ def load(dry_run_override: bool | None = None) -> Settings:
         schedule=s.get("schedule", {"hour": 7, "minute": 0}),
         sources=_load("sources.yaml"),
         matrix=_load("interest-matrix.yaml"),
+        export=s.get("export", {"enabled": False}),
     )

@@ -23,6 +23,7 @@ accounts.db
 logs/
 _scratch/
 cerebro/_scratch/
+export/
 
 # ── python ─────────────────────────────────────────────────
 __pycache__/
