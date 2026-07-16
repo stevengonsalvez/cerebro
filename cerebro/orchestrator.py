@@ -7,7 +7,7 @@ from .config import Settings
 from .llm import claude, digest, triage
 from .models import RunStats
 from .process import comments, dedup, extract, feedback, junkgate, prerank
-from .sink import notify, vault
+from .sink import export, notify, vault
 from .sources import SOURCES
 from .state import State
 
@@ -52,6 +52,7 @@ def run(settings: Settings) -> tuple[RunStats, dict]:
     if profile["n"]:
         print(f"[feedback] profile from {profile['n']} rated notes")
     cand = dedup.dedupe(junkgate.filter(raw), state, settings.dedup_days)
+    cand = export.prefilter(cand, settings)   # autoresearch tried-ledger pre-filter (fail-open, no-op unless configured)
     st.after_dedup = len(cand)
     ranked = prerank.prerank(cand, settings, settings.prerank_keep, profile)
     print(f"[prerank] {len(cand)} → {len(ranked)} to triage")
@@ -69,6 +70,7 @@ def run(settings: Settings) -> tuple[RunStats, dict]:
 
     # 3. write + remember (mark every candidate so tomorrow doesn't re-triage them) + notify
     paths = vault.write(date, briefing, top, settings, st)
+    export.write(top, settings, st)   # autoresearch signal-export sink (no-op unless export.enabled)
     for s in ranked:        # mark only LLM-evaluated items; pre-rank-dropped tail re-evaluates cheaply tomorrow
         state.mark(s)
     notify.push(st, paths["daily"], settings)
