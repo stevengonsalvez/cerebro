@@ -5,9 +5,18 @@ description = "Daily tech-signal intelligence pipeline → Obsidian"
 requires-python = ">=3.11"
 dependencies = ["pyyaml", "requests", "feedparser", "trafilatura", "twscrape"]
 
+[project.optional-dependencies]
+# Test-only deps; jsonschema validates exporter output against the vendored
+# signal-export contract. The exporter itself is stdlib + requests (a runtime dep).
+dev = ["pytest", "jsonschema"]
+
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["cerebro*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

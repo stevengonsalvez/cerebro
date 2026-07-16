@@ -1,0 +1,27 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: create venv + install test deps
+        run: |
+          uv venv
+          uv pip install pytest jsonschema pyyaml requests
+      - name: pytest
+        run: uv run pytest -q
