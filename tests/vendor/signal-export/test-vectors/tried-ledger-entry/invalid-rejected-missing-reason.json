@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "led-x",
+  "tenant_id": "meridian",
+  "fingerprint": "sha256:fbe9b51ec5c338101e13f2a96e993842b06d171a155c0281d4a1590fa8598098",
+  "status": "rejected",
+  "asset_scope": "tenant",
+  "revisit_after": "2027-01-12T09:00:00Z"
+}

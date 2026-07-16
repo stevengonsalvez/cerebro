@@ -14,7 +14,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+# Test-only deps; jsonschema validates exporter output against the vendored
+# signal-export contract. The exporter itself is stdlib + requests (a runtime dep).
+dev = ["pytest", "jsonschema"]
 
 [build-system]
 requires = ["setuptools"]
@@ -25,3 +27,7 @@ include = ["cerebro*"]
 
 [tool.setuptools.package-data]
 cerebro = ["ui/static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

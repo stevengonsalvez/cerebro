@@ -30,3 +30,18 @@ github:
   cache_ttl_hours: 24
   request_timeout_seconds: 20
   max_enrich: 8
+
+# Optional autoresearch signal-export sink (the self-improvement loop's input
+# producer, SPEC 3.1 / 5.1). Entirely opt-in: with enabled:false cerebro behaves
+# exactly as a standalone install. When enabled, each digest-surviving signal is
+# serialized to export/signals-<run_id>.jsonl; when autoresearch_url is set the
+# batch is POSTed (chunked at 500) with the Bearer token read from the env var
+# named below, and the dedup pass pre-filters already-tried signals via the
+# ledger (fail-open). No credentials ever live in this repo: only the env-var
+# NAME is configured here; the token itself stays in the shell env / .env.
+export:
+  enabled: false                   # off by default (no jsonl, no network)
+  dir: "./export"                  # signals-<run_id>.jsonl output dir (relative → repo root)
+  autoresearch_url: ""             # e.g. https://autoresearch.internal, empty disables POST + ledger pre-filter
+  token_env: "AUTORESEARCH_TOKEN"  # env var holding the tenant ingest Bearer token (never a literal token here)
+  tenant_id: "REPLACE_ME"          # tenant id stamped on every exported signal
