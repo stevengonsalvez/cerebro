@@ -117,6 +117,16 @@ class GitHubClient:
         return data if isinstance(data, list) else []
 
 
+def resolve_token(cfg: dict | None, settings=None) -> str | None:
+    """Per-source GitHub token: cfg['token_env'] wins, then settings.github.token_env,
+    then GITHUB_TOKEN. Returns the env VALUE, or None if that env var is unset so
+    GitHubClient.__init__'s ``token is not None`` guard falls back to its own read."""
+    gh = getattr(settings, "github", {}) or {}
+    env_name = (cfg or {}).get("token_env") or gh.get("token_env") or "GITHUB_TOKEN"
+    val = os.environ.get(env_name)
+    return val if val else None
+
+
 def _cache_namespace(token: str) -> str:
     if not token:
         return "anonymous"
