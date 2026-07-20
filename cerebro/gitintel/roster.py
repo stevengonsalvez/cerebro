@@ -116,6 +116,70 @@ def by_github(devs: list[CrackedDev]) -> dict[str, CrackedDev]:
     return {d.github.lower(): d for d in devs if d.github}
 
 
+def append_devs(path: str | pathlib.Path | None, devs: list[dict]) -> list[str]:
+    """Append new tier-3 entries to cracked_devs.yaml, deduped by slug, preserving
+    every existing comment/line and their order. Line-level append (no yaml.dump of the
+    whole file, mirroring __main__._patch_roster_file). Returns the slugs actually added.
+    """
+    p = pathlib.Path(path) if path else DEFAULT_PATH
+    existing, _ = load_roster(p)
+    known = {d.slug for d in existing}
+
+    added: list[str] = []
+    blocks: list[str] = []
+    for dev in devs:
+        slug = _dev_slug(dev)
+        if not slug or slug in known:
+            continue  # dedup by slug (github > x > name)
+        known.add(slug)
+        added.append(slug)
+        blocks.append(_dev_block(dev))
+    if not blocks:
+        return []
+
+    text = p.read_text(encoding="utf-8") if p.exists() else ""
+    if text and not text.endswith("\n"):
+        text += "\n"
+    if not text.startswith("devs:") and "\ndevs:" not in text:
+        text += "devs:\n"  # roster with no list yet — give the entries a home
+    p.write_text(text + "\n" + "\n\n".join(blocks) + "\n", encoding="utf-8")
+    return added
+
+
+def _dev_slug(dev: dict) -> str:
+    key = dev.get("github") or dev.get("x") or dev.get("name") or ""
+    return str(key).strip().lstrip("@").lower()
+
+
+def _dev_block(dev: dict) -> str:
+    name = dev.get("name") or dev.get("github") or ""
+    lines = [f"  - name: {_scalar(name)}", f"    tier: {int(dev.get('tier') or 3)}"]
+    if dev.get("github"):
+        lines.append(f"    github: {_scalar(dev['github'])}")
+    if dev.get("x"):
+        lines.append(f"    x: {_scalar(dev['x'])}")
+    tags = dev.get("tags") or []
+    if tags:
+        lines.append(f"    tags: [{', '.join(str(t) for t in tags)}]")
+    if dev.get("why"):
+        lines.append(f"    why: {_scalar(dev['why'])}")
+    if dev.get("added"):
+        lines.append(f"    added: {_scalar(dev['added'])}")
+    lines.append(f"    discovered_via: {dev.get('discovered_via') or 'crackscan'}")
+    return "\n".join(lines)
+
+
+def _scalar(value: Any) -> str:
+    """Emit a YAML scalar, quoting only when a bare value would be ambiguous.
+    Mirrors __main__._yaml_scalar_out so roster writes stay consistent."""
+    import re
+
+    s = str(value)
+    if s == "" or re.search(r'(^[\s\[\]{}#&*!|>%@`"\',])|(:\s)|(\s#)|(\s$)', s):
+        return '"' + s.replace('"', '\\"') + '"'
+    return s
+
+
 def _merge_unique(existing: list, extra: list) -> list:
     """Case-insensitive dedup, preserving original order and original casing."""
     seen = {str(v).strip().lower() for v in existing}
