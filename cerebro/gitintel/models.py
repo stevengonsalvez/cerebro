@@ -51,6 +51,10 @@ class GitHubUserCandidate:
     growth_reason: str = ""
     score: float = 0.0
     reason: str = ""
+    blog: str = ""
+    twitter_username: str = ""
+    company: str = ""
+    location: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -86,6 +90,10 @@ class ProfileInspection:
     portfolio_momentum_score: float = 0.0
     momentum_score: float = 0.0
     growth_reason: str = ""
+    blog: str = ""
+    twitter_username: str = ""
+    company: str = ""
+    location: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)

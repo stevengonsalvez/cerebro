@@ -53,7 +53,7 @@ def rank_repositories(candidates: list[GitHubRepoCandidate], plan: SearchPlan) -
 def rank_users(candidates: list[GitHubUserCandidate], plan: SearchPlan) -> list[GitHubUserCandidate]:
     terms = _terms(plan)
     for c in candidates:
-        haystack = " ".join([c.login, c.name, c.bio]).lower()
+        haystack = " ".join([c.login, c.name, c.bio, getattr(c, "company", ""), getattr(c, "blog", "")]).lower()
         matches = [t for t in terms if t in haystack]
         exact = 1.0 if any(t.lower() == c.login.lower() for t in plan.exact_terms) else 0.0
         coverage = len(set(matches)) / max(len(set(terms)), 1)

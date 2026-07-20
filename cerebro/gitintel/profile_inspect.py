@@ -27,7 +27,21 @@ def user_from_api(data: dict, track: str = "semantic") -> GitHubUserCandidate:
         followers=int(data.get("followers") or 0),
         public_repos=int(data.get("public_repos") or 0),
         track=track,
+        blog=_clean_url(data.get("blog")),
+        twitter_username=(data.get("twitter_username") or "").strip().lstrip("@"),
+        company=(data.get("company") or "").strip(),
+        location=(data.get("location") or "").strip(),
     )
+
+
+def _clean_url(v) -> str:
+    """GitHub `blog` is user-typed: often bare-domain, sometimes empty, sometimes junk."""
+    s = (v or "").strip()
+    if not s:
+        return ""
+    if not s.startswith(("http://", "https://")):
+        s = "https://" + s
+    return s
 
 
 def inspect_profile(value: str, client: GitHubClient, repo_limit: int = 8) -> ProfileInspection:
@@ -80,4 +94,8 @@ def inspect_profile(value: str, client: GitHubClient, repo_limit: int = 8) -> Pr
         portfolio_momentum_score=portfolio_momentum(repos),
         momentum_score=max(user.momentum_score, portfolio_momentum(repos)),
         growth_reason=user.growth_reason,
+        blog=user.blog,
+        twitter_username=user.twitter_username,
+        company=user.company,
+        location=user.location,
     )
