@@ -51,6 +51,8 @@ def main() -> None:
     cd_roster = cd_sub.add_parser("roster", help="inspect and enrich the cracked-dev roster")
     cd_roster.add_argument("action", choices=["list", "enrich", "suggest"])
     cd_roster.add_argument("--tier", type=int, default=None, help="filter to tier <= N")
+    cd_roster.add_argument("--discovered", default=None,
+                           help="list: filter to devs discovered via this source (e.g. crackscan)")
     cd_roster.add_argument("--write", action="store_true",
                            help="write enrichment back to config/cracked_devs.yaml")
     cd_roster.add_argument("--overwrite", action="store_true",
@@ -267,6 +269,8 @@ def _run_roster(args, settings) -> dict[str, Any]:
     devs, wiring = roster_mod.load_roster()
     if args.action == "list":
         shown = devs if args.tier is None else [d for d in devs if d.tier <= args.tier]
+        if args.discovered is not None:
+            shown = [d for d in shown if d.discovered_via == args.discovered]
         wired = roster_mod.apply_to_sources({}, devs, wiring)
         return {
             "action": "list",
