@@ -144,3 +144,15 @@ def test_suggest_excludes_roster_devs(monkeypatch, tmp_path, capsys):
     assert "simonw" not in logins   # already on roster
     assert logins == ["newdev"]
     assert "newdev" in out["yaml"]
+
+
+def test_fetch_page_is_silent_on_failure(monkeypatch):
+    import requests
+
+    from cerebro.__main__ import _fetch_page
+
+    def boom(*a, **kw):
+        raise requests.ConnectionError("down")
+
+    monkeypatch.setattr(requests, "get", boom)
+    assert _fetch_page("https://unreachable.example") == ""

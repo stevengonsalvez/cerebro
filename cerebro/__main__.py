@@ -291,7 +291,7 @@ def _roster_enrich(args, settings, devs, roster_mod) -> dict[str, Any]:
         if dev.github:
             ident = identity.resolve_from_github(dev.github, client)
         elif dev.blog:
-            ident = identity.resolve_from_blog(dev.blog, client)
+            ident = identity.resolve_from_blog(dev.blog, client, fetch_page=_fetch_page)
         else:
             continue
         _, changed = identity.merge_into(dev, ident, overwrite=args.overwrite)
@@ -312,6 +312,19 @@ def _roster_enrich(args, settings, devs, roster_mod) -> dict[str, Any]:
         "written": wrote,
         "path": str(roster_mod.DEFAULT_PATH) if wrote else None,
     }
+
+
+def _fetch_page(url: str) -> str:
+    """Fetch a blog homepage for github-link scraping. Small, bounded, silent on failure."""
+    import requests
+
+    try:
+        r = requests.get(url, timeout=10, headers={"User-Agent": "cerebro-roster/1.0"})
+    except requests.RequestException:
+        return ""
+    if r.status_code != 200:
+        return ""
+    return r.text[:262144]  # 256 KiB cap — homepage is enough for a profile link
 
 
 def _roster_suggest(args, settings, devs, roster_mod) -> dict[str, Any]:
