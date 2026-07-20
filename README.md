@@ -205,7 +205,7 @@ devs:
 **Operate the roster** (JSON out, scriptable):
 
 ```bash
-python -m cerebro cracked-devs roster list [--tier N]   # roster + what each lane receives
+python -m cerebro cracked-devs roster list [--tier N] [--discovered SRC] # roster + lane view
 python -m cerebro cracked-devs roster enrich [--write]   # fill blank blog/x/github from GitHub
 python -m cerebro cracked-devs roster suggest [--limit N] # high-momentum devs not yet on roster
 ```
@@ -214,7 +214,47 @@ python -m cerebro cracked-devs roster suggest [--limit N] # high-momentum devs n
 blog-only entries, back-resolves the GitHub login. `--write` fills **blank** fields only
 (curated values win unless `--overwrite`) via a targeted line patch that keeps your comments
 and key order intact. Delete the file entirely and the pipeline still runs — the roster is
-optional.
+optional. `list --discovered crackscan` filters to devs auto-admitted by the discovery source
+(see below) via their `discovered_via` marker.
+
+### Cracked-dev auto-discovery (`crackscan`)
+
+The `crackscan` source closes the loop from *hot repo → who built it → is-it-cracked → track them*.
+It runs as a normal source but its output is new tier-3 roster entries rather than signals:
+
+```
+  seeds ──▶ human filter ──▶ cheap score (all) ──▶ deep score (top-N) ──▶ admit tier 3
+  4 lanes    org/bot/empty    followers+portfolio    commits/day via         score ≥ threshold,
+             rejected         +ships (no API burn)    events API             capped at admit_max
+```
+
+- **Four seeds**: trending `github` repos, explicit `seed_repos`, vault repo entities, and
+  `seed_handles` (X/Reddit handles resolved to GitHub). Each lane is empty-safe.
+- **Human filter**: rejects orgs, `[bot]` accounts, known vendor orgs, and empty profiles — only
+  real humans with a name or bio survive. Org-owned repos fall through to the top human committer.
+- **Two-stage funnel**: a cheap score (follower growth + portfolio momentum + ships-a-lot) ranks
+  everyone with zero extra API calls; only the top `top_n` pay for the deep commit-rate pass
+  (`/users/{login}/events`), gated by a `min_remaining` rate-limit budget.
+- **Tier-3 auto-admit is safe**: admitted devs land at tier 3 — catalogued but **not wired** into
+  any ingestion lane (above `max_tier`) — and are appended by a line patch that preserves comments
+  and order, so they are trivially prunable. Nothing runs on them until you promote the tier.
+
+**Token setup** — crackscan reads `GITHUB_TOKEN_CRACKSCAN`, falling back to `GITHUB_TOKEN` when
+unset, so you can isolate its rate-limit budget from the rest of the pipeline:
+
+```bash
+export GITHUB_TOKEN_CRACKSCAN=<a-github-pat>
+```
+
+**Tuning knobs** (in `config/sources.yaml` under `crackscan`):
+
+| Knob | Default | Effect |
+|---|---|---|
+| `score_threshold` | 0.55 | Crackedness gate — raise to admit fewer, higher-confidence devs |
+| `admit_max` | 5 | Max new tier-3 devs written per scan (extras are logged, not admitted) |
+| `top_n` | 10 | How many cheap-scorers get the deep commit-rate pass |
+| `window_days` | 90 | Commit-rate window for the deep score |
+| `min_remaining` | 200 | Skip the deep pass when the token's rate-limit budget is below this |
 
 ## Run it
 
