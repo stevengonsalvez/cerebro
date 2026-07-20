@@ -48,6 +48,14 @@ def main() -> None:
     cd_user.add_argument("--write-brief", action="store_true")
     cd_user.add_argument("--install", choices=["repo", "global"])
     cd_user.add_argument("--dry-run", action="store_true")
+    cd_roster = cd_sub.add_parser("roster", help="inspect and enrich the cracked-dev roster")
+    cd_roster.add_argument("action", choices=["list", "enrich", "suggest"])
+    cd_roster.add_argument("--tier", type=int, default=None, help="filter to tier <= N")
+    cd_roster.add_argument("--write", action="store_true",
+                           help="write enrichment back to config/cracked_devs.yaml")
+    cd_roster.add_argument("--overwrite", action="store_true",
+                           help="let resolution replace curated values (default: fill blanks only)")
+    cd_roster.add_argument("--limit", type=int, default=20, help="suggest: max candidates")
 
     serve = sub.add_parser("serve", help="serve local Cerebro UI")
     serve.add_argument("--host", default="127.0.0.1")
@@ -91,6 +99,9 @@ def main() -> None:
             dry_run_override=True if getattr(args, "dry_run", False) else None,
             allow_example=True,
         )
+        if args.cracked_kind == "roster":
+            print(json.dumps(_run_roster(args, settings), indent=2))
+            return
         if args.install:
             raise SystemExit("--install is intentionally explicit but not automated yet; generated bundle includes commands")
         if args.cracked_kind == "repo":
@@ -167,11 +178,13 @@ def _write_cracked_user_artifacts(
 ) -> list[dict[str, Any]]:
     if not (write_entity or write_brief):
         return []
-    from .sink import briefs, entities
+    from .sink import briefs, cracked_devs as cracked_devs_sink, entities
 
     profile = result.get("profile") or {}
     written: list[dict[str, Any]] = []
     if write_entity:
+        # Roster devs get their curated cross-platform links stamped onto the note.
+        profile = cracked_devs_sink.attach_roster_identity(profile, getattr(settings, "cracked_devs", []))
         written.append(entities.write_developer(profile, settings))
     if write_brief:
         written.append(briefs.write_brief(_developer_intelligence_brief(profile, result), settings))
@@ -245,6 +258,191 @@ def _first_list(data: dict[str, Any], *keys: str) -> list[Any]:
                 return list(value)
             return [value]
     return []
+
+
+def _run_roster(args, settings) -> dict[str, Any]:
+    """Dispatch `cracked-devs roster list|enrich|suggest` to a JSON-serialisable dict."""
+    from .gitintel import roster as roster_mod
+
+    devs, wiring = roster_mod.load_roster()
+    if args.action == "list":
+        shown = devs if args.tier is None else [d for d in devs if d.tier <= args.tier]
+        wired = roster_mod.apply_to_sources({}, devs, wiring)
+        return {
+            "action": "list",
+            "count": len(shown),
+            "devs": [d.to_dict() for d in shown],
+            "wiring": wiring,
+            "wired": wired,
+        }
+    if args.action == "enrich":
+        return _roster_enrich(args, settings, devs, roster_mod)
+    return _roster_suggest(args, settings, devs, roster_mod)
+
+
+def _roster_enrich(args, settings, devs, roster_mod) -> dict[str, Any]:
+    from .gitintel import identity
+    from .gitintel.github_client import GitHubClient
+
+    client = GitHubClient(settings)
+    changes: list[tuple[str, str, str]] = []
+    diffs: list[dict[str, Any]] = []
+    for dev in devs:
+        if dev.github:
+            ident = identity.resolve_from_github(dev.github, client)
+        elif dev.blog:
+            ident = identity.resolve_from_blog(dev.blog, client)
+        else:
+            continue
+        _, changed = identity.merge_into(dev, ident, overwrite=args.overwrite)
+        for field_name in changed:
+            value = getattr(dev, field_name)
+            changes.append((dev.name, field_name, value))
+            diffs.append({
+                "dev": dev.name, "field": field_name, "value": value,
+                "confidence": ident.confidence, "evidence": ident.evidence,
+            })
+    wrote = False
+    if args.write and changes:
+        _patch_roster_file(roster_mod.DEFAULT_PATH, changes)
+        wrote = True
+    return {
+        "action": "enrich",
+        "changes": diffs,
+        "written": wrote,
+        "path": str(roster_mod.DEFAULT_PATH) if wrote else None,
+    }
+
+
+def _roster_suggest(args, settings, devs, roster_mod) -> dict[str, Any]:
+    known: set[str] = set()
+    for dev in devs:
+        known.add(dev.slug)
+        if dev.github:
+            known.add(dev.github.lower())
+        if dev.x:
+            known.add(dev.x.lower())
+    candidates = _scan_developer_entities(getattr(settings, "vault_path", ""))
+    picked = [c for c in candidates if c["login"].lower() not in known]
+    picked.sort(key=lambda c: c["momentum_score"], reverse=True)
+    picked = picked[: args.limit]
+    return {
+        "action": "suggest",
+        "count": len(picked),
+        "suggestions": picked,
+        "yaml": _suggest_yaml_blocks(picked),
+    }
+
+
+def _scan_developer_entities(vault_path) -> list[dict[str, Any]]:
+    """Read developer entity notes' frontmatter for suggest ranking. No network."""
+    from pathlib import Path
+
+    base = Path(vault_path) / "Entities" / "developers"
+    if not base.is_dir():
+        return []
+    out: list[dict[str, Any]] = []
+    for note in sorted(base.glob("*.md")):
+        fm = _read_frontmatter(note.read_text(encoding="utf-8"))
+        login = fm.get("login", "")
+        if not login:
+            continue
+        try:
+            momentum = float(fm.get("momentum_score") or 0.0)
+        except (TypeError, ValueError):
+            momentum = 0.0
+        out.append({
+            "login": login,
+            "display_name": fm.get("display_name", ""),
+            "profile_url": fm.get("profile_url", f"https://github.com/{login}"),
+            "momentum_score": momentum,
+        })
+    return out
+
+
+def _read_frontmatter(text: str) -> dict[str, str]:
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+    fm: dict[str, str] = {}
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        if ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        fm[key.strip()] = value.strip().strip('"')
+    return fm
+
+
+def _suggest_yaml_blocks(candidates: list[dict[str, Any]]) -> str:
+    blocks = []
+    for c in candidates:
+        blocks.append(
+            f"  - name: {c['display_name'] or c['login']}\n"
+            f"    tier: 3\n"
+            f"    github: {c['login']}\n"
+            f"    why: \"momentum_score={c['momentum_score']}\"\n"
+            f"    discovered_via: suggest"
+        )
+    return "\n".join(blocks)
+
+
+def _patch_roster_file(path, changes: list[tuple[str, str, str]]) -> None:
+    """Set (dev_name, field, value) scalars in the roster YAML via a targeted line patch,
+    preserving comments, key order, and every untouched line. Raises if a dev is missing."""
+    from pathlib import Path
+
+    path = Path(path)
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    for dev_name, field_name, value in changes:
+        _patch_one(lines, dev_name, field_name, value)
+    path.write_text("".join(lines), encoding="utf-8")
+
+
+def _patch_one(lines: list[str], dev_name: str, field_name: str, value: str) -> None:
+    import re
+
+    name_re = re.compile(r"^(\s*)-\s+name:\s*(.+?)\s*$")
+    start = None
+    list_indent = ""
+    for i, line in enumerate(lines):
+        m = name_re.match(line.rstrip("\n"))
+        if m and m.group(2).strip().strip('"') == dev_name:
+            start = i
+            list_indent = m.group(1)
+            break
+    if start is None:
+        raise ValueError(f"roster patch: dev {dev_name!r} not found")
+    end = len(lines)
+    for j in range(start + 1, len(lines)):
+        stripped = lines[j].rstrip("\n")
+        if not stripped.strip():
+            continue
+        cur_indent = len(stripped) - len(stripped.lstrip())
+        if cur_indent <= len(list_indent):
+            end = j
+            break
+    field_re = re.compile(rf"^(\s*){re.escape(field_name)}:\s*(.*?)(\s+#.*)?$")
+    scalar = _yaml_scalar_out(value)
+    for k in range(start, end):
+        fm = field_re.match(lines[k].rstrip("\n"))
+        if fm:
+            newline = "\n" if lines[k].endswith("\n") else ""
+            comment = fm.group(3) or ""
+            lines[k] = f"{fm.group(1)}{field_name}: {scalar}{comment}{newline}"
+            return
+    lines.insert(start + 1, f"{list_indent}  {field_name}: {scalar}\n")
+
+
+def _yaml_scalar_out(value: str) -> str:
+    """Emit a YAML scalar. Quote only when a bare value would be ambiguous."""
+    import re
+
+    s = str(value)
+    if s == "" or re.search(r'(^[\s\[\]{}#&*!|>%@`"\',])|(:\s)|(\s#)|(\s$)', s):
+        return '"' + s.replace('"', '\\"') + '"'
+    return s
 
 
 if __name__ == "__main__":

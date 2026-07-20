@@ -109,6 +109,39 @@ def write_skill(bundle: Any, settings_or_path: Any, *, dry_run: bool | None = No
     raise ValueError("cracked-devs bundle requires repo or user kind")
 
 
+def attach_roster_identity(profile: Any, roster_devs: Any) -> Any:
+    """If a developer profile matches a curated roster dev, stamp the note with
+    `identity_links` (blog/x/github/reddit) plus `why`/`tier` so the entity's
+    Identity Links section (sink/entities.py:111) renders. Returns the input
+    unchanged when there is no match or the profile is not a mapping."""
+    from ..gitintel.identity import identity_links
+
+    login = _text(_first(profile, "login", "username", default="")).removeprefix("@").lower()
+    if not login or not isinstance(profile, Mapping):
+        return profile
+    match = None
+    for dev in roster_devs or []:
+        keys = {getattr(dev, "slug", "")}
+        if getattr(dev, "github", ""):
+            keys.add(dev.github.lower())
+        if getattr(dev, "x", ""):
+            keys.add(dev.x.lower())
+        if login in keys:
+            match = dev
+            break
+    if match is None:
+        return profile
+    data = dict(profile)
+    existing = list(data.get("identity_links") or [])
+    for link in identity_links(match):
+        if link not in existing:
+            existing.append(link)
+    data["identity_links"] = existing
+    data.setdefault("why", match.why)
+    data.setdefault("tier", match.tier)
+    return data
+
+
 def scan_artifact_bundle(root: Any, *, max_file_bytes: int = MAX_ARTIFACT_FILE_BYTES) -> dict:
     """Reject oversized, binary/build/cache, and secret-like files in a bundle."""
     root_path = Path(root)
