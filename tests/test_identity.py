@@ -87,6 +87,13 @@ def test_merge_into_does_not_overwrite():
     assert changed == []
 
 
+def test_merge_overwrite_flag():
+    dev = CrackedDev(name="A", github="old")
+    _, changed = merge_into(dev, Identity(github="new"), overwrite=True)
+    assert dev.github == "new"
+    assert changed == ["github"]
+
+
 def test_identity_links_shape():
     links = identity_links(CrackedDev(name="A", blog="https://b"))
     assert links

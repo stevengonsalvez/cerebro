@@ -115,14 +115,21 @@ def resolve_from_blog(
     )
 
 
-def merge_into(dev: CrackedDev, ident: Identity) -> tuple[CrackedDev, list[str]]:
-    """Fill empty roster fields from a resolved Identity. Never overwrites an
-    existing value — curated data wins. Returns (dev, list-of-changed-fields)."""
+def merge_into(dev: CrackedDev, ident: Identity, *, overwrite: bool = False) -> tuple[CrackedDev, list[str]]:
+    """Fill blank roster fields from a resolved Identity. Returns (dev, list-of-changed-fields).
+
+    Never overwrites a curated value unless `overwrite` is set — a human's entry wins over a guess."""
     changed: list[str] = []
     for field_name, value in (("github", ident.github), ("x", ident.x), ("blog", ident.blog)):
-        if value and not getattr(dev, field_name):
-            setattr(dev, field_name, value)
-            changed.append(field_name)
+        if not value:
+            continue
+        current = getattr(dev, field_name)
+        if current and not overwrite:
+            continue
+        if current == value:
+            continue
+        setattr(dev, field_name, value)
+        changed.append(field_name)
     return dev, changed
 
 
