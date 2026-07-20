@@ -140,3 +140,16 @@ def test_score_deterministic_and_bounded():
     b = cheap_score("builder", _builder_client(), cache, captured_at=NOW)
     assert a.score == b.score
     assert 0.0 <= a.score <= 1.0
+
+
+def test_scale_consistency_deep_never_demotes_below_cheap_only():
+    """A deep-scored candidate with zero commits must not fall below its own cheap
+    score — both stages live on one [0,1] axis (commit-unknown == commit-zero).
+    Guards the funnel-inversion bug where normalized-cheap outranked full-scale-deep."""
+    cache = GitIntelCache(":memory:", 24)
+    _seed_follower_growth(cache)
+    base = cheap_score("builder", _builder_client(), cache, captured_at=NOW)
+    deep_zero = deep_score(base, _builder_client(events=[]), window_days=90, now=NOW)
+    assert deep_zero.commits_per_day == 0.0
+    assert deep_zero.score == base.score          # zero commits => no change, not a demotion
+    assert base.score <= 0.65 + 1e-9              # cheap maxes at the cheap-weight budget

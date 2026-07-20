@@ -10,8 +10,12 @@ from .repo_inspect import repo_from_api
 
 # Weighting across the four crackedness signals. Cheap signals (follower,
 # portfolio, ships) sum to 0.65; the deep commit-rate pass owns the rest.
+# Both stages score on ONE full-scale [0,1] axis: cheap treats the unknown
+# commit signal as 0 (so cheap maxes at 0.65), deep replaces that 0 with the
+# real commit rate. This keeps a single admission threshold consistent —
+# deep-scoring can only ever raise a score, never demote a strong candidate
+# below a weaker un-deep-scored one.
 WEIGHTS = {"commit": 0.35, "follower": 0.25, "portfolio": 0.25, "ships": 0.15}
-_CHEAP_TOTAL = WEIGHTS["follower"] + WEIGHTS["portfolio"] + WEIGHTS["ships"]
 
 
 @dataclass
@@ -44,12 +48,13 @@ def cheap_score(login: str, client, cache, *, captured_at: str | None = None) ->
     portfolio_sig = portfolio_momentum(repos)
     ships_sig = _ships_score(data, raw_repos, ref)
 
-    weighted = (
+    # Full-scale: commit signal unknown at Stage A -> contributes 0 (max cheap = 0.65).
+    score = round(
         follower_sig * WEIGHTS["follower"]
         + portfolio_sig * WEIGHTS["portfolio"]
-        + ships_sig * WEIGHTS["ships"]
+        + ships_sig * WEIGHTS["ships"],
+        4,
     )
-    score = round(weighted / _CHEAP_TOTAL, 4)
     return CrackScore(
         login=login,
         score=score,
@@ -83,7 +88,9 @@ def deep_score(base: CrackScore, client, *, window_days: int = 90, now: str | No
     commits_per_day = commits / window_days if window_days else 0.0
     # ponytail: linear cap at 5 commits/day = maxed signal; tune cap if calibration drifts
     commit_sig = min(commits_per_day / 5.0, 1.0)
-    score = round(base.score * _CHEAP_TOTAL + commit_sig * WEIGHTS["commit"], 4)
+    # base.score already carries the cheap signals on the full scale (commit=0);
+    # just add the now-known commit contribution.
+    score = round(base.score + commit_sig * WEIGHTS["commit"], 4)
     return CrackScore(
         login=base.login,
         score=score,
