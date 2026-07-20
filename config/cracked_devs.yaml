@@ -1,0 +1,100 @@
+# Cracked devs — the curated roster. Single source of truth for who we track.
+# Handles here are auto-merged into x.accounts / rss.feeds / github_devs / reddit_users at load.
+version: 1
+
+wiring:
+  enabled: true
+  feed_x: true          # merge `x` handles into sources.x.accounts
+  feed_rss: true        # merge `blog_feed` URLs into sources.rss.feeds
+  feed_github: true     # expose `github` logins to the github_devs source
+  feed_reddit: true     # expose `reddit` handles to the reddit_users source
+  max_tier: 2           # only devs with tier <= this are wired into sources
+
+defaults:
+  tier: 2
+  enabled: true
+
+devs:
+  - name: Boris Cherny
+    tier: 1
+    x: bcherny
+    github: bcherny
+    blog: null
+    blog_feed: null
+    reddit: null
+    tags: [claude-code, anthropic]
+    why: "Claude Code creator — highest-signal source on Claude Code internals"
+    added: "2026-07-20"
+    discovered_via: seed
+
+  - name: Pieter Levels
+    tier: 1
+    x: levelsio
+    github: null
+    blog: https://levels.io
+    blog_feed: null
+    reddit: null
+    tags: [indiehacker, solo-founder, ship-fast]
+    why: "Ships solo products at absurd velocity; the canonical vibe-coding operator"
+    added: "2026-07-20"
+    discovered_via: seed
+
+  - name: Theo Browne
+    tier: 1
+    x: theo
+    github: t3dotgg
+    blog: null
+    blog_feed: null
+    reddit: null
+    tags: [typescript, dx, t3-stack]
+    why: "Loud, early, and usually right on TS/DX tooling shifts"
+    added: "2026-07-20"
+    discovered_via: seed
+
+  - name: Matt Pocock
+    tier: 1
+    x: mattpocockuk
+    github: mattpocock
+    blog: null
+    blog_feed: null
+    reddit: null
+    tags: [typescript, teaching]
+    why: "Deepest practical TypeScript explainer; type-level idioms"
+    added: "2026-07-20"
+    discovered_via: seed
+
+  - name: Skirano
+    tier: 2
+    x: skirano
+    github: null
+    blog: null
+    blog_feed: null
+    reddit: null
+    tags: [ai-agents, demos]
+    why: "Early hands-on agent demos, often before official docs exist"
+    added: "2026-07-20"
+    discovered_via: seed
+
+  - name: Sentient Agency
+    tier: 2
+    x: sentient_agency
+    github: null
+    blog: null
+    blog_feed: null
+    reddit: null
+    tags: [agentic-coding, curation]
+    why: "Curator account — high hit-rate on agentic-coding links"
+    added: "2026-07-20"
+    discovered_via: seed
+
+  - name: Simon Willison
+    tier: 1
+    x: simonw
+    github: simonw
+    blog: https://simonwillison.net
+    blog_feed: https://simonwillison.net/atom/everything/
+    reddit: null
+    tags: [llm, datasette, tooling, prompt-injection]
+    why: "Most reliable primary-source LLM analysis on the open web"
+    added: "2026-07-20"
+    discovered_via: seed   # feed already in sources.yaml rss.feeds — dedup must handle this

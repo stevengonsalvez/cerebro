@@ -44,6 +44,9 @@ class Settings:
     # Opt-in autoresearch signal-export sink; off by default so standalone
     # cerebro users are untouched (autoresearch SPEC 3.1 / 5.1).
     export: dict = field(default_factory=lambda: {"enabled": False})
+    # Curated cracked-dev roster, folded into `sources` at load time.
+    cracked_devs: list = field(default_factory=list)
+    cracked_devs_wiring: dict = field(default_factory=dict)
 
 
 def _load(name: str) -> dict:
@@ -68,6 +71,13 @@ def load(dry_run_override: bool | None = None, allow_example: bool = False) -> S
     vp = pathlib.Path(os.path.expanduser(os.environ.get("CEREBRO_VAULT") or s["vault_path"]))
     if not vp.is_absolute():               # relative paths (e.g. ./vault submodule) anchor to repo root
         vp = ROOT / vp
+    # Fold the curated roster into the raw sources dict. Import is function-local
+    # to avoid a circular import (gitintel.roster must not import config).
+    from .gitintel.roster import apply_to_sources, load_roster
+
+    _sources = _load("sources.yaml")
+    _devs, _wiring = load_roster()
+    apply_to_sources(_sources, _devs, _wiring)
     return Settings(
         vault_path=vp,
         dry_run=dry,
@@ -84,7 +94,9 @@ def load(dry_run_override: bool | None = None, allow_example: bool = False) -> S
             "request_timeout_seconds": 20,
             "max_enrich": 8,
         }),
-        sources=_load("sources.yaml"),
+        sources=_sources,
         matrix=_load("interest-matrix.yaml"),
         export=s.get("export", {"enabled": False}),
+        cracked_devs=_devs,
+        cracked_devs_wiring=_wiring,
     )
