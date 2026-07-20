@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from . import (
-    github_devs, github_search, github_trending, gmail, hackernews, ossinsight,
-    reddit, reddit_users, rss, seed_urls, showhn, x_twscrape, yclaunches, ycrfs,
+    crackscan, github_devs, github_search, github_trending, gmail, hackernews,
+    ossinsight, reddit, reddit_users, rss, seed_urls, showhn, x_twscrape,
+    yclaunches, ycrfs,
 )
 
 # name → fetch(cfg, settings) -> list[Signal]
@@ -21,4 +22,5 @@ SOURCES = {
     "seed_urls": seed_urls.fetch,
     "gmail": gmail.fetch,
     "x": x_twscrape.fetch,
+    "crackscan": crackscan.fetch,
 }

@@ -89,3 +89,13 @@ gmail:
   label: newsletters
   senders: ["AI Breakfast", "The Rundown", "TLDR", "Ben's Bites", "ByteByteGo"]
   newer_than: 1d
+crackscan:              # auto-discover cracked devs; auto-admits them as tier-3 in cracked_devs.yaml
+  enabled: true
+  token_env: GITHUB_TOKEN_CRACKSCAN   # falls back to GITHUB_TOKEN if unset
+  top_n: 10             # deep commit-rate pass runs only on the top N cheap-scorers
+  admit_max: 5          # max new tier-3 devs admitted per scan
+  score_threshold: 0.55 # crackedness gate for admission
+  window_days: 90       # commit-rate window for the deep pass
+  min_remaining: 200    # skip the deep pass when the token budget is below this
+  seed_repos: []        # optional explicit owner/name repos to mine owners from
+  seed_handles: []      # optional x/reddit handles to resolve -> github (deferred)
