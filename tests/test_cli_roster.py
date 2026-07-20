@@ -146,6 +146,18 @@ def test_suggest_excludes_roster_devs(monkeypatch, tmp_path, capsys):
     assert "newdev" in out["yaml"]
 
 
+def test_suggest_yaml_quotes_ambiguous_names():
+    import yaml
+
+    from cerebro.__main__ import _suggest_yaml_blocks
+
+    block = _suggest_yaml_blocks([
+        {"display_name": "Dev: The Sequel", "login": "seq", "momentum_score": 0.5},
+    ])
+    parsed = yaml.safe_load("devs:\n" + block)
+    assert parsed["devs"][0]["name"] == "Dev: The Sequel"
+
+
 def test_fetch_page_is_silent_on_failure(monkeypatch):
     import requests
 

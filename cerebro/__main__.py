@@ -392,9 +392,9 @@ def _suggest_yaml_blocks(candidates: list[dict[str, Any]]) -> str:
     blocks = []
     for c in candidates:
         blocks.append(
-            f"  - name: {c['display_name'] or c['login']}\n"
+            f"  - name: {_yaml_scalar_out(c['display_name'] or c['login'])}\n"
             f"    tier: 3\n"
-            f"    github: {c['login']}\n"
+            f"    github: {_yaml_scalar_out(c['login'])}\n"
             f"    why: \"momentum_score={c['momentum_score']}\"\n"
             f"    discovered_via: suggest"
         )
