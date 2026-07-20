@@ -72,13 +72,7 @@ x:                      # free headless reads via twscrape (your Firefox cookies
   account: stevengonsalvez   # label for the twscrape account (loads your saved x.com cookies)
   search_terms: ["claude code", "agentic coding", "context engineering", "coding agent", "vibe coding"]
   min_likes: 10         # drop zero-engagement noise from search results
-  accounts:             # curators + high-signal follows — all their tweets kept, listicles exploded
-    - sentient_agency
-    - levelsio
-    - theo
-    - skirano
-    - bcherny
-    - mattpocockuk
+  accounts: []          # sourced from config/cracked_devs.yaml — add devs there, not here
   per_query: 12
   explode_min_links: 3  # tweets with >=N external links → one signal per embedded link (listicle explode)
   beast: false              # firehose: pull every tweet in window, analyse all, walk threads
