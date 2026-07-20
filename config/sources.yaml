@@ -17,10 +17,18 @@ reddit:
   subreddits: [ClaudeAI, ChatGPTCoding, LocalLLaMA, AI_Agents, vibecoding, cursor]
   listing: new          # new | hot
   limit: 25
+reddit_users:           # roster devs' reddit submissions — `users` auto-filled from cracked_devs.yaml
+  enabled: true
+  limit: 10             # posts per dev; no score filter possible (RSS carries no score — see adapter note)
 github_trending:        # "GitHunt" — repos making the biggest moves (stars gained)
   enabled: true
   since: [daily, weekly] # str or list; daily catches today's movers, weekly the sustained ones
   languages: []          # [] = all languages
+github_devs:            # roster devs' recent repo activity — `logins` auto-filled from cracked_devs.yaml
+  enabled: true
+  per_dev: 5             # max repos per dev per run
+  window_days: 14        # only repos pushed within window
+  min_stars: 0           # filter noise / scratch repos
 ossinsight:             # GitHub star-velocity (most stars GAINED in the window) via api.ossinsight.io
   enabled: true
   period: [past_week]    # past_24_hours | past_week | past_month (str or list)
@@ -64,13 +72,7 @@ x:                      # free headless reads via twscrape (your Firefox cookies
   account: stevengonsalvez   # label for the twscrape account (loads your saved x.com cookies)
   search_terms: ["claude code", "agentic coding", "context engineering", "coding agent", "vibe coding"]
   min_likes: 10         # drop zero-engagement noise from search results
-  accounts:             # curators + high-signal follows — all their tweets kept, listicles exploded
-    - sentient_agency
-    - levelsio
-    - theo
-    - skirano
-    - bcherny
-    - mattpocockuk
+  accounts: []          # sourced from config/cracked_devs.yaml — add devs there, not here
   per_query: 12
   explode_min_links: 3  # tweets with >=N external links → one signal per embedded link (listicle explode)
   beast: false              # firehose: pull every tweet in window, analyse all, walk threads

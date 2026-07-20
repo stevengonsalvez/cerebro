@@ -169,6 +169,53 @@ x:      { search_terms: [...], accounts: [ ...add a handle... ] }
 
 The orchestrator picks it up automatically — same funnel, same dedup, same triage.
 
+## Cracked-dev roster
+
+`config/cracked_devs.yaml` is the single source of truth for the developers we track.
+At config-load it fans each dev out into four ingestion lanes — no per-source hand-editing:
+
+```
+                      ┌──────────────────────────┐
+                      │ config/cracked_devs.yaml │
+                      └────────────┬─────────────┘
+                                   │ apply_to_sources()
+        ┌──────────────┬───────────┼───────────────┬──────────────┐
+        ▼              ▼           ▼               ▼
+   x.accounts     rss.feeds   github_devs      reddit_users
+   (X posts)      (blog RSS)  (repo activity)  (submissions)
+```
+
+**Add a dev** — minimum viable entry is a `name` plus one handle:
+
+```yaml
+devs:
+  - name: Jane Hacker
+    tier: 1
+    github: janehacker      # any one of github / x / blog / reddit is enough
+```
+
+**Tier policy** — `wiring.max_tier` (default 2) gates which devs get wired:
+
+| Tier | Meaning |
+|---|---|
+| 1 | Read everything — highest-signal |
+| 2 | Wired into sources but filtered |
+| 3 | Tracked/catalogued, not ingested (above `max_tier`) |
+
+**Operate the roster** (JSON out, scriptable):
+
+```bash
+python -m cerebro cracked-devs roster list [--tier N]   # roster + what each lane receives
+python -m cerebro cracked-devs roster enrich [--write]   # fill blank blog/x/github from GitHub
+python -m cerebro cracked-devs roster suggest [--limit N] # high-momentum devs not yet on roster
+```
+
+`enrich` resolves identity from GitHub's cached user API (blog + twitter_username) and, for
+blog-only entries, back-resolves the GitHub login. `--write` fills **blank** fields only
+(curated values win unless `--overwrite`) via a targeted line patch that keeps your comments
+and key order intact. Delete the file entirely and the pipeline still runs — the roster is
+optional.
+
 ## Run it
 
 ```bash
