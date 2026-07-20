@@ -21,6 +21,11 @@ github_trending:        # "GitHunt" — repos making the biggest moves (stars ga
   enabled: true
   since: [daily, weekly] # str or list; daily catches today's movers, weekly the sustained ones
   languages: []          # [] = all languages
+github_devs:            # roster devs' recent repo activity — `logins` auto-filled from cracked_devs.yaml
+  enabled: true
+  per_dev: 5             # max repos per dev per run
+  window_days: 14        # only repos pushed within window
+  min_stars: 0           # filter noise / scratch repos
 ossinsight:             # GitHub star-velocity (most stars GAINED in the window) via api.ossinsight.io
   enabled: true
   period: [past_week]    # past_24_hours | past_week | past_month (str or list)
