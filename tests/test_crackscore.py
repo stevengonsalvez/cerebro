@@ -78,6 +78,33 @@ def test_deep_score_shifts_up_for_high_commit_dev():
     assert 0.0 <= deep.score <= 1.0
 
 
+def _abbrev_push(created_at):
+    # Realistic /users/{login}/events PushEvent: abbreviated payload with NO
+    # "size" and NO "commits" array — only before/head/push_id/ref/repository_id.
+    return {
+        "type": "PushEvent",
+        "created_at": created_at,
+        "payload": {
+            "before": "a" * 40,
+            "head": "b" * 40,
+            "push_id": 123456789,
+            "ref": "refs/heads/main",
+            "repository_id": 42,
+        },
+    }
+
+
+def test_deep_score_counts_abbreviated_pushevents():
+    cache = GitIntelCache(":memory:")
+    _seed_follower_growth(cache)
+    base = cheap_score("builder", _builder_client(), cache, captured_at=NOW)
+    # Several in-window pushes with abbreviated payloads (no size/commits).
+    events = [_abbrev_push("2026-06-%02dT00:00:00Z" % d) for d in range(1, 15)]
+    deep = deep_score(base, _builder_client(events=events), window_days=90, now=NOW)
+    assert deep.commits_per_day > 0  # was always 0.0 before the fix
+    assert deep.commits_per_day == round(14 / 90, 4)
+
+
 def test_deep_score_ranks_high_commit_above_low_commit():
     cache = GitIntelCache(":memory:")
     _seed_follower_growth(cache)
