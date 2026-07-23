@@ -80,9 +80,13 @@ def deep_score(base: CrackScore, client, *, window_days: int = 90, now: str | No
         if created is None or created < cutoff or created > ref:
             continue
         payload = e.get("payload") or {}
+        # /users/{login}/events returns ABBREVIATED PushEvent payloads
+        # (keys: before/head/push_id/ref/repository_id) — no "size", no
+        # "commits" array. Fall back to 1 commit per push so an active
+        # pusher never scores 0; use size/commits when the event carries them.
         size = payload.get("size")
         if size is None:
-            size = len(payload.get("commits") or [])
+            size = len(payload.get("commits") or []) or 1
         commits += int(size or 0)
 
     commits_per_day = commits / window_days if window_days else 0.0
