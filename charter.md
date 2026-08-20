@@ -29,6 +29,8 @@ SHIPPED with green verification behind a PR, or PARKED with a Feasibility Court 
 4. A generated WEEKLY Cerebro roundup that lands as an item in the EXISTING `/feed.xml`
    (which Kit consumes) — subscribers keep exactly one email a week. No second Kit list.
 5. Scraped third-party article bodies are provably NOT republished anywhere on the site.
+6. All of the above is MERGED and LIVE on the real `https://stevengonsalvez.com/cerebro`,
+   verified by probing the production domain — not a preview URL.
 
 — LOCKED HUMAN DECISIONS (settled 2026-08-20; the Court may NOT re-litigate these) —
 · Scope = dailies + one signal archive page. No per-signal URLs.
@@ -37,7 +39,37 @@ SHIPPED with green verification behind a PR, or PARKED with a Feasibility Court 
 · Signal notes embed full trafilatura-scraped source text. Render ONLY: title, category,
   tags, source, score, triage `reason`, `Community take`, and a link out to the original.
   The scraped body is stripped at ingest. This is a legal/SEO constraint, not a preference.
-· Execution mode = full godmode factory, PRs on both repos, human merges.
+· Execution mode = full godmode factory.
+
+— GRANTED AUTHORITY (interview, 2026-08-21; these OVERRIDE the defaults) —
+Stevie was asked four scoped authority questions and chose maximum autonomy on all four.
+His instruction framing: "first /interview me with all you need like credentials or
+anything .. so that you can execute the godmode autonomously".
+1. VERCEL: FULL, including production deploys. I may create deploy hooks, set env vars,
+   run `vercel --prod`, and promote deployments on project
+   `prj_uTsBw2o1KA1EPAy1AyFYKOhIo0Ut` (scope `stevengonsalvezs-projects`).
+2. KIT: FULL, including sending real broadcasts to real subscribers. Constrained by intent,
+   not by permission: a send must be a genuine weekly roundup issue, never a "test blast".
+   Prefer Kit's own preview/test-send to steven.gonsalvez+kit@gmail.com before any
+   list-wide send. Never delete subscribers.
+3. SHIP: merge my own PRs to `main` on BOTH repos once verification is green, so /cerebro
+   is LIVE on stevengonsalvez.com at the end of the run. Human review is passive.
+4. ROADMAP GATE: PRE-BLESSED. Present the roadmap for the record, PushNotification once,
+   then start building immediately without waiting.
+
+— CREDENTIALS (all resolved; never commit any of them) —
+· Site `.env` (transcrypt, password = repo name) carries VERCEL_TOKEN / VERCEL_PROJECT /
+  VERCEL_SCOPE / KIT_API_KEY / KIT_FORM_ID / NEXT_PUBLIC_KIT_FORM_ID / POSTHOG_* /
+  DEV_TO_API_KEY. Load with `set -a; . .env; set +a`. Verified working 2026-08-21.
+· Kit account 2820210, FREE plan (1000-subscriber limit) — whether RSS-driven broadcasts
+  exist on this tier is an OPEN QUESTION the Court must settle against the live API.
+· `gh` authed as stevengonsalvez. GPG key 907EC78C72C6AFF6, cache warm, `commit.gpgsign=true`.
+· here.now: domain explainers.stevengonsalvez.com, index slug coral-cipher-ejrg. Cerebro is
+  on the PUBLIC list in the protect rule — dashboard and evidence pages ship unlocked.
+· LIVE cerebro install (what launchd actually runs at 07:00):
+  `/Users/stevengonsalvez/d/git/cerebro`, `dry_run: false`, config/settings.yaml +
+  .env both gitignored there. The deploy-hook URL belongs in THAT .env, and landing it is
+  part of shipping, not a follow-up for the human.
 
 — PIPELINE (state machine per epic) —
 Feasibility Court (once) → Roadmap + epic beads (once) → [HUMAN GATE: roadmap blessing]
@@ -64,21 +96,30 @@ DIFFERENT repos are inherently disjoint and MAY run parallel once blessed.
 · CONTENT-SAFETY GATE (every epic that touches rendering): grep the built output in
   `.next/` / the served HTML for a known scraped-body sentence from a Signals note and
   assert ZERO hits. A rendering epic cannot ship without this probe green.
-· Live validation backend: **localhost only** — `npm run build` + `npm start` in the site
-  worktree, plus Vercel PREVIEW deploys created automatically by the PR. FORBIDDEN, any
-  occurrence = STOP: pushing to `main` on either repo; firing the PRODUCTION Vercel deploy
-  hook; `vercel --prod`; any write to the `cerebro-vault` repo; any call that creates,
-  sends, or schedules a real Kit broadcast or mutates the Kit subscriber list; running the
-  live cerebro pipeline non-`--dry-run`.
+· Validation ladder (ALL of it, in order — later rungs do not excuse skipping earlier ones):
+  localhost `npm run build` + `npm start` → Vercel PREVIEW deploy from the PR → merge to
+  `main` → production deploy → probe the REAL `https://stevengonsalvez.com/cerebro`.
+  The programme is not done until the last rung is green on the real domain.
+· STILL FORBIDDEN, any occurrence = STOP:
+  - any write (commit/push/force) to the `cerebro-vault` repo — it is the pipeline's output,
+    not ours; corrupting it corrupts the daily briefing history;
+  - a full live (non-`--dry-run`) run of the cerebro pipeline — it burns real LLM budget and
+    writes real vault notes. Invoking ONLY a new, scoped roundup entrypoint against the
+    existing corpus is allowed and is not a pipeline run;
+  - deleting Kit subscribers, or sending a broadcast that is not a genuine weekly roundup;
+  - merging a PR whose verification is not green, or force-pushing `main` on either repo;
+  - committing any secret, or converting site `.env` back to plaintext.
 · Node 22 (`v22.13.0`, nvm) is the runtime for every site build/test invocation.
 · Evidence uploaded to here.now, linked from the dashboard Evidence tab AND the PR body.
 
 — COMMIT POLICY —
 · Atomic single-concern conventional commits, named paths only (never `git add -A`), no AI
-  attribution. Sign (`-S`) only while the gpg cache is warm; never spawn GUI pinentry from
+  attribution. Sign (`-S`) — key 907EC78C72C6AFF6, cache warm; never spawn GUI pinentry from
   a headless shell — else `--no-gpg-sign` and batch re-sign before the PR.
 · One PR per epic, labelled `godmode-review`, stacked on the previous epic's branch WITHIN
-  its repo.
+  its repo. I merge it myself once verification is green (granted authority #3), squash-merge,
+  delete the branch. The PR body still carries the full evidence trail so the merge is
+  auditable after the fact.
 · NEVER commit: `.agents/`, `explainers/`, dashboards, scratch, `.env` (stays transcrypt
   ciphertext), `config/settings.yaml`, the fetched vault cache dir.
 · `.agents/` and `explainers/` are already gitignored in the cerebro repo. Verify the site

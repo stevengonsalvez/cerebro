@@ -1,12 +1,12 @@
 {
   "branch": "f/host-the-vault",
   "current_epic": null,
-  "current_note": "DISCOVER running (wf_540e05f0-52c): three parallel recon agents (site repo / vault corpus / cerebro pipeline) feeding one fable BRAIN that writes the feature registry. Charter written; site checkout cloned and transcrypt-enabled at .agents-in-a-box/godmode/cerebro-vault-site/site on branch f/cerebro-section; driver lease held. Next after DISCOVER: Feasibility Court, then Roadmap, then the human gate.",
+  "current_note": "DISCOVER done: 70-feature registry written (32 tier-1, 23 tier-2, 15 tier-3) with 4 alternative clusters and 10 open questions. FEASIBILITY COURT now running (wf_97eb31e1-d8d): 8 grounding agents gather real evidence (including live Vercel and Kit API probes and a baseline next build) then a fable Court returns a verdict per feature and a Court President settles the 10 open questions. Authority was granted in an interview on 2026-08-21: full Vercel including prod deploys, full Kit including sending, self-merge to main on both repos, and a PRE-BLESSED roadmap, so there is no blocking human gate left. Next: Roadmap, then straight into epic PLAN/EXECUTE without waiting.",
   "dashboard_slug": "cerebro-vault-site",
   "epics": {},
-  "human_gate": "not_reached",
-  "phase": "DISCOVER",
-  "phase_since": "2026-08-20T22:53:01Z",
+  "human_gate": "blessed",
+  "phase": "FEASIBILITY_COURT",
+  "phase_since": "2026-08-21T00:05:00Z",
   "stop_counters": {
     "epic_validation_fails": {},
     "stage_errors": {}
