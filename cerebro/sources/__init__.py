@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from . import (
     crackscan, github_devs, github_search, github_trending, gmail, hackernews,
-    ossinsight, reddit, reddit_users, rss, seed_urls, showhn, x_twscrape,
+    ossinsight, reddit, reddit_users, rss, seed_urls, showhn, swipe, x_twscrape,
     yclaunches, ycrfs,
 )
 
@@ -20,6 +20,7 @@ SOURCES = {
     "ossinsight": ossinsight.fetch,
     "rss": rss.fetch,
     "seed_urls": seed_urls.fetch,
+    "swipe": swipe.fetch,
     "gmail": gmail.fetch,
     "x": x_twscrape.fetch,
     "crackscan": crackscan.fetch,
