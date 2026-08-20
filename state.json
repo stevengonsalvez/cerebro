@@ -1,7 +1,7 @@
 {
   "branch": "f/host-the-vault",
   "current_epic": null,
-  "current_note": "INIT complete. Charter written, site checkout cloned and transcrypt-enabled at .agents-in-a-box/godmode/cerebro-vault-site/site on branch f/cerebro-section. Launching DISCOVER to brainstorm the feature landscape for hosting the CEREBRO vault at stevengonsalvez.com/cerebro with a weekly roundup into the existing Kit newsletter.",
+  "current_note": "DISCOVER running (wf_540e05f0-52c): three parallel recon agents (site repo / vault corpus / cerebro pipeline) feeding one fable BRAIN that writes the feature registry. Charter written; site checkout cloned and transcrypt-enabled at .agents-in-a-box/godmode/cerebro-vault-site/site on branch f/cerebro-section; driver lease held. Next after DISCOVER: Feasibility Court, then Roadmap, then the human gate.",
   "dashboard_slug": "cerebro-vault-site",
   "epics": {},
   "human_gate": "not_reached",
