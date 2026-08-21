@@ -92,6 +92,20 @@ hold this session's id — so the lease is STALE, not CONTENDED, and the skill's
 lease-lost as real when the holder's SESSION token DIFFERS from this session's id. Never
 skip this check and never force-claim past a genuinely different, fresh holder.
 
+— PROVEN PRE-EXISTING FAILURE (do NOT fix, do NOT let it block the e07 merge) —
+The site repo's `publish` workflow (`.github/workflows/publish_devto.yml`) fails, and has
+failed on `main` continuously since at least 2026-07-22 (runs at 3b0df68, de64d55, 5607a1f,
+a73b589, aef9f3f, 640a56c — all `failure`). Cause: `Error: Cannot find published article on
+dev.to: Your Agents Are Talking Behind Your Back`, i.e. `_devto/banter/2026/week-14-agents-
+talking-to-agents.md` has no matching dev.to article. Proof it is not ours: that file was
+last touched 2026-04-20 (f7ec7bb) and THIS branch has 0 commits touching it; the PR changes
+0 files under `_devto/` at all. So PR #68 shows `mergeStateStatus: UNSTABLE` for a reason
+that predates the programme by a month.
+CONSEQUENCE: e07 merges on Vercel + the site's own test suite being green, and explicitly
+ignores the `publish` check. Do not "fix" Stevie's dev.to sync as a side effect of this
+programme — surface it to him instead; it means his blog→dev.to publishing has been silently
+broken for weeks, which is his call to act on, not the factory's.
+
 — SECRET CONTAINMENT (added after the e04 adversarial review found a real leak path) —
 The dashboard is PASSWORDLESS and auto-republishes on every state.json write, and here.now
 evidence pages are public. Therefore the Vercel deploy-hook URL (a bearer secret: anyone
