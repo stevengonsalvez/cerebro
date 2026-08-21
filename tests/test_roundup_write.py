@@ -130,6 +130,61 @@ def test_read_seam_recovers_titles_and_never_yields_none_or_scraped_body(fixture
             assert SENTINEL not in value
 
 
+def test_a_malformed_note_is_skipped_instead_of_killing_the_whole_read(fixture_vault):
+    """Frontmatter is hand-editable YAML, so its value TYPES are not schema-guaranteed.
+    A `tags:` scalar used to raise out of the read seam, and because run.sh soft-fails
+    the roundup, that one note would have stopped weekly publication permanently and
+    silently. Each malformed shape must cost exactly one note."""
+    malformed = {
+        "d" * 16: "tags: 42\n",                 # non-iterable scalar — the reported crash
+        "e" * 16: "tags: {a: b}\n",             # mapping, iterates but is not a tag list
+        "f" * 16: "tags: [ai/agents]\nscore: .nan\n",   # unorderable score
+        "0abcdef012345678": "tags: [ai/agents]\nscore: .inf\n",
+    }
+    for hash_, extra in malformed.items():
+        (fixture_vault / "Signals" / f"{hash_}.md").write_text(
+            "---\n"
+            f'title: "malformed {hash_}"\n'
+            "category: cli-tui\n"
+            "source: rss\n"
+            "url: https://example.test/malformed\n"
+            "score: 0.5\n"
+            "captured: 2026-08-12T08:00:00+00:00\n"
+            f"{extra}"
+            "---\n"
+            "# malformed\n\nbody\n"
+        )
+    result = vault_read.read_signal_notes(fixture_vault)
+    assert result.skipped == len(malformed)
+    assert len(result.notes) == 30                       # every healthy note survives
+    assert not ({h for h in malformed} & {n.hash for n in result.notes})
+    assert all(isinstance(n.tags, tuple) for n in result.notes)
+
+
+def test_a_non_finite_score_can_never_reach_selection(fixture_vault):
+    """NaN compares false against everything, so a single NaN score turns
+    `weekly.sort_key`'s claimed total order into an input-order-dependent one. Two
+    NaN notes in opposite input orders must still select the same roundup."""
+    for hash_ in ("1" * 16, "2" * 16):
+        (fixture_vault / "Signals" / f"{hash_}.md").write_text(
+            "---\n"
+            f'title: "nan {hash_}"\n'
+            "category: cli-tui\n"
+            "tags: [ai/agents]\n"
+            "source: rss\n"
+            "url: https://example.test/nan\n"
+            "score: .nan\n"
+            "captured: 2026-08-12T08:00:00+00:00\n"
+            "---\n"
+            "# nan\n\nbody\n"
+        )
+    notes = vault_read.read_signal_notes(fixture_vault).notes
+    assert all(n.score == n.score for n in notes)
+    forward = [n.hash for n in weekly.select(notes, WEEK).notes]
+    backward = [n.hash for n in weekly.select(list(reversed(notes)), WEEK).notes]
+    assert forward == backward
+
+
 # ── render ───────────────────────────────────────────────────────────────────
 
 def test_render_omits_the_blockquote_line_but_keeps_reasonless_entries(fixture_vault):
@@ -211,6 +266,47 @@ def test_write_is_write_once_unless_forced(fixture_vault):
     third = roundup.write(sel, settings, force=True)
     assert third["written"] is True
     assert target.read_text() == roundup.render(sel)
+
+
+def test_a_crash_mid_write_leaves_no_stump_and_the_next_run_heals(fixture_vault,
+                                                                   monkeypatch):
+    """Write-once + non-atomic is the dangerous pair: a truncated file satisfies the
+    exists-check, so the next run reports `exists` and refuses to heal it while run.sh
+    stages `Weekly/` and pushes it to the PUBLIC vault. `os.replace` means the target
+    only ever appears complete."""
+    sel = _select(fixture_vault)
+    settings = _settings(fixture_vault, dry_run=False)
+    target = fixture_vault / "Weekly" / f"{WEEK_TEXT}.md"
+
+    real_write_text = Path.write_text
+
+    def killed_mid_flush(self, text, *args, **kwargs):
+        real_write_text(self, text[: len(text) // 2])
+        raise KeyboardInterrupt("killed mid-write")
+
+    monkeypatch.setattr(Path, "write_text", killed_mid_flush)
+    with pytest.raises(KeyboardInterrupt):
+        roundup.write(sel, settings)
+    monkeypatch.undo()
+
+    assert not target.exists()                       # no partial roundup to publish
+    assert list((fixture_vault / "Weekly").iterdir()) == []   # and no temp file either
+
+    healed = roundup.write(sel, settings)
+    assert (healed["written"], healed["reason"]) == (True, "written")
+    assert target.read_text() == roundup.render(sel)
+
+
+def test_a_stale_temp_file_is_swept_so_it_can_never_be_pushed(fixture_vault):
+    """run.sh stages the whole `Weekly/` directory, so a temp file left by a power loss
+    would be committed to the public vault on the next run."""
+    sel = _select(fixture_vault)
+    weekly_dir = fixture_vault / "Weekly"
+    weekly_dir.mkdir(parents=True)
+    (weekly_dir / ".2026-w20.md.tmp").write_text("half a roundup")
+
+    roundup.write(sel, _settings(fixture_vault, dry_run=False))
+    assert [p.name for p in weekly_dir.iterdir()] == [f"{WEEK_TEXT}.md"]
 
 
 def test_write_refuses_an_empty_week(fixture_vault):
