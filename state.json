@@ -19,12 +19,14 @@
   "phase_since": "2026-08-21T01:45:00Z",
   "stop_counters": {
     "epic_validation_fails": {},
-    "stage_errors": {}
+    "stage_errors": {
+      "E02_EXECUTE_review": 1
+    }
   },
   "termination": {
     "backlog_dry": true,
     "budget_tokens": null,
     "deadline": null,
-    "spent_tokens_estimate": 2474717
+    "spent_tokens_estimate": 3298906
   }
 }
