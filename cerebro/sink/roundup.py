@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import os
 
 from ..process.weekly import WeekSelection, format_week
 from .vault import _alias, _yaml_list, _yaml_value
@@ -143,7 +144,37 @@ def write(sel: WeekSelection, settings, *, force: bool = False) -> dict:
         result["reason"] = "exists"
         return result
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(render(sel))
+    _atomic_write(target, render(sel))
     result["written"] = True
     result["reason"] = "written"
     return result
+
+
+def _atomic_write(target, text: str) -> None:
+    """Write `text` to `target` atomically: full temp file, then `os.replace`.
+
+    Write-once and non-atomic are a bad pair. A plain `write_text` that is killed
+    mid-flush leaves a TRUNCATED roundup on disk; the exists-check above then reads that
+    stump as "already published" and refuses to heal it on every subsequent run, while
+    run.sh stages `Weekly/` and pushes it to the PUBLIC vault. `os.replace` is atomic on
+    POSIX, so the exists-check can only ever observe a complete file.
+
+    The temp file is dot-prefixed and lives in the target directory (same filesystem —
+    a cross-device rename is not atomic). It is removed in `finally`, and any stump left
+    by a power loss is swept on the next write, because run.sh's `git add -- Weekly`
+    would otherwise publish it.
+    """
+    for stale in target.parent.glob(".*.md.tmp"):
+        try:
+            stale.unlink()
+        except OSError:
+            pass
+    tmp = target.with_name(f".{target.name}.tmp")
+    try:
+        tmp.write_text(text)
+        os.replace(tmp, target)
+    finally:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
