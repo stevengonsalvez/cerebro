@@ -2,21 +2,21 @@
   "beads_mode": "state-only",
   "branch": "f/cerebro-section",
   "current_epic": "e03",
-  "current_note": "TICK 10:56. E03 EXECUTE still running (w38176lj3); 16 commits already landed on f/cerebro-section: tag folding at ingest, the static JSON payload asset, the pure filter/search/URL engine, keyboard decisions, the archive render with live search and facets, slash-to-search + Escape + arrow walking, URL/filter sync, anchor resolution with row highlight, four editorial entry points, the noindexed self-canonical archive page, canonicals for the index and dailies, sitemap listing, a preset-chip navigation fix, a real browser suite, and a signal-link triage preview. Driver did NOT run a competing build (same worktree as the workflow's agents) and checked CI instead. CEREBRO PR #17 IS FULLY GREEN: gitguardian, gitleaks and pytest all pass, MERGEABLE/CLEAN. SITE PR #68 shows UNSTABLE, and the cause is PROVEN PRE-EXISTING, not ours: the dev.to `publish` workflow has failed on main continuously since 2026-07-22 (six consecutive failure runs) with 'Cannot find published article on dev.to: Your Agents Are Talking Behind Your Back'. That file (_devto/banter/2026/week-14-agents-talking-to-agents.md) was last touched 2026-04-20 and this branch has 0 commits touching it; the PR changes 0 files under _devto/ at all, which also re-confirms F009 - no vault content can reach dev.to. Charter now records this so the e07 merge gate ignores the publish check rather than blocking, and explicitly forbids fixing Stevie's dev.to sync as a side effect. Vercel preview on the PR is green.",
+  "current_note": "E03 SHIPPED AND DRIVER-VERIFIED. Adversarial review APPROVE, 3 lows, no highs/mediums; honest gap - the codex pair returned a background task handle instead of a review, so e03 had builder + adversarial reviewer + driver verify, not three lanes. Build EXIT=0, 100 unit tests pass, 759 static pages. LOCKED DECISION HOLDS: 63 html under app/cerebro = 62 dailies + signals.html, ZERO per-signal routes, so page count is flat forever. Payload measured at 401001 B raw / 103420 B gzip for 929 records. REAL BROWSER DRIVE over CDP against a real next start: baseline 929 OF 929 MATCH with progressive render 100->200 on scroll; typing 'ollama' narrows 100->2 and every visible row genuinely matches (non-vacuous); URL gains ?q=; Escape restores and drops q; '/' focuses search; facet click 100->87 with ?category=vibe-coding; deep-link #hash resolves to a visible row; ?q=agent on load populates the input and reports 219 matching. TWO of the driver's own assertions failed first and were the HARNESS not the app (asserted rows>100 before knowing 100 is a deliberate window; compared DOM counts both capped at 100) - verified before reporting rather than filing them as defects, same as the earlier mobile-clipping false alarm. An assertion that passed VACUOUSLY over zero rows was also caught (wrong selector; real class is .cerebro-archive-row). Content safety: 65 responses scanned, 0 leaks, served payload fields exactly the sealed whitelist. SEO: archive noindex, 0 occurrences in sitemap, 62 dailies present, canonicals live, all 100 rendered outbound anchors carry rel='nofollow noopener'. E05 NOW RUNNING (wf_3e1f545e-2c0) - the newsletter tie-in: weekly roundup page + the /feed.xml item, with a plan-review-revise stage in front of build and the dead-reviewer guard behind it. Its top review priority is that the three EXISTING feed content types must survive unchanged, because a regression there silently breaks Stevie's real newsletter.",
   "dashboard_slug": "cerebro-vault-site",
   "dashboard_url": "https://sleek-nirvana-cwww.here.now/",
   "epics": {
     "e01": "DONE_VERIFIED_6d8361f",
     "e02": "VERIFIED_GREEN_PR68",
-    "e03": "EXECUTING",
+    "e03": "VERIFIED_GREEN_PR68",
     "e04": "VERIFIED_GREEN_PR17",
-    "e05": "QUEUED",
+    "e05": "PLAN+EXECUTE",
     "e06": "QUEUED",
     "e07": "QUEUED"
   },
   "human_gate": "blessed",
-  "phase": "E03_EXECUTE",
-  "phase_since": "2026-08-21T10:15:00Z",
+  "phase": "E05",
+  "phase_since": "2026-08-21T11:05:00Z",
   "prs": {
     "cerebro": "https://github.com/stevengonsalvez/cerebro/pull/17",
     "site": "https://github.com/stevengonsalvez/stevengonsalvez.github.io/pull/68"
@@ -32,6 +32,6 @@
     "backlog_dry": true,
     "budget_tokens": null,
     "deadline": null,
-    "spent_tokens_estimate": 4035038
+    "spent_tokens_estimate": 4434978
   }
 }
