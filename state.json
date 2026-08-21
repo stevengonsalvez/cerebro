@@ -1,7 +1,7 @@
 {
   "beads_mode": "state-only",
   "branch": "f/cerebro-section",
-  "current_epic": "e02+e04 (parallel, different repos)",
+  "current_epic": "e03",
   "current_note": "EXECUTE RETURNED, MIXED. E04 IS GREEN: its adversarial review ran properly and found 2 HIGH + 2 MEDIUM + 3 LOW, all fixed in 5 further signed commits (7831a43 279bdba 21154ac b22decd 22bf648), tree clean, 194 pytest pass on the 3.12 CI interpreter. The two HIGHs were real and nasty: a single malformed signal note with a non-iterable tags scalar would have crashed ALL roundup generation permanently and silently, and roundup.write was non-atomic and write-once so a mid-write kill would have locked in a truncated Weekly note that run.sh then pushes to the PUBLIC vault. E02 IS NOT GREEN: its adversarial review agent DIED mid-response (API connection lost), the fix stage saw an empty finding list and reported 'no high/medium findings' - a FALSE GREEN, nothing has adversarially reviewed e02 at all. Recorded as stage_errors.E02_EXECUTE_review=1; a second failure on this stage trips the STOP rule. The codex pair did land a real P1 independently, driver-confirmed: loadSignals() is exported but NO app/ route calls it, and npm run build does not run tests, so a vault clone with the entire Signals/ directory missing still builds green with all 1346 wikilinks pointing at nothing - build-time corpus integrity is unenforced. Retry workflow wf_a3ca2075-1a4 is running the e02 adversarial review properly with that P1 seeded, followed by a bounded fix. Prior tick: TICK 02:23. EXECUTE still running; driver did independent work rather than idling. Commits verified landed on BOTH branches: SITE f/cerebro-section has 8 new commits (vault loader seam behind a sealed whitelist, vitest as the test runner, ingest suite over the real corpus, build-fails-on-leak gate, scoped newspaper classes, masthead + briefing components, daily briefing + section index rendering, nav entry); CEREBRO f/host-the-vault has 11 (whitelisted read seam, deterministic weekly selection, roundup render + write, roundup CLI subcommand, tests for render/write/CLI-flag-states, failure alerting in notify, run.sh pages on post-briefing failure, run.sh writes and STAGES the weekly roundup, run.sh POSTs the deploy hook, .env docs, hermetic shell harness pinning the run.sh contract). Both working trees clean. Vercel deploy hook 'cerebro-daily' CREATED on ref main (exactly one, id MTzw2PNmEl); its URL is a bearer secret and lives ONLY in the gitignored .agents/scratch/cerebro-vault-site-secrets.env at mode 600, never here. Also gitignored the stray .herenow/ publish state in the cerebro repo (commit e4fccb3). Dashboard is live at https://sleek-nirvana-cwww.here.now/ - note the publish hook chose that slug, not the charter's 'cerebro-vault-site'. Prior: E02+E04 EXECUTING in parallel (wf_22b3e1a7-db2): build (opus) -> codex pair review -> fable adversarial epic review -> bounded fix, per epic. Plans were adversarially reviewed and the revise was VERIFIED in-file by the driver (e02 gained 26 corpus-drift markers, e04 gained M16/M17/M18 and a --write flag). The e02 review caught a sabotage test that could never fire (the whitelist assert would throw before the safety grep ran, and && short-circuits) and that hardcoded corpus counts break at the next 07:00 vault push, which happens mid-run. The e04 review caught that a no-flag roundup invocation would always be dry because only settings.example.yaml exists here with dry_run true, that 18 w25 notes have no reason key at all, and that the deploy-hook URL had no named safe home while the dashboard is passwordless and auto-published. Two new charter sections were added as a result: SECRET CONTAINMENT and CORPUS DRIFT. E01 remains DONE and verified at 6d8361f.",
   "dashboard_slug": "cerebro-vault-site",
   "dashboard_url": "https://sleek-nirvana-cwww.here.now/",
@@ -15,8 +15,12 @@
     "e07": "QUEUED"
   },
   "human_gate": "blessed",
-  "phase": "E02_E04_EXECUTE",
-  "phase_since": "2026-08-21T01:45:00Z",
+  "phase": "E03_PLAN",
+  "phase_since": "2026-08-21T03:15:00Z",
+  "prs": {
+    "cerebro": "https://github.com/stevengonsalvez/cerebro/pull/17",
+    "site": "https://github.com/stevengonsalvez/stevengonsalvez.github.io/pull/68"
+  },
   "stop_counters": {
     "epic_validation_fails": {},
     "stage_errors": {
