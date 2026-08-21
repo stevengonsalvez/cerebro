@@ -2,7 +2,7 @@
   "beads_mode": "state-only",
   "branch": "f/cerebro-section",
   "current_epic": "e03",
-  "current_note": "TICK 19:27. E05 resumed run is progressing: 13 signed commits landed on f/cerebro-section, tree clean, review/fix still in flight. Commits: optional Weekly kind in the cache path seam, weekly roundup loader, loader test over a real generated roundup, weekly feed description and pubDate builders, section OG card, the weekly roundup page, latest-roundup link on the section index, the weekly item in the RSS channel, weekly entries in the sitemap, section OG on index and archive, article JSON-LD and section OG on the dailies, and e2e specs for feed shape and the weekly page. DRIVER PREP FOR E07 (read-only, no worktree contention): read scripts/build-digest.py in full. It IS the newsletter mechanism and needs ZERO changes for Cerebro - FEED_URL is {ORIGIN}/feed.xml, parse_feed() regex-matches every <item> and filters on nothing (no category or path gate), so a Cerebro weekly item is picked up automatically. It drafts by default; --send is required to schedule and confirms unless --yes; --posts defaults to 5 taken in FEED ORDER, which means e05's weekly item must sort correctly by date among the blog/banter/tools items or it falls outside the window. Charter now records the e07 proof procedure: run build-digest.py with NO --send, assert the Cerebro item appears in the post list and the draft HTML, delete the draft, and never send - the first real issue is Stevie's to send.",
+  "current_note": "E05 SHIPPED, AND DRIVER VERIFICATION FOUND A DEFECT THE ADVERSARIAL REVIEW MISSED. The review returned APPROVE with 2 lows. But scripts/build-digest.py - the script that actually builds Stevie's Kit broadcast - reads /feed.xml and takes the first --posts N items IN FEED ORDER (default 5), and the channel grouped by collection with the weekly APPENDED LAST. So the roundup, dated 2026-08-16 and the newest item in the whole feed, sat at index 103 of 104, and the first five items were all blog posts from July and earlier. The newsletter half of the north star would have shipped silently non-functional. Worse, the e2e spec ENCODED the bug as its invariant ('the weekly items are APPENDED, so no existing item moved'), so it would have passed forever. The append-last choice was deliberate and well-reasoned - keep pre-existing channel indexes stable so the Kit feed is provably undisturbed - but stability of item CONTENT is what protects subscribers, not channel position. FIXED in 9ffe685: the channel merge-sorts newest-first across all collections; verified against the LIVE production feed by guid - all 103 production guids present, 0 field diffs on title/link/pubDate/category/description, exactly 1 guid added, 0 empty guids, weekly now at index 0 and inside the digest window. The e2e invariant was rewritten to assert reverse-chronological order and that a published roundup lands within the default --posts window. BEHAVIOUR CHANGE TO FLAG AT HANDOVER: Stevie's digest composition changes - --posts 5 used to return five blog posts because blogs led the channel regardless of date, and now returns the five genuinely newest across all four collections. Also verified: build green against the REAL vault which has no Weekly/ dir (759 pages), 760 with a locally generated roundup, /cerebro/weekly/2026-w33 -> 200, 133 tests pass, integrity and safety clean, and the roundup was written only into the gitignored local vault-cache - the real vault checkout has 0 dirty entries. NEXT: e06 (publication surfaces + transparency), then e07 (merge, go live, wire the hook, prove the Kit path).",
   "dashboard_slug": "cerebro-vault-site",
   "dashboard_url": "https://sleek-nirvana-cwww.here.now/",
   "epics": {
@@ -10,13 +10,13 @@
     "e02": "VERIFIED_GREEN_PR68",
     "e03": "VERIFIED_GREEN_PR68",
     "e04": "VERIFIED_GREEN_PR17",
-    "e05": "BUILDING_13_COMMITS",
+    "e05": "VERIFIED_GREEN_defect_found_and_fixed_9ffe685",
     "e06": "QUEUED",
     "e07": "QUEUED"
   },
   "human_gate": "blessed",
-  "phase": "E05",
-  "phase_since": "2026-08-21T18:45:00Z",
+  "phase": "E06",
+  "phase_since": "2026-08-21T20:20:00Z",
   "prs": {
     "cerebro": "https://github.com/stevengonsalvez/cerebro/pull/17",
     "site": "https://github.com/stevengonsalvez/stevengonsalvez.github.io/pull/68"
@@ -33,6 +33,6 @@
     "backlog_dry": true,
     "budget_tokens": null,
     "deadline": null,
-    "spent_tokens_estimate": 4780980
+    "spent_tokens_estimate": 5234044
   }
 }
