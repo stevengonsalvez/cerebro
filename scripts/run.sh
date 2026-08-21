@@ -19,15 +19,32 @@ notify.push_failure('run.sh failed at line $line (rc $rc)', load())" || true
 }
 trap 'on_err $LINENO' ERR
 
+# Soft failures (the roundup, the deploy hook) must not kill the daily briefing — but
+# they must not be SILENT either. `|| echo` alone put one line into an unrotated
+# cerebro.err.log that nobody reads, so a permanently broken roundup would stop weekly
+# publication with zero alerting. Page the phone here instead, non-fatally: the message
+# goes in via argv (never interpolated into the -c source), the whole thing is `|| true`
+# so alerting can never become the failure, and being on the RHS of `||` keeps it out of
+# the ERR trap, which is what makes it soft.
+warn_and_page() {
+  echo "[warn] $1" >&2
+  .venv/bin/python -c 'import sys
+from cerebro.config import load
+from cerebro.sink import notify
+notify.push_failure(sys.argv[1], load())' "$1" || true
+  return 0
+}
+
 .venv/bin/python -m cerebro
 
 # Weekly roundup for the last COMPLETE ISO week: deterministic, no LLM, write-once.
 # No flag: dry_run comes from settings.yaml, exactly like the daily run above. On the live
 # install that is `dry_run: false`, so this writes Weekly/ for real; on a dev checkout with
 # only settings.example.yaml it writes _scratch/Weekly/. Never hardcode --write here.
-# Soft-fail (the `|| echo` also keeps it out of the ERR trap, which is intended) — the
-# daily briefing must still reach the vault if the roundup breaks.
-.venv/bin/python -m cerebro roundup || echo "[warn] weekly roundup failed" >&2
+# Soft-fail (the `||` also keeps it out of the ERR trap, which is intended) — the daily
+# briefing must still reach the vault if the roundup breaks — but it pages, because a
+# roundup that stays broken means the weekly email silently stops going out.
+.venv/bin/python -m cerebro roundup || warn_and_page "weekly roundup failed"
 
 # The vault is a separate Git repository. Keep generated briefings visible in
 # its remote, not only on this Mac.
@@ -49,6 +66,6 @@ if ! git -C "$VAULT_PATH" diff --cached --quiet; then
   DEPLOY_HOOK="$(.venv/bin/python -c 'import os, cerebro.config; print(os.environ.get("VERCEL_DEPLOY_HOOK_URL", ""))')"
   if [ -n "$DEPLOY_HOOK" ]; then
     curl -fsS -m 20 -X POST -o /dev/null "$DEPLOY_HOOK" 2>/dev/null \
-      || echo "[warn] vercel deploy hook POST failed" >&2
+      || warn_and_page "vercel deploy hook POST failed"
   fi
 fi

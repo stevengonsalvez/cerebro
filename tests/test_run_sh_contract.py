@@ -29,7 +29,7 @@ CURL = "stub:curl:"
 PYTHON_STUB = """#!/usr/bin/env bash
 printf '%s\\n' "stub:python:$0 python $*" >> "$CALLLOG"
 case "$*" in
-  *push_failure*)               exit 0 ;;
+  *push_failure*)               exit "${PUSH_FAILURE_RC:-0}" ;;
   *vault_path*)                 printf '%s\\n' "$FAKE_VAULT"; exit 0 ;;
   *VERCEL_DEPLOY_HOOK_URL*)     printf '%s\\n' "$FAKE_HOOK";  exit 0 ;;
   "-m cerebro roundup")         exit "${ROUNDUP_RC:-0}" ;;
@@ -179,19 +179,41 @@ def test_a_missing_weekly_directory_does_not_kill_the_push(sandbox):
     assert sandbox.count(PUSH) == 1
 
 
-def test_a_failing_roundup_is_soft_and_the_briefing_still_ships(sandbox):
+def test_a_failing_roundup_is_soft_but_still_pages(sandbox):
+    """Soft, because the daily briefing must reach the vault regardless — but NOT
+    silent: a roundup that stays broken stops weekly publication for good, and the only
+    other trace is one line in an unrotated err.log nobody reads."""
     result = sandbox.run(ROUNDUP_RC=1)
     assert result.returncode == 0, result.stderr
     assert "weekly roundup failed" in result.stderr
+    assert sandbox.count("push_failure") == 1
     for call in (ADD, COMMIT, PUSH):
         assert sandbox.count(call) == 1
 
 
-def test_a_failing_deploy_hook_is_soft(sandbox):
+def test_a_failing_deploy_hook_is_soft_but_still_pages(sandbox):
     result = sandbox.run(CURL_RC=1)
     assert result.returncode == 0, result.stderr
     assert sandbox.index(PUSH) < sandbox.index(CURL)
     assert "vercel deploy hook POST failed" in result.stderr
+    assert sandbox.count("push_failure") == 1
+
+
+def test_the_happy_path_pages_nobody(sandbox):
+    """Negative control for the two cases above: paging must be failure-driven, not a
+    thing that fires on every 07:00 run."""
+    result = sandbox.run()
+    assert result.returncode == 0, result.stderr
+    assert sandbox.count("push_failure") == 0
+
+
+def test_alerting_can_never_turn_a_soft_failure_into_a_hard_one(sandbox):
+    """If the pager itself is broken (no settings.yaml, no network, import error), the
+    run must still exit 0 and still push the briefing."""
+    result = sandbox.run(ROUNDUP_RC=1, PUSH_FAILURE_RC=1)
+    assert result.returncode == 0, result.stderr
+    assert sandbox.count("push_failure") == 1
+    assert sandbox.count(PUSH) == 1
 
 
 def test_a_failing_vault_push_is_loud_and_pages_the_phone(sandbox):
