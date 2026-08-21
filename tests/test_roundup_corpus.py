@@ -53,10 +53,29 @@ def test_every_corpus_note_parses(corpus):
     assert len({n.hash for n in corpus.notes}) == len(corpus.notes)
 
 
+def _first_week(corpus):
+    """The 18 notes of ISO week 2026-w25 — a CLOSED week, so this population is frozen.
+
+    Exact counts are asserted here and never corpus-wide: the vault gains ~25 signals a
+    day, and the pipeline omits the `reason:` key whenever triage reason is empty
+    (`cerebro/sink/vault.py`), so a corpus-wide `== 18` would break the day a future
+    note ships reason-less. Aggregates over the growing corpus are floors only.
+    """
+    return [n for n in corpus.notes if weekly.iso_week_of(n.captured) == FIRST_WEEK]
+
+
 def test_the_first_day_notes_recover_their_titles_and_carry_an_empty_reason(corpus):
-    assert corpus.title_recovered == 18
+    first_week = _first_week(corpus)
+    assert len(first_week) == 18                          # closed week: frozen count
+    assert sum(1 for n in first_week if n.reason == "") == 18
+    # Per-file fact about those same frozen notes: none of them has a `title` key, so
+    # every one of them exercised the H1 recovery path.
+    for note in first_week:
+        fm, _ = vault_read._frontmatter((CORPUS / "Signals" / f"{note.hash}.md").read_text())
+        assert not fm.get("title"), note.hash
+    # Corpus-wide: floors and invariants only.
+    assert corpus.title_recovered >= 18
     assert all(n.title for n in corpus.notes)
-    assert sum(1 for n in corpus.notes if n.reason == "") == 18
     assert [n for n in corpus.notes if n.reason is None] == []
 
 
