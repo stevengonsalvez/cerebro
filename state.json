@@ -7,9 +7,9 @@
   "dashboard_url": "https://sleek-nirvana-cwww.here.now/",
   "epics": {
     "e01": "DONE_VERIFIED_6d8361f",
-    "e02": "REVIEW_RETRY",
-    "e03": "QUEUED",
-    "e04": "REVIEWED_FIXED_awaiting_VERIFY",
+    "e02": "VERIFIED_GREEN_PR68",
+    "e03": "PLANNING",
+    "e04": "VERIFIED_GREEN_PR17",
     "e05": "QUEUED",
     "e06": "QUEUED",
     "e07": "QUEUED"
@@ -31,6 +31,6 @@
     "backlog_dry": true,
     "budget_tokens": null,
     "deadline": null,
-    "spent_tokens_estimate": 3298906
+    "spent_tokens_estimate": 3545380
   }
 }
