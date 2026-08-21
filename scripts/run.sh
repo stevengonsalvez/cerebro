@@ -39,4 +39,16 @@ git -C "$VAULT_PATH" add -- Daily Signals Weekly
 if ! git -C "$VAULT_PATH" diff --cached --quiet; then
   git -C "$VAULT_PATH" commit -S -m "vault: $(date +%F) daily briefing"
   git -C "$VAULT_PATH" push
+  # Public vault changed → tell the site to rebuild /cerebro. Soft-fail, and swallow curl's
+  # own stderr as defence-in-depth. NOT because curl leaks the URL — measured on curl 8.7.1,
+  # an HTTP failure prints `curl: (56) The requested URL returned error: 404` (no URL) and a
+  # DNS failure prints the host only, never the secret path. The redirect is here because
+  # other curl builds and other exit modes (e.g. exit 3 malformed-URL diagnostics) are less
+  # disciplined, and cerebro.err.log is an unrotated plaintext file. Do not delete it after
+  # "verifying" that today's curl happens not to leak.
+  DEPLOY_HOOK="$(.venv/bin/python -c 'import os, cerebro.config; print(os.environ.get("VERCEL_DEPLOY_HOOK_URL", ""))')"
+  if [ -n "$DEPLOY_HOOK" ]; then
+    curl -fsS -m 20 -X POST -o /dev/null "$DEPLOY_HOOK" 2>/dev/null \
+      || echo "[warn] vercel deploy hook POST failed" >&2
+  fi
 fi
