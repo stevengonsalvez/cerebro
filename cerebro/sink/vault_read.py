@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import math
 import pathlib
 from dataclasses import dataclass
 from typing import NamedTuple
@@ -124,6 +125,12 @@ def _note(hash_: str, fm: dict, body: str) -> tuple[SignalNote, bool] | None:
         score = float(fm.get("score"))
     except (TypeError, ValueError):
         return None
+    # YAML `.nan` / `.inf` survive float() but destroy the total order weekly.sort_key
+    # documents: NaN compares false against everything, so selection would silently
+    # become input-order dependent. A non-finite score is not orderable, so the note is
+    # unplaceable for exactly the same reason a missing one is — skip it.
+    if not math.isfinite(score):
+        return None
 
     title = _one_line(fm.get("title"))
     recovered = False
@@ -134,6 +141,14 @@ def _note(hash_: str, fm: dict, body: str) -> tuple[SignalNote, bool] | None:
     raw_tags = fm.get("tags") or []
     if isinstance(raw_tags, str):
         raw_tags = [raw_tags]
+    # Hand-edited or truncated frontmatter can hand back a scalar (`tags: 42`) or a
+    # mapping. Iterating one raises, and this function is called for every note in the
+    # vault from a loop that only catches "unparseable" by way of a None return — so an
+    # unguarded raise here takes down the whole roundup, permanently and silently, on
+    # ONE bad note. Anything that is not a sequence of scalars is a malformed note: skip
+    # it, exactly like a bad `captured` or `score`, so it lands in `skipped`.
+    if not isinstance(raw_tags, (list, tuple)):
+        return None
     tags = tuple(_one_line(t) for t in raw_tags if _one_line(t))
 
     return (
@@ -179,7 +194,15 @@ def read_signal_notes(vault_path) -> ReadResult:
             skipped += 1
             continue
         fm, body_offset = parsed
-        built = _note(path.stem, fm, text[body_offset:])
+        # Belt-and-braces around the per-note guards in `_note`: frontmatter is
+        # hand-editable YAML, so its value types are attacker-shaped, not schema-shaped.
+        # One unanticipated shape must cost exactly one note, never the whole roundup —
+        # a raise here propagates out of the read seam and stops weekly publication
+        # permanently, and run.sh soft-fails the roundup, so nobody would ever find out.
+        try:
+            built = _note(path.stem, fm, text[body_offset:])
+        except Exception:
+            built = None
         if built is None:
             skipped += 1
             continue
