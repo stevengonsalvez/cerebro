@@ -82,6 +82,22 @@ anything .. so that you can execute the godmode autonomously".
   fetch-parse-POST path, so the free-plan RSS question is closed and irrelevant.
 · 0 of 909 signal notes carry a rating; any rating-dependent feature is PARKED.
 
+— SECRET CONTAINMENT (added after the e04 adversarial review found a real leak path) —
+The dashboard is PASSWORDLESS and auto-republishes on every state.json write, and here.now
+evidence pages are public. Therefore the Vercel deploy-hook URL (a bearer secret: anyone
+holding it can trigger builds) must NEVER appear in state.json, `current_note`, a dashboard
+render, an evidence upload, a PR body, or a commit. Its only homes are the LIVE install's
+gitignored `/Users/stevengonsalvez/d/git/cerebro/.env` and, during the run,
+`.agents/scratch/cerebro-vault-site-secrets.env` (gitignored, never rendered). Every command
+that could echo it is redacted at the source. Same rule for VERCEL_TOKEN and KIT_API_KEY.
+
+— CORPUS DRIFT (the vault is a moving target mid-run) —
+The vault gains one daily + ~25 signal notes at 07:00 every day, and this programme is
+running across that boundary. NO test, assertion, or done-condition may hardcode a corpus
+aggregate (61 dailies / 909 signals / 1346 links). Aggregates are derived at run time from
+the cache and asserted as floors or as internal-consistency invariants. Per-file facts about
+named landmine notes stay hardcoded — those files do not change.
+
 — PIPELINE (state machine per epic) —
 Feasibility Court (once) → Roadmap + epic beads (once) → [HUMAN GATE: roadmap blessing]
 → per epic: Plan (planner → adversarial review → revise → verify-the-revise) → Execute

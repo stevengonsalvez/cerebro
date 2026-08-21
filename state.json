@@ -1,21 +1,21 @@
 {
   "beads_mode": "state-only",
   "branch": "f/cerebro-section",
-  "current_epic": "e02",
-  "current_note": "E01 DONE AND VERIFIED on all four features: the Vercel sandbox really does run a user-script git clone (preview dpl_HppnyHHHfeyX8NpstsWbxDZmnTVw, log line 42: '[vault] ok sha=c807866 daily=61 signals=909 in 389ms', compiled in 13.7s), vault-cache sits at repo root so it can never match the dev.to _devto/**/*.md glob, git status shows zero stageable vault entries, and a sabotaged clone URL exits 1 so a broken fetch fails the build loudly instead of shipping an empty section. Commit 6d8361f signed and pushed. ROADMAP produced 7 epics; e04 (CEREBRO) pairs with e02/e03 (SITE) because they are different repos. PLAN workflow wf_4d32afae-7d9 now running plan-review-revise for e02 and e04 in parallel. PR shape amended in the charter to two long-lived PRs (one per repo) rather than five stacked site PRs, because granted authority #3 makes the driver the merger and stacked PRs would have no reviewer. Beads is state-only: the cerebro repo has no .beads and none is being introduced. Prior context: COURT DONE: 53 SHIP / 4 DOWNGRADE / 13 PARK across 70 features, all 10 open questions settled with measured evidence. Winners: F001 build-time shallow clone (0.79s, 5.3MB) over submodule/push-sync/JSON/ISR; F007 custom loader over contentlayer types (18 title-less notes fail any declarative schema); body-strip enforced SITE-SIDE only (writing to cerebro-vault is forbidden); F036+F039 deterministic weekly roundup written into the vault; Kit never polls RSS at all, so the weekly email goes out via the existing build-digest.py fetch-parse-POST path, making the free-plan question moot; archive is NOINDEX; routes are flat /cerebro/<date>; full 400KB/108KB-gzip signals payload ships unsharded. ROADMAP workflow running (wf_74a10279-3a9). In parallel the driver is de-risking the Court's single load-bearing inference: whether Vercel's build sandbox permits a user-script git clone. Spike committed and pushed to f/cerebro-section (tools/fetch-vault.mjs as an npm prebuild hook, plus the F009 placement rule and F010 ignore rules); watching the auto-created preview deploy in background job bspv9ddqp. Vercel runs Node 24.x while local is 22.13 - the build must work on both.",
+  "current_epic": "e02+e04 (parallel, different repos)",
+  "current_note": "E02+E04 EXECUTING in parallel (wf_22b3e1a7-db2): build (opus) -> codex pair review -> fable adversarial epic review -> bounded fix, per epic. Plans were adversarially reviewed and the revise was VERIFIED in-file by the driver (e02 gained 26 corpus-drift markers, e04 gained M16/M17/M18 and a --write flag). The e02 review caught a sabotage test that could never fire (the whitelist assert would throw before the safety grep ran, and && short-circuits) and that hardcoded corpus counts break at the next 07:00 vault push, which happens mid-run. The e04 review caught that a no-flag roundup invocation would always be dry because only settings.example.yaml exists here with dry_run true, that 18 w25 notes have no reason key at all, and that the deploy-hook URL had no named safe home while the dashboard is passwordless and auto-published. Two new charter sections were added as a result: SECRET CONTAINMENT and CORPUS DRIFT. E01 remains DONE and verified at 6d8361f.",
   "dashboard_slug": "cerebro-vault-site",
   "epics": {
     "e01": "DONE_VERIFIED_6d8361f",
-    "e02": "PLANNING",
+    "e02": "EXECUTING",
     "e03": "QUEUED",
-    "e04": "PLANNING",
+    "e04": "EXECUTING",
     "e05": "QUEUED",
     "e06": "QUEUED",
     "e07": "QUEUED"
   },
   "human_gate": "blessed",
-  "phase": "E02_PLAN",
-  "phase_since": "2026-08-21T01:35:00Z",
+  "phase": "E02_E04_EXECUTE",
+  "phase_since": "2026-08-21T01:45:00Z",
   "stop_counters": {
     "epic_validation_fails": {},
     "stage_errors": {}
@@ -24,6 +24,6 @@
     "backlog_dry": true,
     "budget_tokens": null,
     "deadline": null,
-    "spent_tokens_estimate": 1645083
+    "spent_tokens_estimate": 2474717
   }
 }
