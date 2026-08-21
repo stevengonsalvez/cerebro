@@ -2,7 +2,7 @@
   "beads_mode": "state-only",
   "branch": "f/cerebro-section",
   "current_epic": "e03",
-  "current_note": "E03 SHIPPED AND DRIVER-VERIFIED. Adversarial review APPROVE, 3 lows, no highs/mediums; honest gap - the codex pair returned a background task handle instead of a review, so e03 had builder + adversarial reviewer + driver verify, not three lanes. Build EXIT=0, 100 unit tests pass, 759 static pages. LOCKED DECISION HOLDS: 63 html under app/cerebro = 62 dailies + signals.html, ZERO per-signal routes, so page count is flat forever. Payload measured at 401001 B raw / 103420 B gzip for 929 records. REAL BROWSER DRIVE over CDP against a real next start: baseline 929 OF 929 MATCH with progressive render 100->200 on scroll; typing 'ollama' narrows 100->2 and every visible row genuinely matches (non-vacuous); URL gains ?q=; Escape restores and drops q; '/' focuses search; facet click 100->87 with ?category=vibe-coding; deep-link #hash resolves to a visible row; ?q=agent on load populates the input and reports 219 matching. TWO of the driver's own assertions failed first and were the HARNESS not the app (asserted rows>100 before knowing 100 is a deliberate window; compared DOM counts both capped at 100) - verified before reporting rather than filing them as defects, same as the earlier mobile-clipping false alarm. An assertion that passed VACUOUSLY over zero rows was also caught (wrong selector; real class is .cerebro-archive-row). Content safety: 65 responses scanned, 0 leaks, served payload fields exactly the sealed whitelist. SEO: archive noindex, 0 occurrences in sitemap, 62 dailies present, canonicals live, all 100 rendered outbound anchors carry rel='nofollow noopener'. E05 NOW RUNNING (wf_3e1f545e-2c0) - the newsletter tie-in: weekly roundup page + the /feed.xml item, with a plan-review-revise stage in front of build and the dead-reviewer guard behind it. Its top review priority is that the three EXISTING feed content types must survive unchanged, because a regression there silently breaks Stevie's real newsletter.",
+  "current_note": "TICK 18:45. E05's first attempt produced NO CODE: four agents (revise, build, review, review-retry) all died on 'You've hit your weekly limit, resets 6pm'. The dead-reviewer guard added after e02 worked exactly as intended - the workflow returned 'REVIEW DIED TWICE - NOT a clean bill of health' instead of an empty findings list that would have read as clean. Recorded as an INFRA strike, separate from code-defect strikes, so it does not trip the two-strikes STOP rule. The machine then slept through the wakeup again; by the time the driver woke it was 18:45 and the 18:00 reset had already passed, so e05 was resumed from run wf_3e1f545e-2c0 (task wnl1izwr5) - the plan and plan-review agents replay from cache, only revise/build/review/fix re-run. The e05 plan artifact (37KB) and goal file both survive on disk from the first attempt, with 5 plan-review findings still to be folded by the resumed revise stage. MEASURED WHILE WAITING: the public vault has NO Weekly/ directory (sha a2db16f, 62 dailies, 929 signals). It cannot have one - the run.sh that generates and stages the roundup is in cerebro PR #17, still unmerged, so this morning's 07:00 run used the old script. The first real Weekly note needs BOTH that merge AND a run covering a complete ISO week. Charter now binds the consequence: e05 must render correctly with zero Weekly notes (today's actual state, not a hypothetical), and e07 must NOT require a live weekly roundup as a done-condition or the programme stalls for days waiting on a cron.",
   "dashboard_slug": "cerebro-vault-site",
   "dashboard_url": "https://sleek-nirvana-cwww.here.now/",
   "epics": {
@@ -16,7 +16,7 @@
   },
   "human_gate": "blessed",
   "phase": "E05",
-  "phase_since": "2026-08-21T11:05:00Z",
+  "phase_since": "2026-08-21T18:45:00Z",
   "prs": {
     "cerebro": "https://github.com/stevengonsalvez/cerebro/pull/17",
     "site": "https://github.com/stevengonsalvez/stevengonsalvez.github.io/pull/68"
@@ -25,13 +25,14 @@
     "epic_validation_fails": {},
     "stage_errors": {
       "E02_EXECUTE_review": 1,
-      "E03_PLAN_session_limit": "infra, not code — reset 05:10, resumed 09:50"
+      "E03_PLAN_session_limit": "infra, not code — reset 05:10, resumed 09:50",
+      "E05_weekly_limit": "infra, not code — weekly cap, reset 18:00, resumed 18:45"
     }
   },
   "termination": {
     "backlog_dry": true,
     "budget_tokens": null,
     "deadline": null,
-    "spent_tokens_estimate": 4434978
+    "spent_tokens_estimate": 4780980
   }
 }

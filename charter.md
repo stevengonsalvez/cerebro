@@ -92,6 +92,22 @@ hold this session's id — so the lease is STALE, not CONTENDED, and the skill's
 lease-lost as real when the holder's SESSION token DIFFERS from this session's id. Never
 skip this check and never force-claim past a genuinely different, fresh holder.
 
+— WEEKLY-ROUNDUP SEQUENCING (measured 2026-08-21 18:45; affects e05 and e07 done-conditions) —
+The public vault has NO `Weekly/` directory (sha a2db16f, 62 dailies, 929 signals). It cannot
+have one yet: the `run.sh` that generates and stages the roundup lives in cerebro PR #17, which
+is unmerged, so this morning's 07:00 run used the old script. The first real Weekly note can
+therefore only appear after BOTH (a) PR #17 merges, and (b) the next run covering a COMPLETE
+ISO week fires. Today is Friday 2026-08-21.
+CONSEQUENCES, binding:
+· e05 MUST render /cerebro correctly with zero Weekly notes, and the build MUST NOT fail on an
+  absent Weekly/ dir. This is today's actual state, not a hypothetical edge case.
+· e07 MUST NOT have "a weekly roundup is live on the site" as a done-condition — that is not
+  achievable at launch and waiting for it would stall the programme for days. e07's weekly
+  done-condition is: the page and the /feed.xml item render correctly FROM A LOCALLY GENERATED
+  roundup fixture, and the production path is proven ready. The first real issue lands on its
+  own once the pipeline runs post-merge.
+· Tell Stevie this plainly at handover rather than letting him discover an empty weekly page.
+
 — PROVEN PRE-EXISTING FAILURE (do NOT fix, do NOT let it block the e07 merge) —
 The site repo's `publish` workflow (`.github/workflows/publish_devto.yml`) fails, and has
 failed on `main` continuously since at least 2026-07-22 (runs at 3b0df68, de64d55, 5607a1f,
