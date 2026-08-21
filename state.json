@@ -7,9 +7,9 @@
   "dashboard_url": "https://sleek-nirvana-cwww.here.now/",
   "epics": {
     "e01": "DONE_VERIFIED_6d8361f",
-    "e02": "EXECUTING",
+    "e02": "REVIEW_RETRY",
     "e03": "QUEUED",
-    "e04": "EXECUTING",
+    "e04": "REVIEWED_FIXED_awaiting_VERIFY",
     "e05": "QUEUED",
     "e06": "QUEUED",
     "e07": "QUEUED"
