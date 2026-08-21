@@ -2,7 +2,7 @@
   "beads_mode": "state-only",
   "branch": "f/cerebro-section",
   "current_epic": "e03",
-  "current_note": "TICK 18:45. E05's first attempt produced NO CODE: four agents (revise, build, review, review-retry) all died on 'You've hit your weekly limit, resets 6pm'. The dead-reviewer guard added after e02 worked exactly as intended - the workflow returned 'REVIEW DIED TWICE - NOT a clean bill of health' instead of an empty findings list that would have read as clean. Recorded as an INFRA strike, separate from code-defect strikes, so it does not trip the two-strikes STOP rule. The machine then slept through the wakeup again; by the time the driver woke it was 18:45 and the 18:00 reset had already passed, so e05 was resumed from run wf_3e1f545e-2c0 (task wnl1izwr5) - the plan and plan-review agents replay from cache, only revise/build/review/fix re-run. The e05 plan artifact (37KB) and goal file both survive on disk from the first attempt, with 5 plan-review findings still to be folded by the resumed revise stage. MEASURED WHILE WAITING: the public vault has NO Weekly/ directory (sha a2db16f, 62 dailies, 929 signals). It cannot have one - the run.sh that generates and stages the roundup is in cerebro PR #17, still unmerged, so this morning's 07:00 run used the old script. The first real Weekly note needs BOTH that merge AND a run covering a complete ISO week. Charter now binds the consequence: e05 must render correctly with zero Weekly notes (today's actual state, not a hypothetical), and e07 must NOT require a live weekly roundup as a done-condition or the programme stalls for days waiting on a cron.",
+  "current_note": "TICK 19:27. E05 resumed run is progressing: 13 signed commits landed on f/cerebro-section, tree clean, review/fix still in flight. Commits: optional Weekly kind in the cache path seam, weekly roundup loader, loader test over a real generated roundup, weekly feed description and pubDate builders, section OG card, the weekly roundup page, latest-roundup link on the section index, the weekly item in the RSS channel, weekly entries in the sitemap, section OG on index and archive, article JSON-LD and section OG on the dailies, and e2e specs for feed shape and the weekly page. DRIVER PREP FOR E07 (read-only, no worktree contention): read scripts/build-digest.py in full. It IS the newsletter mechanism and needs ZERO changes for Cerebro - FEED_URL is {ORIGIN}/feed.xml, parse_feed() regex-matches every <item> and filters on nothing (no category or path gate), so a Cerebro weekly item is picked up automatically. It drafts by default; --send is required to schedule and confirms unless --yes; --posts defaults to 5 taken in FEED ORDER, which means e05's weekly item must sort correctly by date among the blog/banter/tools items or it falls outside the window. Charter now records the e07 proof procedure: run build-digest.py with NO --send, assert the Cerebro item appears in the post list and the draft HTML, delete the draft, and never send - the first real issue is Stevie's to send.",
   "dashboard_slug": "cerebro-vault-site",
   "dashboard_url": "https://sleek-nirvana-cwww.here.now/",
   "epics": {
@@ -10,7 +10,7 @@
     "e02": "VERIFIED_GREEN_PR68",
     "e03": "VERIFIED_GREEN_PR68",
     "e04": "VERIFIED_GREEN_PR17",
-    "e05": "PLAN+EXECUTE",
+    "e05": "BUILDING_13_COMMITS",
     "e06": "QUEUED",
     "e07": "QUEUED"
   },

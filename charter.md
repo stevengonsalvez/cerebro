@@ -92,6 +92,22 @@ hold this session's id — so the lease is STALE, not CONTENDED, and the skill's
 lease-lost as real when the holder's SESSION token DIFFERS from this session's id. Never
 skip this check and never force-claim past a genuinely different, fresh holder.
 
+— THE NEWSLETTER TIE-IN IS ALREADY SOLVED (read the real script, 2026-08-21 19:30) —
+`scripts/build-digest.py` in the SITE repo (246 lines) IS the newsletter mechanism, and it
+needs NO changes for Cerebro:
+· `FEED_URL = f"{ORIGIN}/feed.xml"`; `parse_feed()` regex-matches EVERY `<item>` block and
+  filters on nothing — no category gate, no path gate. A Cerebro weekly item in the channel is
+  therefore picked up automatically.
+· It DRAFTS by default; `--send` is required to schedule, and even then it confirms unless
+  `--yes`. `--posts N` (default 5) takes the first N in feed order; `--since YYYY-MM-DD` filters
+  by pubDate. Reads `KIT_API_KEY` from the transcrypt-decrypted `.env`.
+· Consequence for e05: the weekly item must sort by date correctly AMONG the blog/banter/tools
+  items, because position in the channel decides whether `--posts 5` includes it.
+· e07 PROOF PROCEDURE (this is the F042 proof, and it stays inside the charter's limits):
+  after the site is live, run `python3 scripts/build-digest.py` with NO `--send`, assert the
+  Cerebro item appears in the printed post list and in the draft's HTML, then DELETE the draft.
+  Never pass `--send` as part of this programme — the first real issue is Stevie's to send.
+
 — WEEKLY-ROUNDUP SEQUENCING (measured 2026-08-21 18:45; affects e05 and e07 done-conditions) —
 The public vault has NO `Weekly/` directory (sha a2db16f, 62 dailies, 929 signals). It cannot
 have one yet: the `run.sh` that generates and stages the roundup lives in cerebro PR #17, which
