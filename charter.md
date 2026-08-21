@@ -108,6 +108,18 @@ needs NO changes for Cerebro:
   Cerebro item appears in the printed post list and in the draft's HTML, then DELETE the draft.
   Never pass `--send` as part of this programme — the first real issue is Stevie's to send.
 
+— CEREBRO HALF IS MERGED AND LIVE (2026-08-21 19:55) —
+PR #17 squash-merged to cerebro main. The LIVE install at /Users/stevengonsalvez/d/git/cerebro
+was pulled, and its gitignored `.env` now carries `VERCEL_DEPLOY_HOOK_URL`. Verified after the
+merge, on the live install: `pytest -q` → 200 passed; `bash -n scripts/run.sh` → OK; a roundup
+DRY-RUN read 929 notes and wrote only to `vault/_scratch/Weekly/`; the live vault checkout has
+0 dirty entries. The 07:00 pipeline is intact.
+CORRECTION to the sequencing note below: `run.sh` invokes `python -m cerebro roundup` on EVERY
+daily run (write-once, for the last COMPLETE ISO week) — not only on Sundays. Today is Fri
+2026-08-21 (w34), so the last complete week is w33. TOMORROW'S 07:00 RUN WILL WRITE
+`Weekly/2026-w33.md` INTO THE PUBLIC VAULT AND PUSH IT, then POST the deploy hook. A real
+roundup therefore exists from 2026-08-22 onward without any further action.
+
 — WEEKLY-ROUNDUP SEQUENCING (measured 2026-08-21 18:45; affects e05 and e07 done-conditions) —
 The public vault has NO `Weekly/` directory (sha a2db16f, 62 dailies, 929 signals). It cannot
 have one yet: the `run.sh` that generates and stages the roundup lives in cerebro PR #17, which

@@ -2,14 +2,14 @@
   "beads_mode": "state-only",
   "branch": "f/cerebro-section",
   "current_epic": "e03",
-  "current_note": "E05 SHIPPED, AND DRIVER VERIFICATION FOUND A DEFECT THE ADVERSARIAL REVIEW MISSED. The review returned APPROVE with 2 lows. But scripts/build-digest.py - the script that actually builds Stevie's Kit broadcast - reads /feed.xml and takes the first --posts N items IN FEED ORDER (default 5), and the channel grouped by collection with the weekly APPENDED LAST. So the roundup, dated 2026-08-16 and the newest item in the whole feed, sat at index 103 of 104, and the first five items were all blog posts from July and earlier. The newsletter half of the north star would have shipped silently non-functional. Worse, the e2e spec ENCODED the bug as its invariant ('the weekly items are APPENDED, so no existing item moved'), so it would have passed forever. The append-last choice was deliberate and well-reasoned - keep pre-existing channel indexes stable so the Kit feed is provably undisturbed - but stability of item CONTENT is what protects subscribers, not channel position. FIXED in 9ffe685: the channel merge-sorts newest-first across all collections; verified against the LIVE production feed by guid - all 103 production guids present, 0 field diffs on title/link/pubDate/category/description, exactly 1 guid added, 0 empty guids, weekly now at index 0 and inside the digest window. The e2e invariant was rewritten to assert reverse-chronological order and that a published roundup lands within the default --posts window. BEHAVIOUR CHANGE TO FLAG AT HANDOVER: Stevie's digest composition changes - --posts 5 used to return five blog posts because blogs led the channel regardless of date, and now returns the five genuinely newest across all four collections. Also verified: build green against the REAL vault which has no Weekly/ dir (759 pages), 760 with a locally generated roundup, /cerebro/weekly/2026-w33 -> 200, 133 tests pass, integrity and safety clean, and the roundup was written only into the gitignored local vault-cache - the real vault checkout has 0 dirty entries. NEXT: e06 (publication surfaces + transparency), then e07 (merge, go live, wire the hook, prove the Kit path).",
+  "current_note": "CEREBRO HALF IS MERGED AND LIVE. While e06 planned, the driver merged PR #17 (squash, branch deleted) - it was MERGEABLE/CLEAN with all three checks green and is in a different repo from e06, so it was safely off the critical path. Pulled it into the LIVE install at d/git/cerebro and appended VERCEL_DEPLOY_HOOK_URL to its gitignored .env (90 chars, value never printed or committed; a .env.bak was taken first). Then PROVED the 07:00 pipeline is intact rather than assuming: pytest 200 passed, bash -n on run.sh OK, a roundup DRY-RUN read 929 notes and wrote only to vault/_scratch/Weekly/, and the live vault checkout has 0 dirty entries. run.sh now stages 'Daily Signals Weekly' and POSTs the deploy hook after a successful push. CORRECTION TO AN EARLIER CLAIM: the driver previously said the first weekly note needed a Sunday run. Wrong - run.sh invokes the roundup on EVERY daily run, write-once for the last COMPLETE ISO week. Today is Friday w34, so tomorrow's 07:00 run writes Weekly/2026-w33.md into the PUBLIC vault, pushes it, and fires the hook. A real roundup exists from 2026-08-22 with no further action, which means e07 no longer needs a fixture to prove the weekly path end to end. E06 still running (wf_d821a4a2-918), currently in planning with 0 commits. Site PR #68 is at 43 commits, MERGEABLE/UNSTABLE where UNSTABLE is only the proven pre-existing dev.to publish failure; Vercel is green.",
   "dashboard_slug": "cerebro-vault-site",
   "dashboard_url": "https://sleek-nirvana-cwww.here.now/",
   "epics": {
     "e01": "DONE_VERIFIED_6d8361f",
     "e02": "VERIFIED_GREEN_PR68",
     "e03": "VERIFIED_GREEN_PR68",
-    "e04": "VERIFIED_GREEN_PR17",
+    "e04": "MERGED_LIVE_PR17",
     "e05": "VERIFIED_GREEN_defect_found_and_fixed_9ffe685",
     "e06": "QUEUED",
     "e07": "QUEUED"
@@ -18,7 +18,7 @@
   "phase": "E06",
   "phase_since": "2026-08-21T20:20:00Z",
   "prs": {
-    "cerebro": "https://github.com/stevengonsalvez/cerebro/pull/17",
+    "cerebro": "https://github.com/stevengonsalvez/cerebro/pull/17 (MERGED)",
     "site": "https://github.com/stevengonsalvez/stevengonsalvez.github.io/pull/68"
   },
   "stop_counters": {
