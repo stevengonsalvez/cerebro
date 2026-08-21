@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from . import __version__
+from .process import weekly as weekly_defaults
 
 
 def main() -> None:
@@ -62,6 +63,21 @@ def main() -> None:
     serve = sub.add_parser("serve", help="serve local Cerebro UI")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=4317)
+
+    rp = sub.add_parser("roundup", help="write the deterministic weekly roundup note (no LLM)")
+    rp.add_argument("--week", default=None,
+                    help="ISO week, e.g. 2026-w33 (default: last complete week)")
+    rp.add_argument("--top-n", type=int, default=weekly_defaults.TOP_N)
+    rp.add_argument("--per-source-cap", type=int, default=weekly_defaults.PER_SOURCE_CAP)
+    rp.add_argument("--per-category-cap", type=int, default=weekly_defaults.PER_CATEGORY_CAP)
+    rp.add_argument("--force", action="store_true", help="overwrite an existing weekly note")
+    mx = rp.add_mutually_exclusive_group()
+    mx.add_argument("--dry-run", action="store_true",
+                    help="force a dry run: write to _scratch/Weekly/")
+    mx.add_argument("--write", action="store_true",
+                    help="force a real write to Weekly/ regardless of settings.dry_run "
+                         "(honours $CEREBRO_VAULT — point it at a copy, never at the live vault)")
+
     args = ap.parse_args()
 
     if args.command == "health" or args.health:
@@ -126,6 +142,40 @@ def main() -> None:
         from .ui.server import create_app
         import uvicorn
         uvicorn.run(create_app(settings), host=args.host, port=args.port)
+        return
+
+    if args.command == "roundup":
+        # Deliberately handled BEFORE `from .orchestrator import run` below: the roundup
+        # is a pure, LLM-free re-read of notes the vault already holds, and returning
+        # from here makes it structurally incapable of triggering a pipeline run.
+        import datetime as _datetime
+
+        from .process import weekly
+        from .sink import roundup as roundup_sink, vault_read
+
+        # Tri-state dry-run. --dry-run forces a scratch write, --write forces a real one,
+        # and NEITHER defers to config/settings.yaml — which is what run.sh relies on, so
+        # the no-flag form must stay `None` rather than being coerced to a bool.
+        dry_override = True if args.dry_run else (False if args.write else None)
+        settings = load(dry_run_override=dry_override, allow_example=True)
+        read = vault_read.read_signal_notes(settings.vault_path)
+        week = (
+            weekly.parse_week(args.week) if args.week
+            else weekly.last_complete_week(_datetime.date.today())
+        )
+        selection = weekly.select(
+            read.notes, week,
+            top_n=args.top_n,
+            per_source_cap=args.per_source_cap,
+            per_category_cap=args.per_category_cap,
+        )
+        result = roundup_sink.write(selection, settings, force=args.force)
+        # `dry_run` rides along so a reader of the JSON can tell which of the two roots
+        # `path` sits under without re-deriving it from the settings.
+        result["dry_run"] = settings.dry_run
+        result["notes_read"] = len(read.notes)
+        result["notes_skipped"] = read.skipped
+        print(json.dumps(result, indent=2))
         return
 
     from .orchestrator import run
