@@ -50,3 +50,4 @@ explainers/
 
 # local agent config
 .claude/
+.herenow/
