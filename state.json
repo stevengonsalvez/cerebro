@@ -1,14 +1,15 @@
 {
+  "beads_mode": "state-only",
   "branch": "f/cerebro-section",
-  "current_epic": "e01-pipeline-spike",
+  "current_epic": "e02",
   "current_note": "COURT DONE: 53 SHIP / 4 DOWNGRADE / 13 PARK across 70 features, all 10 open questions settled with measured evidence. Winners: F001 build-time shallow clone (0.79s, 5.3MB) over submodule/push-sync/JSON/ISR; F007 custom loader over contentlayer types (18 title-less notes fail any declarative schema); body-strip enforced SITE-SIDE only (writing to cerebro-vault is forbidden); F036+F039 deterministic weekly roundup written into the vault; Kit never polls RSS at all, so the weekly email goes out via the existing build-digest.py fetch-parse-POST path, making the free-plan question moot; archive is NOINDEX; routes are flat /cerebro/<date>; full 400KB/108KB-gzip signals payload ships unsharded. ROADMAP workflow running (wf_74a10279-3a9). In parallel the driver is de-risking the Court's single load-bearing inference: whether Vercel's build sandbox permits a user-script git clone. Spike committed and pushed to f/cerebro-section (tools/fetch-vault.mjs as an npm prebuild hook, plus the F009 placement rule and F010 ignore rules); watching the auto-created preview deploy in background job bspv9ddqp. Vercel runs Node 24.x while local is 22.13 - the build must work on both.",
   "dashboard_slug": "cerebro-vault-site",
   "epics": {
     "e01-pipeline-spike": "SPIKE_IN_FLIGHT"
   },
   "human_gate": "blessed",
-  "phase": "ROADMAP",
-  "phase_since": "2026-08-21T01:10:00Z",
+  "phase": "E02_PLAN",
+  "phase_since": "2026-08-21T01:35:00Z",
   "stop_counters": {
     "epic_validation_fails": {},
     "stage_errors": {}
