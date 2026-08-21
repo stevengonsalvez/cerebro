@@ -82,6 +82,16 @@ anything .. so that you can execute the godmode autonomously".
   fetch-parse-POST path, so the free-plan RSS question is closed and irrelevant.
 · 0 of 909 signal notes carry a rating; any rating-dependent feature is PARKED.
 
+— LEASE / HOSTNAME CHURN (observed live 2026-08-21 02:24) —
+This machine's hostname changes under it (`MB1412-5457` → `MB1412-5508`, DHCP-style churn).
+The lease holder token is `machine/user/SESSION`, so a hostname change makes the driver look
+like a different machine and trips a spurious "lease lost". DIAGNOSTIC RULE: if the holder's
+SESSION token equals this session's id, no competing driver can exist — a rival could not
+hold this session's id — so the lease is STALE, not CONTENDED, and the skill's own
+"auto-claims a stale one" path applies: re-claim, clear the marker, continue. Only treat a
+lease-lost as real when the holder's SESSION token DIFFERS from this session's id. Never
+skip this check and never force-claim past a genuinely different, fresh holder.
+
 — SECRET CONTAINMENT (added after the e04 adversarial review found a real leak path) —
 The dashboard is PASSWORDLESS and auto-republishes on every state.json write, and here.now
 evidence pages are public. Therefore the Vercel deploy-hook URL (a bearer secret: anyone
