@@ -2,7 +2,7 @@
   "beads_mode": "state-only",
   "branch": "f/cerebro-section",
   "current_epic": "e08",
-  "current_note": "NORTH STAR PROVEN END TO END, UNATTENDED, ON THE REAL DOMAIN. The 07:00 run fired on its own at 07:06 and committed 'vault: 2026-08-22 daily briefing' to the public vault: 63 dailies, 945 signals, and the first real Weekly/2026-w33.md. The deploy hook fired, the site rebuilt, and by 11:04 https://stevengonsalvez.com/cerebro/weekly/2026-w33 and /cerebro/2026-08-22 both return 200 with zero human action. Crucially the production feed now carries the weekly at INDEX 0 of 104 items, reverse-chronological confirmed - it is the first item build-digest.py --posts 5 takes, which is the entire point of the ordering defect the driver found and fixed in e05. Without that fix it would sit at index 103 and never reach the newsletter. The driver's prediction from yesterday (roundup lands 07:00 on the 22nd, not on a Sunday) held exactly. E08 in build: 6 signed commits on f/cerebro-vault-graph so far - a separate loader for the scraped body kept OFF the whitelist path, a test proving the index stays body-free, a per-signal permalink helper, one definition for hostname normalisation, a build-time index of backlinks plus shared tags and shared domains, and tests pinning backlink and related behaviour against the live corpus.",
+  "current_note": "E08 MERGED (bbb6b0413) after full driver verification, and the dedup fix is up as cerebro PR #18 for Stevie to merge himself. E08 VERIFY, all driver-run: build EXIT=0 at 1710 static pages (was 762), compiled in 3.0s; the narrowed safety gate reports '3 sentinels, 11 allowed hit(s) under /cerebro/signal/, 0 leaks across 5273 files - feed OK index OK daily OK archive OK weekly OK'. SABOTAGE PROOF: injecting a REAL sentinel into a feed description produced '[safety] FAIL: 30 scraped-body occurrence(s) outside the per-signal route' and BUILD_EXIT=1, so the gate can still fail. The driver's FIRST sabotage attempt was itself broken - the sentinel extraction returned '{' - and was caught and redone rather than being recorded as a pass. index.json stayed body-free: 407787 raw / 104895 gzip for 945 records, fields unchanged, growth proportional to the corpus only. Backlinks render '38 briefings' with 38 distinct daily links for SnapState, matching the driver's independently computed fan-in exactly. Graph: 84 nodes, 119 edges, tag and domain labels, click navigates, no horizontal overflow at 390px, renders on mobile; the page itself opens by explaining that 0 of 945 notes carry an outgoing link and that a note-link graph would be 63 hubs and 945 leaves telling the reader nothing - it documents the measurement instead of pretending. Signal pages carry explicit attribution: 'automated extraction of the article at <url>, stored verbatim in the public cerebro-vault repository. Copyright remains with the original publisher.' TWO OBSERVATIONS FOR STEVIE, neither blocking: (1) the SnapState note's scraped body is a Cloudflare Access LOGIN PAGE, not an article, so publishing bodies will sometimes publish extraction junk; (2) signal pages are self-canonical while republishing third-party text - a cross-domain canonical to the original is the standard mitigation, but it would effectively de-index them, which contradicts his explicit choice to index.",
   "dashboard_slug": "cerebro-vault-site",
   "dashboard_url": "https://sleek-nirvana-cwww.here.now/",
   "epics": {
@@ -13,14 +13,16 @@
     "e05": "MERGED_LIVE",
     "e06": "MERGED_LIVE",
     "e07": "MERGED_LIVE",
-    "e08": "BUILDING"
+    "e08": "MERGED_bbb6b0413"
   },
   "human_gate": "blessed",
-  "phase": "E08_BUILD",
-  "phase_since": "2026-08-22T11:05:00Z",
+  "phase": "E08_LAUNCH",
+  "phase_since": "2026-08-22T22:35:00Z",
   "prs": {
     "cerebro": "https://github.com/stevengonsalvez/cerebro/pull/17 (MERGED)",
-    "site": "https://github.com/stevengonsalvez/stevengonsalvez.github.io/pull/68 (MERGED 5a2a692aa)"
+    "cerebro_dedup": "https://github.com/stevengonsalvez/cerebro/pull/18 (OPEN — left for Stevie)",
+    "site": "https://github.com/stevengonsalvez/stevengonsalvez.github.io/pull/68 (MERGED 5a2a692aa)",
+    "site_e08": "https://github.com/stevengonsalvez/stevengonsalvez.github.io/pull/69 (MERGED bbb6b0413)"
   },
   "stop_counters": {
     "epic_validation_fails": {},
@@ -34,6 +36,6 @@
     "backlog_dry": true,
     "budget_tokens": null,
     "deadline": null,
-    "spent_tokens_estimate": 6062302
+    "spent_tokens_estimate": 7091440
   }
 }
