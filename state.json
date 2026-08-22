@@ -2,7 +2,7 @@
   "beads_mode": "state-only",
   "branch": "f/cerebro-section",
   "current_epic": "e08",
-  "current_note": "PROGRAMME REOPENED for e08 at Stevie's request: publish the vault Obsidian-style. He was asked two scoped questions and chose (1) the FULL treatment including a graph view and (2) publish the scraped bodies exactly as the vault has them. The driver had recommended against the graph on wikilinks and against publishing bodies; he overruled the second, which is his call, and it is recorded as a deliberate decision rather than a default. Softening fact the driver surfaced: cerebro-vault is ALREADY a public GitHub repo, so the scraped text is already published by him and readable today - this is not first publication, and the real delta is SEO (thin/duplicate third-party text on his primary domain) plus discoverability. MEASURED BEFORE RECOMMENDING: 0 of 929 signals carry any outgoing wikilink, so the wikilink graph is strictly bipartite Daily->Signal depth 1 - 62 hubs, 929 leaves, a dandelion with no clusters. The graph must therefore be built on TAGS (26, ai/agents on 587) and shared domains (20 with >1 signal), which do have structure. Backlinks ARE meaningful: 104 signals are referenced by more than one briefing, top fan-ins are 37, 33, 28 and 19 briefings, which doubles as a dedup-weakness signal worth surfacing.",
+  "current_note": "NORTH STAR PROVEN END TO END, UNATTENDED, ON THE REAL DOMAIN. The 07:00 run fired on its own at 07:06 and committed 'vault: 2026-08-22 daily briefing' to the public vault: 63 dailies, 945 signals, and the first real Weekly/2026-w33.md. The deploy hook fired, the site rebuilt, and by 11:04 https://stevengonsalvez.com/cerebro/weekly/2026-w33 and /cerebro/2026-08-22 both return 200 with zero human action. Crucially the production feed now carries the weekly at INDEX 0 of 104 items, reverse-chronological confirmed - it is the first item build-digest.py --posts 5 takes, which is the entire point of the ordering defect the driver found and fixed in e05. Without that fix it would sit at index 103 and never reach the newsletter. The driver's prediction from yesterday (roundup lands 07:00 on the 22nd, not on a Sunday) held exactly. E08 in build: 6 signed commits on f/cerebro-vault-graph so far - a separate loader for the scraped body kept OFF the whitelist path, a test proving the index stays body-free, a per-signal permalink helper, one definition for hostname normalisation, a build-time index of backlinks plus shared tags and shared domains, and tests pinning backlink and related behaviour against the live corpus.",
   "dashboard_slug": "cerebro-vault-site",
   "dashboard_url": "https://sleek-nirvana-cwww.here.now/",
   "epics": {
@@ -13,11 +13,11 @@
     "e05": "MERGED_LIVE",
     "e06": "MERGED_LIVE",
     "e07": "MERGED_LIVE",
-    "e08": "PLANNING"
+    "e08": "BUILDING"
   },
   "human_gate": "blessed",
-  "phase": "E08_PLAN",
-  "phase_since": "2026-08-22T00:00:00Z",
+  "phase": "E08_BUILD",
+  "phase_since": "2026-08-22T11:05:00Z",
   "prs": {
     "cerebro": "https://github.com/stevengonsalvez/cerebro/pull/17 (MERGED)",
     "site": "https://github.com/stevengonsalvez/stevengonsalvez.github.io/pull/68 (MERGED 5a2a692aa)"
