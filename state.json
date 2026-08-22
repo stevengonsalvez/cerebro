@@ -1,22 +1,23 @@
 {
   "beads_mode": "state-only",
   "branch": "f/cerebro-section",
-  "current_epic": "e07",
-  "current_note": "E06 VERIFIED AND BOTH REPOS MERGED. E06 review APPROVE with 4 lows and ZERO new dependencies (package.json untouched; charts are CSS bars and inline SVG). The driver pre-computed ground truth from the corpus and then checked the rendered pages against it rather than trusting the agents: /cerebro/cost publishes 62 briefings, $38.02 total, 15,360,816 tokens, 261 model calls, $0.6133 per briefing, $0.0277 per kept signal, 247,755 tokens a day - every one matching the driver's independent sum exactly, and the reviewer's separate sum (380238/10000) agreed too. The page is also honest about what it EXCLUDES (machine, bandwidth, hosting, hours), which is the right posture for a transparency page. Build EXIT=0, 762 static pages, 195 tests pass across 14 files, safety clean across 2421 files, the three transparency pages are index+canonical while the archive stays noindex and absent from the sitemap. SITE PR #68 MERGED (squash, 61 commits, all signed G, merge sha 5a2a692aa). The only red check was the PROVEN pre-existing dev.to publish failure - identical error, and the PR touches 0 files under _devto/ - so it was merged past per the charter. Production deploy is BUILDING from 5a2a692aa (watcher b3g5g98be). CEREBRO PR #17 was merged earlier and is already live on the machine. REMAINING FOR E07: confirm the production deploy READY, probe the real https://stevengonsalvez.com/cerebro (not a preview), verify the production feed is reverse-chronological, and simulate what build-digest.py --posts 5 would take from the live feed. The weekly item itself joins tomorrow at 07:00 when run.sh writes Weekly/2026-w33.md and fires the deploy hook.",
+  "current_epic": "e08",
+  "current_note": "PROGRAMME REOPENED for e08 at Stevie's request: publish the vault Obsidian-style. He was asked two scoped questions and chose (1) the FULL treatment including a graph view and (2) publish the scraped bodies exactly as the vault has them. The driver had recommended against the graph on wikilinks and against publishing bodies; he overruled the second, which is his call, and it is recorded as a deliberate decision rather than a default. Softening fact the driver surfaced: cerebro-vault is ALREADY a public GitHub repo, so the scraped text is already published by him and readable today - this is not first publication, and the real delta is SEO (thin/duplicate third-party text on his primary domain) plus discoverability. MEASURED BEFORE RECOMMENDING: 0 of 929 signals carry any outgoing wikilink, so the wikilink graph is strictly bipartite Daily->Signal depth 1 - 62 hubs, 929 leaves, a dandelion with no clusters. The graph must therefore be built on TAGS (26, ai/agents on 587) and shared domains (20 with >1 signal), which do have structure. Backlinks ARE meaningful: 104 signals are referenced by more than one briefing, top fan-ins are 37, 33, 28 and 19 briefings, which doubles as a dedup-weakness signal worth surfacing.",
   "dashboard_slug": "cerebro-vault-site",
   "dashboard_url": "https://sleek-nirvana-cwww.here.now/",
   "epics": {
-    "e01": "MERGED",
-    "e02": "MERGED",
-    "e03": "MERGED",
-    "e04": "MERGED_LIVE_PR17",
-    "e05": "MERGED",
-    "e06": "VERIFIED_GREEN",
-    "e07": "PROD_DEPLOYING"
+    "e01": "MERGED_LIVE",
+    "e02": "MERGED_LIVE",
+    "e03": "MERGED_LIVE",
+    "e04": "MERGED_LIVE",
+    "e05": "MERGED_LIVE",
+    "e06": "MERGED_LIVE",
+    "e07": "MERGED_LIVE",
+    "e08": "PLANNING"
   },
   "human_gate": "blessed",
-  "phase": "E07_LAUNCH",
-  "phase_since": "2026-08-21T19:53:00Z",
+  "phase": "E08_PLAN",
+  "phase_since": "2026-08-22T00:00:00Z",
   "prs": {
     "cerebro": "https://github.com/stevengonsalvez/cerebro/pull/17 (MERGED)",
     "site": "https://github.com/stevengonsalvez/stevengonsalvez.github.io/pull/68 (MERGED 5a2a692aa)"
