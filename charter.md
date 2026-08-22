@@ -24,22 +24,61 @@ SHIPPED with green verification behind a PR, or PARKED with a Feasibility Court 
 2. `/cerebro/signals` — ONE page, client-side searchable/filterable over every signal
    (date, source, category, score, tag). NO per-signal URLs; page count stays flat as the
    vault grows ~25 notes/day.
+   >> AMENDED 2026-08-22 by AMENDMENT A1 (below): the "NO per-signal URLs / flat page
+   >> count" half is LIFTED. The archive page itself is unchanged and still required.
 3. A vault→site content pipeline that publishes a new daily briefing with ZERO human
    action after the 07:00 cerebro run, and that survives Vercel's build sandbox.
 4. A generated WEEKLY Cerebro roundup that lands as an item in the EXISTING `/feed.xml`
    (which Kit consumes) — subscribers keep exactly one email a week. No second Kit list.
 5. Scraped third-party article bodies are provably NOT republished anywhere on the site.
+   >> AMENDED 2026-08-22 by AMENDMENT A1 (below): now scoped. Bodies are republished on
+   >> `/cerebro/signal/<hash>` ONLY, and provably NOT on any other surface.
 6. All of the above is MERGED and LIVE on the real `https://stevengonsalvez.com/cerebro`,
    verified by probing the production domain — not a preview URL.
 
 — LOCKED HUMAN DECISIONS (settled 2026-08-20; the Court may NOT re-litigate these) —
 · Scope = dailies + one signal archive page. No per-signal URLs.
+  >> REVERSED 2026-08-22, see AMENDMENT A1 below. Per-signal URLs are now WANTED.
 · Newsletter = weekly roundup item in the existing `/feed.xml`. No separate Kit list, no
   daily email.
 · Signal notes embed full trafilatura-scraped source text. Render ONLY: title, category,
   tags, source, score, triage `reason`, `Community take`, and a link out to the original.
   The scraped body is stripped at ingest. This is a legal/SEO constraint, not a preference.
+  >> REVERSED 2026-08-22 for ONE surface, see AMENDMENT A1 below. Still binding everywhere
+  >> else: the archive, the JSON payload, the dailies, the weekly and both feeds stay body-free.
 · Execution mode = full godmode factory.
+
+— AMENDMENT A1 (owner's reversal, recorded 2026-08-22; amends the LOCKED HUMAN
+DECISIONS and OUTCOME items 2 and 5 above) —
+The owner reversed two of the 2026-08-20 locks for epic e08. This block is the record of
+that reversal, so no future loop iteration re-reads the original locks and unwinds e08.
+Instruction of record: `.agents/goals/epic-e08.md` §"Reversals in force" ("Per-signal URLs
+are WANTED. The 'page count stays flat' lock is LIFTED." / "The scraped body IS published,
+on the per-signal route only."). Ground given: `cerebro-vault` is ALREADY a public GitHub
+repository, so the owner already publishes the text himself.
+
+WHAT IS NOW ALLOWED (and only this):
+1. PER-SIGNAL URLS EXIST. One static page per `Signals/*.md` at
+   `/cerebro/signal/<16-hex>`. Page count now grows ~26/day; the scale budget in
+   `tools/scale-budget.mjs` is what keeps that honest, not a flat-count rule.
+2. BODY REPUBLICATION IS ALLOWED ON `/cerebro/signal/<hash>` ONLY. The single loader is
+   `lib/vault/signal-body.ts` and its single-importer property is enforced by a test
+   (`lib/cerebro/__tests__/seo.test.ts`), not by convention.
+3. INDEXED, KNOWINGLY. `SIGNAL_PAGES_INDEXED = true` in `lib/cerebro/seo.ts` is the owner's
+   ACCEPTED SEO RISK, taken with the scraped-content heuristic named beside it. That
+   constant is the KILL SWITCH: flipping it to `false` and rebuilding takes every signal
+   page to `noindex, nofollow` AND drops them from `/sitemap.xml` in one edit. If Search
+   Console goes badly after the first index pass, flip it. That is the designed response,
+   not a rollback of the epic.
+
+WHAT IS UNCHANGED AND STILL BINDING:
+· Every other surface stays body-free and the CONTENT-SAFETY GATE still fails the build if
+  that stops being true. The gate was NARROWED to exempt the per-signal route, not removed:
+  `/cerebro/signals` and its `index.json`, the dailies, the weekly page, `/feed.xml` and
+  `/cerebro/feed.xml` must all contain ZERO scraped-body text.
+· OUTCOME items 1, 3, 4 and 6 are untouched.
+· No other LOCKED HUMAN DECISION is reversed. The newsletter decision, the execution mode,
+  and the archive page itself all stand exactly as locked on 2026-08-20.
 
 — GRANTED AUTHORITY (interview, 2026-08-21; these OVERRIDE the defaults) —
 Stevie was asked four scoped authority questions and chose maximum autonomy on all four.
