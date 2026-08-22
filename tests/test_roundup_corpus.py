@@ -141,9 +141,23 @@ def test_the_rendered_roundup_contains_no_scraped_body_sentence(corpus):
 def test_writing_the_roundup_touches_only_tmp_path(corpus, tmp_path):
     from types import SimpleNamespace
 
+    # The corpus is allowed to CONTAIN a Weekly/ dir — since the roundup shipped, the
+    # 07:00 run writes real ones into the vault, and a fetched cache mirrors them. The
+    # invariant is that writing with vault_path=tmp_path leaves the corpus BYTE-FOR-BYTE
+    # unchanged, so snapshot it rather than asserting a directory does not exist. The
+    # old assertion encoded "the corpus has no Weekly/", which the feature made false.
+    before = {p: p.stat().st_mtime_ns for p in CORPUS.rglob("*") if p.is_file()}
+
     sel = weekly.select(corpus.notes, CLOSED_WEEK)
     settings = SimpleNamespace(vault_path=tmp_path / "out", dry_run=False)
     result = roundup.write(sel, settings)
     assert result["written"] is True
     assert Path(result["path"]).is_relative_to(tmp_path)
-    assert not (CORPUS / "Weekly").exists()
+
+    after = {p: p.stat().st_mtime_ns for p in CORPUS.rglob("*") if p.is_file()}
+    assert after.keys() == before.keys(), (
+        "writing the roundup must not add or remove any file in the read-only corpus: "
+        f"added {sorted(after.keys() - before.keys())}, "
+        f"removed {sorted(before.keys() - after.keys())}"
+    )
+    assert after == before, "writing the roundup must not modify any file in the corpus"
