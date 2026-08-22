@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS seen (
   last_seen  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_seen_first ON seen(first_seen);
+CREATE INDEX IF NOT EXISTS idx_seen_last ON seen(last_seen);
 CREATE TABLE IF NOT EXISTS runs (
   run_id      TEXT PRIMARY KEY,
   started_at  TEXT, finished_at TEXT,
@@ -52,15 +53,20 @@ class State:
                 pass
 
     def seen_recent(self, url_hash: str, days: int) -> bool:
+        # The window is a ROLLING one, so it must be measured from last_seen, not
+        # first_seen. Measuring from first_seen inverts the watermark: anything whose
+        # FIRST sighting is older than `days` falls outside the window permanently and
+        # is re-admitted on every subsequent run, forever. That is how one item reached
+        # 38 of 63 briefings with one-day gaps while `dedup_days` was 14.
         cur = self.db.execute(
-            "SELECT 1 FROM seen WHERE url_hash=? AND first_seen >= date('now', ?)",
+            "SELECT 1 FROM seen WHERE url_hash=? AND last_seen >= date('now', ?)",
             (url_hash, f"-{days} days"),
         )
         return cur.fetchone() is not None
 
     def recent_simhashes(self, days: int) -> list[int]:
         cur = self.db.execute(
-            "SELECT simhash FROM seen WHERE first_seen >= date('now', ?)",
+            "SELECT simhash FROM seen WHERE last_seen >= date('now', ?)",
             (f"-{days} days",),
         )
         return [r[0] for r in cur.fetchall() if r[0] is not None]
