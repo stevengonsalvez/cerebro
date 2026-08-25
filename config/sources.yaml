@@ -14,7 +14,7 @@ yc_rfs:                   # YC Request for Startups — ideas YC wants funded (c
   limit: 20
 reddit:
   enabled: true
-  subreddits: [ClaudeAI, ChatGPTCoding, LocalLLaMA, AI_Agents, vibecoding, cursor]
+  subreddits: [ClaudeAI, ChatGPTCoding, LocalLLaMA, AI_Agents, vibecoding, cursor, tokentrillionaire]
   listing: new          # new | hot
   limit: 25
 reddit_users:           # roster devs' reddit submissions — `users` auto-filled from cracked_devs.yaml
