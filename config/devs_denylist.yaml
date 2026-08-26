@@ -1,0 +1,38 @@
+# QUALITY verdicts — recorded human review outcomes for the /cerebro/devs pipeline.
+#
+# THIS IS NOT THE OPT-OUT LIST. Opt-out is CONSENT (F049/F050) and lives in its own
+# file. The two must never be merged: this file records what a reviewer concluded
+# about an account's SHAPE; that one records what a person asked for.
+#
+# Court settled Q7 gives human review two terminal states, so both are recorded here
+# and both carry the SAME five mandatory fields (verdict, shape, evidence,
+# reviewed_by, reviewed_on). A bare login is rejected at load time.
+#
+#   denied:   the only path to automation state `excluded`. No arithmetic reaches it.
+#   cleared:  the only durable form of "flagged-then-resolved-clear by human review".
+#             Without it, a cleared engineer is re-flagged and withheld on every run
+#             for ever, and the review queue never converges.
+#
+# A login in BOTH sections is a load-time error, not a precedence question.
+#
+# EVERY `evidence:` STRING IS REGENERATED FROM THE RUN THAT PRODUCED THE VERDICT.
+# Numbers drift: the registry records diegosouzapw at 3 not-owned basenames, three
+# separate live runs on 2026-08-26 measured 2. A stale number in a published verdict
+# about a named person is exactly what the verification doctrine forbids.
+
+denied:
+  - login: Dicklesworthstone
+    verdict: automation
+    shape: mass_self_repo
+    evidence: "90d live 2026-08-26: 27764 pushes / 109 distinct repos / 90 active days (91 raw, clamped to the window) / 0 not-owned (ratio 0.0000) / 308.49 pushes per active day / 254.72 pushes per repo / basename concentration 0.0092"
+    reviewed_by: owner
+    reviewed_on: 2026-08-26
+
+  - login: diegosouzapw
+    verdict: automation
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 2274 pushes / 130 distinct repos / 87 active days / 124 not-owned across 2 basenames / max basename group 124 / concentration 0.9538 / 26.14 pushes per active day"
+    reviewed_by: owner
+    reviewed_on: 2026-08-26
+
+cleared: []
