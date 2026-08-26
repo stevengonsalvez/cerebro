@@ -37,7 +37,27 @@ cleared:
 def test_the_shipped_file_loads_with_the_two_day_one_denials(tmp_path):
     v = denylist.load(SHIPPED)
     assert sorted(v.denied) == ["dicklesworthstone", "diegosouzapw"]
-    assert v.cleared == {}
+
+
+def test_the_shipped_clearings_are_reviewed_and_carry_this_runs_numbers():
+    """Every account worked off the F066 flag queue leaves a durable record. A verdict
+    that lives only in a scratch file is not a verdict: nothing loads it, and the
+    account is re-flagged identically on the next run."""
+    v = denylist.load(SHIPPED)
+    assert v.cleared, "the flag queue was worked; its clearings must be committed"
+    for login, entry in v.cleared.items():
+        assert entry.verdict == "human"
+        assert entry.shape in {"fork_farm", "high_push_rate", "mass_self_repo",
+                               "synthetic_repo"}
+        assert "90d live" in entry.evidence
+        assert "active days" in entry.evidence      # numeric evidence from the run
+        assert len(entry.evidence) > 120, f"{login}: no human reason recorded"
+        assert entry.reviewed_by and entry.reviewed_on
+
+
+def test_no_login_is_both_denied_and_cleared_in_the_shipped_file():
+    v = denylist.load(SHIPPED)
+    assert not (set(v.denied) & set(v.cleared))
 
 
 def test_the_shipped_denials_carry_regenerated_numeric_evidence():
