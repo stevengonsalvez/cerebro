@@ -1,10 +1,14 @@
 """F010/F012/F014/F018/F025/F026 — flags, floors and ordering.
 
-NOTHING THAT LIVES HERE IS A SCORE.
+THREE THINGS LIVE HERE, AND NONE OF THEM IS A SCORE.
 
 1. `flags()` — every automation SHAPE that fires on a candidate. It returns a list,
    never a boolean and never a verdict, and it NEVER excludes anybody.
-2. the admission floors and the default facet sort, which land in the next commit.
+2. `admit()` — three INDEPENDENT floors, evaluated and reported separately. No weights,
+   no sum, no single ranking number, no league table. Court settled Q2.
+3. `order_by_consistency()` — the default facet sort. Active days, not volume: the
+   charter's central design constraint is that GH Archive volume ranking is INVERTED,
+   not merely noisy.
 
 WHY THERE ARE NO THRESHOLD KEYWORD ARGUMENTS ANYWHERE IN THIS MODULE. The scorer this
 replaces shipped broken for six production runs because every one of its admission
@@ -182,3 +186,96 @@ def automation_state(m90, login: str, verdicts) -> AutomationState:
     if key in verdicts.cleared:
         return "clear"
     return "flagged"
+
+
+# --- floors -----------------------------------------------------------------
+
+MIN_ACTIVE_DAYS_90D = 5
+"""Court settled Q7. Below this the candidate gets the `low_n` LABEL and is still
+admitted — suppression is forbidden. Low-n is the pool's DOMINANT case (78 of 175
+owners have zero 90d pushes), and bcherny, a top roster dev, shows 8 pushes / 4 active
+days purely because his work lands under org repos not attributed to his personal
+actor. That is an attribution limitation, never a fact about a person.
+"""
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """Everything the floors read. Deliberately narrow: see `admit`'s F026 note."""
+
+    login: str
+    signal_hashes: tuple[str, ...]
+    active_days_90d: int
+    active_days_30d: int = 0
+    automation: AutomationState = "clear"
+
+
+@dataclass(frozen=True)
+class Admission:
+    admitted: bool
+    low_n: bool
+    automation: AutomationState
+    reasons: tuple[str, ...]
+
+
+def admit(candidate) -> Admission:
+    """Three independent floors, reported separately. NO THRESHOLD KWARGS, BY DESIGN.
+
+    1. PROVENANCE — at least one vault signal. Answers "why is this person here" for
+       every published profile.
+    2. ACTIVITY — >= 5 active days in 90d, else the `low_n` LABEL. `admitted` stays
+       True: the label is the mechanism and suppression is forbidden (Court Q7/Q8).
+    3. AUTOMATION — `clear` admits, `flagged` withholds pending human review,
+       `excluded` (a recorded `denied:` verdict only) is out.
+
+    F026: no floor reads any signal that is structurally zero on a cold cache. There is
+    no follower, star, growth, momentum or score input here — those are exactly what
+    made the previous scorer's 0.55 threshold arithmetically unreachable on day one.
+
+    No weights. No sum. No score. `reasons` is the audit trail the transparency page
+    needs: one line per floor, pass or fail, always populated.
+    """
+    reasons: list[str] = []
+
+    provenance_ok = len(candidate.signal_hashes) >= 1
+    reasons.append(
+        f"provenance: {len(candidate.signal_hashes)} vault signal(s) — "
+        f"{'pass' if provenance_ok else 'FAIL, no originating signal note'}"
+    )
+
+    low_n = candidate.active_days_90d < MIN_ACTIVE_DAYS_90D
+    reasons.append(
+        f"activity: {candidate.active_days_90d} active days in 90d — "
+        + (f"below the {MIN_ACTIVE_DAYS_90D}-day line, LABELLED low-n (never suppressed)"
+           if low_n else "pass")
+    )
+
+    state = candidate.automation
+    reasons.append(
+        "automation: " + {
+            "clear": "clear — pass",
+            "flagged": "FLAGGED, withheld pending human review",
+            "excluded": "EXCLUDED by a recorded human denylist verdict",
+        }[state]
+    )
+
+    admitted = provenance_ok and state == "clear"
+    return Admission(admitted=admitted, low_n=low_n, automation=state,
+                     reasons=tuple(reasons))
+
+
+def order_by_consistency(candidates):
+    """The default facet sort: CONSISTENCY, never volume.
+
+    active_days_90d desc, tie-break active_days_30d desc, then login asc so the artifact
+    is byte-stable run to run. This is a facet sort, not a ranking number — there is no
+    score to sort by and none is computed anywhere in this module.
+
+    ORDERING ALWAYS RUNS DOWNSTREAM OF THE AUTOMATION GATE, because consistency is NOT
+    an automation discriminator: both day-one denylisted accounts sit at the TOP of
+    active-day ranking (90 and 87 of 90 days). Sorting first would put them at #1 and #2.
+    """
+    return sorted(
+        candidates,
+        key=lambda c: (-int(c.active_days_90d), -int(c.active_days_30d), c.login.lower()),
+    )
