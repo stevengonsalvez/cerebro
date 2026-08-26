@@ -43,20 +43,24 @@ insufficient in the other direction — koala73 is a fork farm at 11.85 and esen
 """
 
 MASS_SELF_REPO_MIN_REPOS = 30
-"""Dicklesworthstone: 109 repos, 0 not-owned, 308.5 push-per-active-day (90d, live).
+"""THE ONLY THING BETWEEN THIS RULE AND A REAL HUMAN. Calibrate it, not the rate.
 
-THIS CONJUNCT IS WHAT PROTECTS HUMANS, together with the push-rate one. paulmillr sits
-at 28 repos. Lower this and the rule starts reaching real prolific engineers.
+Catches: Dicklesworthstone 109 repos / 0 not-owned / 308.49 ppd, and mvanhorn 204 repos
+/ 4 not-owned / 8.84 ppd — both measured live 90d, and note the 35x spread in push rate
+between them. Highest human measured on this shape: paulmillr at 28 repos, ratio 0.0000
+(s2 cohort). Next-highest in the real 159-account active pool: Leonxlnx at 17 repos.
+The measured band 29..108 is EMPTY of humans in both cohorts, which is what makes 30
+defensible — but the headroom over paulmillr is TWO REPOS, so lowering this reaches a
+real prolific engineer immediately. Do not lower it.
 """
 
 NOT_OWNED_RATIO_SELF_MAX = 0.05
-"""WHAT PROTECTS HUMANS HERE IS THE CONJUNCTION, NOT THIS TERM.
+"""WHAT PROTECTS HUMANS HERE IS THE REPO-COUNT CONJUNCT, NOT THIS TERM.
 
 paulmillr (28 repos), torvalds, antirez and bcherny all sit at not_owned_ratio EXACTLY
 0.0 — measured live 2026-08-26 — the same value as Dicklesworthstone. They are kept
-clear by `>= 30 repos` AND `> 15 push/active-day` (paulmillr: 28 repos, 3.22 ppd), never
-by the ratio. Drop either conjunct and the rule reaches real humans. 0.05 rather than
-== 0.0 so that one push to one not-owned repo does not buy an escape.
+clear by `>= 30 repos` alone. 0.05 rather than == 0.0 so that one push to one not-owned
+repo does not buy an escape; mvanhorn passes it at 4/204 = 0.0196.
 """
 
 FORK_FARM_MIN_REPOS = 8
@@ -131,9 +135,15 @@ def flags(m90) -> list[Flag]:
             values,
         ))
 
-    if (repos >= MASS_SELF_REPO_MIN_REPOS
-            and ratio <= NOT_OWNED_RATIO_SELF_MAX
-            and ppd > PUSH_PER_ACTIVE_DAY_FLAG):
+    # SHAPE, NOT RATE. This rule carried `ppd > PUSH_PER_ACTIVE_DAY_FLAG` as a third
+    # conjunct until 2026-08-26, which made it strictly narrower than `high_push_rate`
+    # and therefore incapable of detecting anything that rule had not already caught —
+    # a shape rule with zero detection power of its own. The live nearest-miss proves
+    # the cost: mvanhorn, 204 distinct repos with 200 of them his own, cleared every
+    # mechanical filter at 8.84 pushes per active day and reached the top-20 with an
+    # empty flag list. The Court settled that shape, not rate, separates the hard cases;
+    # the rate line is PAIRED WITH shape metrics, never a gate in front of them.
+    if repos >= MASS_SELF_REPO_MIN_REPOS and ratio <= NOT_OWNED_RATIO_SELF_MAX:
         out.append(Flag(
             "mass_self_repo",
             f"{repos} distinct repos, {m90.repos_not_owned} not owned "

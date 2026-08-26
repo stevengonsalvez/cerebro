@@ -97,16 +97,45 @@ def test_rich_harris_is_the_nearest_miss_human_and_stays_clear():
 
 def test_paulmillr_is_the_mass_self_repo_counter_example():
     """not_owned_ratio == 0.0 IS NOT A HUMAN-EXCLUSIVE SHAPE. paulmillr sits at exactly
-    the same ratio as Dicklesworthstone. What keeps him clear is the conjunction with
-    >= 30 repos and > 15 push/active-day, never the ratio term. A 'simplification' that
-    drops either conjunct fails here."""
-    from cerebro.gitintel.shape import not_owned_ratio, push_per_active_day
+    the same ratio as Dicklesworthstone, so the ratio term protects nobody. The ONLY
+    thing holding him clear is the repo-count conjunct, and the margin is TWO REPOS.
+    Lower MASS_SELF_REPO_MIN_REPOS and this test names the human you reached."""
+    from cerebro.gitintel.shape import not_owned_ratio
     m = COHORT["paulmillr"]
     assert not_owned_ratio(m) == 0.0
     assert not_owned_ratio(COHORT["Dicklesworthstone"]) == 0.0   # identical ratio
     assert m.distinct_repos == 28 < admission.MASS_SELF_REPO_MIN_REPOS
-    assert push_per_active_day(m) < admission.PUSH_PER_ACTIVE_DAY_FLAG
     assert names("paulmillr") == set()
+
+
+def test_mvanhorn_is_flagged_below_the_push_rate_line():
+    """THE REGRESSION THIS RULE WAS REWRITTEN FOR. mass_self_repo used to carry
+    `push_per_active_day > 15` as a third conjunct, which made it strictly narrower
+    than high_push_rate and unable to detect anything that rule had not already caught.
+    mvanhorn — 204 distinct repos, 200 of them his own, at 8.84 pushes per active day —
+    walked through every mechanical filter with an EMPTY flag list and reached the
+    published top-20 unreviewed. Live 90d measurement, 2026-08-26.
+
+    He is a real named engineer (Matt Van Horn, GitHub user since 2010, 4,901 followers)
+    and carries a `cleared:` verdict in config/devs_denylist.yaml. That is the point:
+    the shape is now DETECTED and the resolution is a recorded human verdict, instead
+    of the account passing silently."""
+    from cerebro.gitintel.shape import not_owned_ratio, push_per_active_day
+    m = COHORT["mvanhorn"]
+    assert m.distinct_repos == 204
+    assert push_per_active_day(m) == pytest.approx(8.84, abs=0.01)
+    assert push_per_active_day(m) < admission.PUSH_PER_ACTIVE_DAY_FLAG   # under the line
+    assert not_owned_ratio(m) == pytest.approx(0.0196, abs=0.001)
+    assert names("mvanhorn") == {"mass_self_repo"}
+
+
+def test_mass_self_repo_can_fire_without_high_push_rate():
+    """A shape rule that can only fire when a rate rule has already fired has zero
+    detection power. Asserted structurally, over the whole cohort, so the conjunct
+    cannot be reintroduced as a 'safety tightening'."""
+    rate_free = [login for login in COHORT
+                 if "mass_self_repo" in names(login) and "high_push_rate" not in names(login)]
+    assert rate_free, "mass_self_repo fires only alongside high_push_rate — it detects nothing"
 
 
 def test_torvalds_antirez_bcherny_also_sit_at_ratio_zero_and_stay_clear():
