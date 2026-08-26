@@ -227,3 +227,145 @@ def test_the_roster_lane_output_feeds_assemble_unchanged():
     assert merged["simonw"].discovered_via_all == ("roster", "vault")
     assert merged["simonw"].name == "Simon Willison"
     assert merged["bcherny"].signal_hashes == (), "no vault provenance — a recorded fact"
+
+
+# --- T08/T09: the budget and the ONE paid step ------------------------------
+
+class _Cl:
+    """A client whose get_user is the only paid call, with its own call counter so a
+    test can assert the budget matches what actually left the process."""
+
+    def __init__(self, users, fail=()):
+        self.users = users
+        self.fail = set(fail)
+        self._calls = 0
+        self._cache_hits = 0
+        self.asked: list[str] = []
+
+    def get_user(self, login):
+        self._calls += 1
+        self.asked.append(login)
+        if login in self.fail:
+            raise RuntimeError("boom")
+        return self.users.get(login)
+
+
+def _m(active_90d):
+    from cerebro.gitintel.gharchive import WindowMetrics
+    return {90: WindowMetrics(window_days=90, active_days=active_90d, pushes=active_90d)}
+
+
+def _human(login):
+    return {"login": login, "type": "User", "name": login.title(), "public_repos": 3}
+
+
+def test_the_activity_floor_runs_before_the_paid_call_and_defers_it_entirely():
+    """THE ARITHMETIC THE ORDERING EXISTS FOR: get_user on every contributor is ~6,000
+    cold calls, 1.2 hours of the hourly budget, spent on people the FREE lane has already
+    shown have no activity."""
+    cands = [Cand("active", ("h",), (), "fanout", ""), Cand("quiet", ("h",), (), "fanout", "")]
+    metrics = {"active": _m(40), "quiet": _m(1)}
+    cl = _Cl({"active": _human("active"), "quiet": _human("quiet")})
+    got = pool.paid_prefilter(cands, metrics, cl, cap=100)
+    assert cl.asked == ["active"], "the below-floor candidate cost no REST call"
+    assert got.calls_used == 1
+    assert [c.login for c in got.kept] == ["active"]
+    assert [(c.login, r) for c, r in got.deferred] == [("quiet", pool.PREFILTER_DEFERRED)]
+
+
+def test_a_deferred_candidate_is_returned_not_dropped():
+    """Suppression stays forbidden. Deferring an API call is not suppression, and the
+    Court settled twice that a low activity count is an attribution fact about the feed,
+    never a fact about a human."""
+    cands = [Cand("quiet", ("h",), (), "fanout", "")]
+    got = pool.paid_prefilter(cands, {"quiet": _m(0)}, _Cl({}), cap=100)
+    assert got.kept == [] and got.rejected == []
+    assert len(got.deferred) == 1
+    assert got.deferred[0][0].signal_hashes == ("h",), "provenance survives the deferral"
+
+
+def test_the_cap_is_hard_and_the_overflow_is_named_never_silent():
+    cands = [Cand(f"u{i}", ("h",), (), "fanout", "") for i in range(5)]
+    metrics = {f"u{i}": _m(40) for i in range(5)}
+    cl = _Cl({f"u{i}": _human(f"u{i}") for i in range(5)})
+    got = pool.paid_prefilter(cands, metrics, cl, cap=2)
+    assert got.calls_used == 2 == cl._calls
+    assert got.truncated is True
+    truncated = [c.login for c, r in got.deferred if r == pool.PREFILTER_TRUNCATED]
+    assert len(truncated) == 3
+    assert len(got.kept) + len(got.deferred) == 5, "nobody vanishes at the cap"
+
+
+def test_a_cap_of_zero_spends_nothing_and_defers_everybody():
+    cands = [Cand("a", ("h",), (), "fanout", "")]
+    cl = _Cl({"a": _human("a")})
+    got = pool.paid_prefilter(cands, {"a": _m(40)}, cl, cap=0)
+    assert cl._calls == 0 and got.calls_used == 0 and got.truncated is True
+
+
+def test_a_non_human_is_rejected_by_the_e01_ruling_not_by_a_new_one():
+    cands = [Cand("anorg", ("h",), (), "fanout", "")]
+    cl = _Cl({"anorg": {"login": "anorg", "type": "Organization"}})
+    got = pool.paid_prefilter(cands, {"anorg": _m(40)}, cl, cap=10)
+    assert [c.login for c in got.rejected] == ["anorg"]
+    assert got.kept == []
+
+
+def test_a_raising_get_user_rejects_that_one_account_and_the_lane_continues():
+    cands = [Cand("bad", ("h",), (), "fanout", ""), Cand("good", ("h",), (), "fanout", "")]
+    metrics = {"bad": _m(40), "good": _m(40)}
+    cl = _Cl({"good": _human("good")}, fail={"bad"})
+    got = pool.paid_prefilter(cands, metrics, cl, cap=10)
+    assert [c.login for c in got.kept] == ["good"]
+    assert [c.login for c in got.rejected] == ["bad"]
+
+
+def test_the_work_order_is_recurrence_first_and_orders_work_only():
+    """F063. When the cap bites, the calls are spent on the repos the vault keeps coming
+    back to, not on whichever login sorted first alphabetically."""
+    cands = [Cand("zzz", ("h",), (), "fanout", ""), Cand("aaa", ("h",), (), "fanout", "")]
+    metrics = {"zzz": _m(40), "aaa": _m(40)}
+    cl = _Cl({"zzz": _human("zzz"), "aaa": _human("aaa")})
+    got = pool.paid_prefilter(cands, metrics, cl, cap=1, order=["zzz", "aaa"])
+    assert cl.asked == ["zzz"]
+    assert got.truncated is True
+
+
+def test_the_prefilter_floor_is_the_admission_constant_not_a_second_copy():
+    """A private copy of the floor drifts from the real one the first time either moves,
+    and the drift is silent."""
+    from cerebro.gitintel.admission import MIN_ACTIVE_DAYS_90D
+    cands = [Cand("edge", ("h",), (), "fanout", "")]
+    cl = _Cl({"edge": _human("edge")})
+    at = pool.paid_prefilter(cands, {"edge": _m(MIN_ACTIVE_DAYS_90D)}, cl, cap=10)
+    assert [c.login for c in at.kept] == ["edge"]
+    cl2 = _Cl({"edge": _human("edge")})
+    below = pool.paid_prefilter(cands, {"edge": _m(MIN_ACTIVE_DAYS_90D - 1)}, cl2, cap=10)
+    assert cl2._calls == 0 and len(below.deferred) == 1
+
+
+def test_a_candidate_the_archive_never_returned_is_deferred_not_crashed():
+    """78 of the real 175-owner pool has zero archive activity. A missing metrics entry
+    is that case, never a KeyError."""
+    got = pool.paid_prefilter([Cand("ghost", ("h",), (), "fanout", "")], {}, _Cl({}), cap=10)
+    assert len(got.deferred) == 1
+
+
+def test_the_budget_records_actual_against_cap_for_both_ceilings():
+    b = pool.Budget(rest_calls_used=338, rest_calls_cap=1200, rest_cache_hits=7,
+                    clickhouse_scans=3, fork_calls_used=12, fork_calls_cap=300)
+    d = b.to_dict()
+    assert d["rest_calls_used"] <= d["rest_calls_cap"]
+    assert d["fork_calls_used"] <= d["fork_calls_cap"]
+    assert d["clickhouse_scans"] == 3
+    for key in ("rest_calls_used", "rest_cache_hits", "rest_calls_cap", "clickhouse_scans",
+                "truncated", "skipped_logins", "fork_calls_used", "fork_calls_cap",
+                "fork_budget_exhausted", "fork_unevidenced"):
+        assert key in d, f"the artifact needs {key}"
+
+
+def test_the_budget_carries_no_score_or_volume_field():
+    d = pool.Budget().to_dict()
+    flat = " ".join(d)
+    for banned in ("score", "rank", "followers", "stars"):
+        assert banned not in flat

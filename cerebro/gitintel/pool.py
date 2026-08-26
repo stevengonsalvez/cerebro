@@ -208,3 +208,148 @@ def _first_by_precedence(by_lane: dict):
         if by_lane[lane]:
             return by_lane[lane]
     return None
+
+
+# --- F053/F056: the budget, and the ONE paid step ---------------------------
+
+#: The activity floor the free lane already answers, restated here as the gate in front
+#: of the only paid step. Same constant and same meaning as `admission.MIN_ACTIVE_DAYS_90D`
+#: — imported rather than re-declared so the two can never drift apart.
+def _min_active_days() -> int:
+    from .admission import MIN_ACTIVE_DAYS_90D
+    return MIN_ACTIVE_DAYS_90D
+
+
+#: What `paid_prefilter` records on a candidate it never spent a call on. NOT a verdict
+#: and NOT a suppression: a deferred API call is not a dropped person, and the Court
+#: settled twice (Q7, Q8) that a low activity count is an attribution fact, never a fact
+#: about a human. The marker exists so a downstream writer can tell "checked and human"
+#: apart from "not checked", which `admitted: true` alone cannot express.
+PREFILTER_VERIFIED = "rest_verified"
+PREFILTER_DEFERRED = "deferred_below_activity_floor"
+PREFILTER_TRUNCATED = "deferred_rest_budget"
+
+
+@dataclass
+class Budget:
+    """Every cost this run incurred, actual against cap, written into the artifact.
+
+    ONE ACCOUNTANT. `rest_calls_used` and `rest_cache_hits` are DELTAS off the client's
+    own counters and off nothing else, so no lane can keep a private tally that
+    disagrees with what actually left the process. A budget re-derived by counting call
+    sites is a second accountant and the two disagree the first time somebody adds a
+    retry.
+
+    A ZERO `rest_calls_used` ON A COLD RUN IS A FAILED VALIDATION, NOT A CHEAP RUN. It
+    means the client counter is unwired and every other number here is unmeasured — the
+    exact condition that let this repo print "0 REST calls" for six months.
+
+    TRUNCATION IS NAMED OR IT IS A DEFECT. Both `truncated` and `fork_budget_exhausted`
+    carry a count beside them, because a budget that silently stops doing work reports a
+    clean run and surfaces an hour later as a 403.
+    """
+
+    rest_calls_used: int = 0
+    rest_cache_hits: int = 0
+    rest_calls_cap: int = 0
+    clickhouse_scans: int = 0
+    #: The paid pre-filter hit `rest_calls_cap` and stopped. `skipped_logins` counts who.
+    truncated: bool = False
+    skipped_logins: int = 0
+    #: The fork-provenance lane's own hard ceiling, separate because it is a separate
+    #: knob: nothing in the design caps the FLAG RATE, so an expanded pool can flag more
+    #: candidates than any per-candidate bound anticipated.
+    fork_calls_used: int = 0
+    fork_calls_cap: int = 0
+    fork_budget_exhausted: bool = False
+    #: Flagged candidates left with `checked == 0` when the fork budget ran out. Their
+    #: flags STAND. A budget running out never clears anybody.
+    fork_unevidenced: int = 0
+    #: Candidates the free activity floor deferred, so no REST call was ever spent on
+    #: them. Recorded, never suppressed.
+    prefilter_deferred: int = 0
+    #: Fan-out candidates the paid pre-filter checked and rejected as non-human.
+    prefilter_rejected: int = 0
+
+    def to_dict(self) -> dict:
+        from dataclasses import asdict
+        return asdict(self)
+
+
+@dataclass
+class PrefilterResult:
+    kept: list = field(default_factory=list)
+    deferred: list = field(default_factory=list)
+    rejected: list = field(default_factory=list)
+    calls_used: int = 0
+    truncated: bool = False
+
+
+def paid_prefilter(candidates, metrics, client, *, cap, order=None):
+    """F011's humanness check on fan-out candidates, ordered CHEAPEST-FIRST.
+
+    THE ARITHMETIC THAT DICTATES THE ORDERING. Calling `get_user` on every contributor
+    is 60 repos x up to 100 contributors ~ 6,000 cold REST calls: 1.2 hours of the whole
+    hourly budget, spent on people the free ClickHouse lane has already shown have no
+    activity at all. So the pipeline runs:
+
+        contributors page -> inline `type != User` reject   (FREE, at the lane boundary)
+        dedup against the existing pool                     (FREE)
+        ClickHouse pool scan, one IN list                   (FREE, 3 queries per run)
+        activity floor, >= 5 active days / 90d              (FREE, off that scan)
+        get_user                                            <- the ONLY paid step
+
+    A CANDIDATE BELOW THE FLOOR IS DEFERRED, NOT DROPPED. They come back in `deferred`
+    carrying `PREFILTER_DEFERRED`, they enter the pool, and they simply never cost a call.
+    Suppression stays forbidden; deferring an API call is not suppression. What the
+    marker buys is honesty downstream: `admitted: true` cannot express "nobody checked",
+    and a writer that cannot tell the two apart would publish an unverified account with
+    the same confidence as a verified one.
+
+    `cap` is a HARD ceiling on calls this step may spend. On exhaustion the remainder come
+    back in `deferred` carrying `PREFILTER_TRUNCATED` and `truncated=True` — recorded
+    truncation is a budget, silent truncation is a defect.
+
+    `order` is the F063 work order (recurrence-first). It orders WORK. It is never read
+    as a fact about a person and never enters a record.
+    """
+    from .owner_resolve import is_human
+
+    floor = _min_active_days()
+    ranked = list(candidates)
+    if order is not None:
+        rank = {slug(k): i for i, k in enumerate(order)}
+        ranked.sort(key=lambda c: (rank.get(slug(c.login), len(rank)), slug(c.login)))
+    else:
+        ranked.sort(key=lambda c: slug(c.login))
+
+    out = PrefilterResult()
+    spent = 0
+    for cand in ranked:
+        m = (metrics.get(cand.login) or metrics.get(slug(cand.login)) or {})
+        m90 = m.get(90)
+        active = getattr(m90, "active_days", 0)
+        if active < floor:
+            out.deferred.append((cand, PREFILTER_DEFERRED))
+            continue
+        if spent >= cap:
+            out.truncated = True
+            out.deferred.append((cand, PREFILTER_TRUNCATED))
+            continue
+        spent += 1
+        try:
+            user = client.get_user(cand.login)
+        except Exception:  # noqa: BLE001 — one bad account must not sink the lane
+            user = None
+        if user and is_human(user):
+            out.kept.append(cand)
+        else:
+            # F011's ruling, e01's calibration, not this epic's to re-open. An account
+            # the humanness check rejects is not a person being suppressed.
+            out.rejected.append(cand)
+
+    out.calls_used = spent
+    out.kept.sort(key=lambda c: slug(c.login))
+    out.deferred.sort(key=lambda pair: slug(pair[0].login))
+    out.rejected.sort(key=lambda c: slug(c.login))
+    return out
