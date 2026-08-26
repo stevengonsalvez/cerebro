@@ -46,13 +46,24 @@ TRANSPORT_LADDER_S = (30, 60, 120)
 
 _QUOTA_RESET_RE = re.compile(r"Interval will end at (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 
+#: F019/T10 additions to the e01 query, and the reason each one rides HERE rather than in
+#: a scan of its own. `uniqExactStateIf(owner)` gives the F019 triple its third term
+#: (distinct not-owned OWNERS, beside repos and basenames) across the two-level GROUP BY
+#: exactly as `days_state` already carries distinct days. `argMax(base, n_repos)` and
+#: `argMax(repos_sample, n_repos)` name the dominant basename group and hand T10 a bounded
+#: sample of its repo names to resolve fork provenance against — the inner
+#: `groupUniqArray(30)` caps that sample per group, so the only new field with an
+#: unbounded-looking shape is capped at 30 strings by construction.
 POOL_SQL = """SELECT actor_login,
   sum(n_pushes)                                    AS pushes,
   sum(n_repos)                                     AS distinct_repos,
   uniqExactMerge(days_state)                       AS active_days,
   sum(n_not_owned)                                 AS repos_not_owned,
   countIf(n_not_owned > 0)                         AS not_owned_basenames,
+  uniqExactMerge(owners_state)                     AS not_owned_owners,
   max(n_repos)                                     AS max_basename_group,
+  argMax(base, n_repos)                            AS dominant_base,
+  argMax(repos_sample, n_repos)                    AS dominant_repos,
   sumMapMerge(weeks_state)                         AS weeks_map
 FROM (
   SELECT actor_login,
@@ -61,7 +72,10 @@ FROM (
     uniqExact(repo_name)                           AS n_repos,
     uniqExactIf(repo_name,
       lower(splitByChar('/', repo_name)[1]) != lower(actor_login)) AS n_not_owned,
+    uniqExactStateIf(lower(splitByChar('/', repo_name)[1]),
+      lower(splitByChar('/', repo_name)[1]) != lower(actor_login)) AS owners_state,
     uniqExactState(toDate(created_at))             AS days_state,
+    groupUniqArray(30)(repo_name)                  AS repos_sample,
     sumMapState([toUInt16(intDiv(dateDiff('day', toDate(created_at), today()), 7))],
                 [toUInt64(1)])                     AS weeks_state
   FROM github_events
@@ -94,7 +108,15 @@ class WindowMetrics:
     active_days: int = 0
     repos_not_owned: int = 0
     not_owned_basenames: int = 0
+    #: F019's third term. Distinct OWNERS of the not-owned repos, which is what
+    #: separates "pushed to 124 repos belonging to 124 different people" from "pushed
+    #: to 124 repos belonging to one org". Free from the same scan.
+    not_owned_owners: int = 0
     max_basename_group: int = 0
+    #: The basename of the largest same-name repo group, and up to 30 of that group's
+    #: repo names. T10's fork-provenance input. Descriptive strings, never a sort key.
+    dominant_base: str = ""
+    dominant_repos: tuple[str, ...] = ()
     #: 13 slots, oldest -> newest. Populated from the 90d window only; the 7d/30d
     #: rows carry zeros and nothing reads them.
     pushes_per_week: tuple[int, ...] = (0,) * WEEK_SLOTS
@@ -134,6 +156,44 @@ def densify_weeks(weeks_map: str) -> tuple[int, ...]:
             slots[k] = v
     slots.reverse()
     return tuple(slots)
+
+
+def parse_repo_array(literal: str) -> tuple[str, ...]:
+    """`['a/b','c/d']` -> `('a/b', 'c/d')`. Pure, client-side, total.
+
+    ClickHouse renders an `Array(String)` in TSV as single-quoted elements with
+    backslash escaping. Repo names legitimately carry `-`, `.`, `_` and `/`, so a naive
+    comma split is wrong the first time a name contains one; the scan is character-wise
+    over quoted runs instead.
+
+    TOTAL BY CONSTRUCTION. A malformed or empty literal returns `()` rather than
+    raising, and `()` means "no fork evidence available", which the T10 lane treats as
+    fail-closed — the flag stands. A parse failure must never look like a clearance.
+    """
+    s = (literal or "").strip()
+    if not s or s == "[]":
+        return ()
+    out: list[str] = []
+    buf: list[str] = []
+    in_str = False
+    escaped = False
+    for ch in s:
+        if escaped:
+            buf.append(ch)
+            escaped = False
+            continue
+        if in_str:
+            if ch == "\\":
+                escaped = True
+            elif ch == "'":
+                out.append("".join(buf))
+                buf = []
+                in_str = False
+            else:
+                buf.append(ch)
+        elif ch == "'":
+            in_str = True
+    return tuple(out)
 
 
 def _ints(chunk: str) -> list[int]:
@@ -192,7 +252,8 @@ def _parse_tsv(body: str, window: int) -> dict[str, WindowMetrics]:
     try:
         idx = {name: header.index(name) for name in (
             "actor_login", "pushes", "distinct_repos", "active_days", "repos_not_owned",
-            "not_owned_basenames", "max_basename_group", "weeks_map")}
+            "not_owned_basenames", "not_owned_owners", "max_basename_group",
+            "dominant_base", "dominant_repos", "weeks_map")}
     except ValueError:  # a column vanished -> the contract moved, not a transient
         raise GHArchiveUnavailable(f"unexpected result header: {header!r}") from None
 
@@ -218,7 +279,10 @@ def _parse_tsv(body: str, window: int) -> dict[str, WindowMetrics]:
             active_days=active,
             repos_not_owned=_int(cells[idx["repos_not_owned"]]),
             not_owned_basenames=_int(cells[idx["not_owned_basenames"]]),
+            not_owned_owners=_int(cells[idx["not_owned_owners"]]),
             max_basename_group=_int(cells[idx["max_basename_group"]]),
+            dominant_base=cells[idx["dominant_base"]].strip(),
+            dominant_repos=parse_repo_array(cells[idx["dominant_repos"]]),
             pushes_per_week=(densify_weeks(cells[idx["weeks_map"]])
                              if window == 90 else (0,) * WEEK_SLOTS),
         )

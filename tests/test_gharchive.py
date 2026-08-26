@@ -1,4 +1,15 @@
-"""T05t — F006/F018/F019/F022 GH Archive client. No network."""
+"""T05t — F006/F018/F019/F022 GH Archive client. No network.
+
+FIXTURE PROVENANCE, stated because the file mixes two measurement dates on purpose.
+`gharchive_cohort_90d.tsv` carries e01's live 2026-08-26 90d snapshot for the eight
+columns e01 already had — those numbers are the CALIBRATION RECORD the admission
+constants were derived from (sindresorhus 7.14, Rich-Harris 0.5385, mvanhorn 8.84) and
+re-querying them a day later silently moves the evidence under the Court's rulings.
+e02's three new columns (`not_owned_owners`, `dominant_base`, `dominant_repos`) were
+measured live on 2026-08-27 against the same 24 logins and spliced in beside them,
+because they cannot be derived from the old row. New columns, new date; the pinned
+calibration values are untouched, which is the property that matters.
+"""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -12,6 +23,7 @@ from cerebro.gitintel.gharchive import (
     WEEK_SLOTS,
     GHArchiveUnavailable,
     densify_weeks,
+    parse_repo_array,
     pool_metrics,
     render_sql,
 )
@@ -114,8 +126,9 @@ def test_active_days_never_exceeds_the_window():
 
 def test_clamp_applies_to_a_thirty_day_window():
     header = ("actor_login\tpushes\tdistinct_repos\tactive_days\trepos_not_owned\t"
-              "not_owned_basenames\tmax_basename_group\tweeks_map\n")
-    body = header + "someone\t100\t3\t31\t0\t0\t1\t([0],[1])\n"
+              "not_owned_basenames\tnot_owned_owners\tmax_basename_group\t"
+              "dominant_base\tdominant_repos\tweeks_map\n")
+    body = header + "someone\t100\t3\t31\t0\t0\t0\t1\tfoo\t[]\t([0],[1])\n"
     t = FakeTransport([body])
     got = pool_metrics(["someone"], windows=(30,), transport=t, sleep=lambda s: None)
     assert got["someone"][30].active_days == 30
@@ -123,8 +136,9 @@ def test_clamp_applies_to_a_thirty_day_window():
 
 def test_result_login_case_folds_onto_the_requested_login():
     header = ("actor_login\tpushes\tdistinct_repos\tactive_days\trepos_not_owned\t"
-              "not_owned_basenames\tmax_basename_group\tweeks_map\n")
-    t = FakeTransport([header + "SimonW\t5\t1\t2\t0\t0\t1\t([0],[5])\n"])
+              "not_owned_basenames\tnot_owned_owners\tmax_basename_group\t"
+              "dominant_base\tdominant_repos\tweeks_map\n")
+    t = FakeTransport([header + "SimonW\t5\t1\t2\t0\t0\t0\t1\tllm\t[]\t([0],[5])\n"])
     got = pool_metrics(["simonw"], windows=(90,), transport=t, sleep=lambda s: None)
     assert got["simonw"][90].pushes == 5
 
@@ -243,3 +257,94 @@ def test_empty_login_list_makes_no_request():
     t = FakeTransport([_fixture_body()])
     assert pool_metrics([], transport=t) == {}
     assert t.sent == []
+
+
+# --- T02: parse_repo_array, the ClickHouse Array(String) literal ------------
+#
+# TOTAL, NEVER RAISING. Every failure mode below returns `()`, and `()` means "no fork
+# evidence", which the T10 lane treats as fail-closed: the flag stands. A parser that
+# raised here would turn a malformed cell into a crashed run; one that guessed would
+# turn it into a clearance nobody reviewed.
+
+def test_parses_a_thirty_element_array_whole():
+    lit = "[" + ",".join(f"'own{i}/repo'" for i in range(30)) + "]"
+    got = parse_repo_array(lit)
+    assert len(got) == 30
+    assert got[0] == "own0/repo" and got[29] == "own29/repo"
+
+
+def test_parses_an_empty_array_and_a_blank_cell_as_no_evidence():
+    assert parse_repo_array("[]") == ()
+    assert parse_repo_array("") == ()
+    assert parse_repo_array("   ") == ()
+    assert parse_repo_array(None) == ()
+
+
+def test_parses_a_single_element_array():
+    assert parse_repo_array("['koala73/worldmonitor']") == ("koala73/worldmonitor",)
+
+
+def test_repo_names_with_a_hyphen_and_a_dot_survive_intact():
+    """`rinseaid/omniroute` and `simonw/datasette.io` are both real. A naive split on
+    punctuation mangles the second and a split on `,` alone is fine only until a name
+    contains one."""
+    got = parse_repo_array("['pingdotgg/t3-code','simonw/datasette.io','a.b-c/d_e.f-g']")
+    assert got == ("pingdotgg/t3-code", "simonw/datasette.io", "a.b-c/d_e.f-g")
+
+
+def test_an_escaped_quote_inside_a_name_does_not_end_the_element():
+    assert parse_repo_array(r"['ow\'ner/repo','b/c']") == ("ow'ner/repo", "b/c")
+
+
+def test_a_truncated_literal_degrades_to_what_it_could_read_never_raises():
+    assert parse_repo_array("['a/b','c/d") == ("a/b",)
+
+
+# --- T02: the three new columns come off the real cohort row ---------------
+
+def test_the_f019_triple_is_all_three_terms_on_the_real_cohort():
+    """F019's SHIP CONDITION: owner count ALONE cannot tell a template bot from a
+    prolific contributor, basename diversity can, and the pair is only legible with the
+    repo count beside it. All three are recorded, none is a sort key."""
+    t = FakeTransport([_fixture_body()])
+    m = pool_metrics(["diegosouzapw", "simonw"], windows=(90,), transport=t,
+                     sleep=lambda s: None)
+    d = m["diegosouzapw"][90]
+    assert (d.repos_not_owned, d.not_owned_basenames, d.not_owned_owners) == (124, 2, 124)
+    s = m["simonw"][90]
+    assert s.repos_not_owned == 13 and s.not_owned_owners < s.repos_not_owned
+
+
+def test_dominant_base_and_sample_are_parsed_for_the_fork_shaped_accounts():
+    t = FakeTransport([_fixture_body()])
+    m = pool_metrics(["koala73", "diegosouzapw"], windows=(90,), transport=t,
+                     sleep=lambda s: None)
+    k = m["koala73"][90]
+    assert k.dominant_base == "worldmonitor"
+    assert len(k.dominant_repos) >= 5
+    assert all("/" in r for r in k.dominant_repos)
+    assert any(r.lower() == "koala73/worldmonitor" for r in k.dominant_repos)
+    dg = m["diegosouzapw"][90]
+    assert dg.dominant_base == "omniroute"
+    assert len(dg.dominant_repos) == 30    # groupUniqArray(30) caps the sample
+
+
+def test_a_missing_new_column_is_a_moved_contract_not_a_transient():
+    """The e01 header parses no more. A vanished column raises instead of silently
+    zero-filling, because a zero `not_owned_owners` is a real value F019 reads."""
+    body = ("actor_login\tpushes\tdistinct_repos\tactive_days\trepos_not_owned\t"
+            "not_owned_basenames\tmax_basename_group\tweeks_map\n"
+            "someone\t1\t1\t1\t0\t0\t1\t([0],[1])\n")
+    t = FakeTransport([body])
+    with pytest.raises(GHArchiveUnavailable):
+        pool_metrics(["someone"], windows=(90,), transport=t, sleep=lambda s: None)
+
+
+def test_the_new_fields_ride_the_same_three_scans():
+    """Query count is a correctness property: the shared hourly quota is finite and e01
+    lost the endpoint for an hour to a second scan. Three new fields, still three POSTs."""
+    t = FakeTransport([_fixture_body()])
+    pool_metrics(["simonw", "koala73"], transport=t, sleep=lambda s: None)
+    assert len(t.sent) == 3
+    for sql in t.sent:
+        assert "not_owned_owners" in sql and "dominant_repos" in sql
