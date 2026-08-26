@@ -1,0 +1,21 @@
+{
+  "beads_mode": "state-only",
+  "branch": "main",
+  "current_epic": null,
+  "current_note": "INIT. Charter written for the cracked-dev discovery programme. Owner settled four scoping decisions by interview: all three discovery lanes, a published /cerebro/devs section, factual framing with a working opt-out and no cracked badge, and scoring rebuilt rather than patched. The programme carries forward the previous charter's granted authority verbatim, including a PRE-BLESSED roadmap gate, so there is no blocking human gate. The central design constraint is empirical and proven this session: GH Archive volume ranking is INVERTED, ranking spam roughly 30x above Simon Willison, so GH Archive is an enrichment lane over quality-anchored candidates and never a volume-ranked discovery lane. Launching DISCOVER.",
+  "dashboard_slug": "cerebro-devs",
+  "epics": {},
+  "human_gate": "blessed",
+  "phase": "DISCOVER",
+  "phase_since": "2026-08-26T20:00:00Z",
+  "stop_counters": {
+    "epic_validation_fails": {},
+    "stage_errors": {}
+  },
+  "termination": {
+    "backlog_dry": true,
+    "budget_tokens": null,
+    "deadline": null,
+    "spent_tokens_estimate": 0
+  }
+}
