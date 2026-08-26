@@ -2,12 +2,12 @@
   "beads_mode": "state-only",
   "branch": "main",
   "current_epic": null,
-  "current_note": "INIT. Charter written for the cracked-dev discovery programme. Owner settled four scoping decisions by interview: all three discovery lanes, a published /cerebro/devs section, factual framing with a working opt-out and no cracked badge, and scoring rebuilt rather than patched. The programme carries forward the previous charter's granted authority verbatim, including a PRE-BLESSED roadmap gate, so there is no blocking human gate. The central design constraint is empirical and proven this session: GH Archive volume ranking is INVERTED, ranking spam roughly 30x above Simon Willison, so GH Archive is an enrichment lane over quality-anchored candidates and never a volume-ranked discovery lane. Launching DISCOVER.",
+  "current_note": "DISCOVER done: 70-feature registry (40 tier-1, 22 tier-2, 8 tier-3) with an empirical GH-Archive appendix. The recon confirmed the PushEvent skew with numbers (96.2% vs 68.5% in early 2025, stronger than the charter implied), proved 176 logins can be scored in ONE sub-3s query, and found push/active_day as a discriminator with a claimed 120x gap and zero overlap across 16 humans / 6 non-humans. It also correctly registered explicit REJECTION rows for raw volume (F020) and stars/followers (F021). DRIVER VALIDATED THE THRESHOLD AGAINST THE REAL POOL AND IT REFINES THE CLAIM: 167 distinct repo owners extracted from the vault, 87 with 90-day push activity. Only 2 of 87 exceed 15 pushes/active-day. But the distribution is CONTINUOUS, not cleanly separated - 14.52 and 14.45 sit immediately below the proposed threshold and 25.85 immediately above, so 15 is a knife-edge rather than the recon's clean gap, which was an artifact of sampling obvious bots. The shape matters more than the rate: Dicklesworthstone is 305/day across 109 repos with ZERO not-owned (mass self-repo spam) while diegosouzapw is 25.85/day across 130 repos with 124 not-owned (high-volume contribution to OTHERS' repos, plausibly a real contributor or a PR bot). push/active_day alone cannot tell those two apart and they deserve opposite verdicts - that finding is embedded in the Court's brief so it reasons from real data, not the easy sample. COURT + ROADMAP now running (wf_caedee4a-f6d): 5 grounding agents, per-cluster verdicts, a President to settle the 10 open questions, then epic clustering. Roadmap gate is pre-blessed.",
   "dashboard_slug": "cerebro-devs",
   "epics": {},
   "human_gate": "blessed",
-  "phase": "DISCOVER",
-  "phase_since": "2026-08-26T20:00:00Z",
+  "phase": "FEASIBILITY_COURT",
+  "phase_since": "2026-08-26T21:35:00Z",
   "stop_counters": {
     "epic_validation_fails": {},
     "stage_errors": {}
@@ -16,6 +16,6 @@
     "backlog_dry": true,
     "budget_tokens": null,
     "deadline": null,
-    "spent_tokens_estimate": 0
+    "spent_tokens_estimate": 519141
   }
 }
