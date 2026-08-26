@@ -27,6 +27,12 @@ MODULES = [
     "cerebro/gitintel/gharchive.py",
     "cerebro/gitintel/vault_seed.py",
     "cerebro/gitintel/denylist.py",
+    # owner_resolve is the one module in the lane that legitimately READS followers and
+    # public_repos, as a coarse presence pre-filter (the F011 ruling, the committers.top
+    # precedent). Reading them is permitted; sorting or ranking people by them is not,
+    # and the difference is exactly what this sweep tests. It grows a fan-out path in
+    # e02, which is when a "rank the contributors by followers" line would arrive.
+    "cerebro/gitintel/owner_resolve.py",
 ]
 
 VOLUME_NAMES = {"pushes", "followers", "stars", "score", "distinct_repos",
