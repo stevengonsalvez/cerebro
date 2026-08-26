@@ -219,3 +219,90 @@ def test_unset_token_falls_back(monkeypatch, tmp_path):
     # resolve_token returns None → GitHubClient(...) falls back to its own env read; no crash
     out = _fetch(monkeypatch, FakeClient(), {"seed_repos": [], "roster_path": str(p)})
     assert out == []
+
+
+# --- T03t: F001 vault Signal-note seed lane, behind a default-off flag ---------
+
+def _seeded_vault(tmp_path):
+    """A vault whose Signals corpus references real-looking github repos."""
+    d = tmp_path / "vault" / "Signals"
+    d.mkdir(parents=True)
+    for i, full in enumerate(("alpha/one", "beta/two", "gamma/three")):
+        (d / f"note{i}.md").write_text(
+            f"---\nurl: https://github.com/{full}\ncaptured: 2026-01-0{i + 1}T00:00:00+00:00\n---\nbody\n",
+            encoding="utf-8",
+        )
+    return str(tmp_path / "vault")
+
+
+class CountingClient(FakeClient):
+    """Records every call so 'zero client calls' can be asserted, not assumed."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.calls = 0
+
+    def get_user(self, login):
+        self.calls += 1
+        return super().get_user(login)
+
+    def get_user_repos(self, login, limit=20):
+        self.calls += 1
+        return super().get_user_repos(login, limit=limit)
+
+    def request(self, path, params=None):
+        self.calls += 1
+        return super().request(path, params)
+
+
+def test_seed_lane_on_contributes_vault_signal_repos(tmp_path):
+    settings = types.SimpleNamespace(vault_path=_seeded_vault(tmp_path), github={})
+    seeds = crackscan._seed_repos({"use_vault_seed_lane": True}, settings)
+    assert set(seeds) == {"alpha/one", "beta/two", "gamma/three"}
+
+
+def test_seed_lane_on_with_absent_vault_path_contributes_nothing(tmp_path):
+    settings = types.SimpleNamespace(vault_path="", github={})
+    assert crackscan._seed_repos({"use_vault_seed_lane": True}, settings) == []
+    settings = types.SimpleNamespace(vault_path=str(tmp_path / "nope"), github={})
+    assert crackscan._seed_repos({"use_vault_seed_lane": True}, settings) == []
+
+
+def test_seed_lane_defaults_off_over_a_populated_signals_corpus(tmp_path):
+    """Default-off is ASSERTED, not assumed: the same vault yields nothing without the flag."""
+    settings = types.SimpleNamespace(vault_path=_seeded_vault(tmp_path), github={})
+    assert crackscan._seed_repos({}, settings) == []
+    assert crackscan._seed_repos({"seed_repos": ["x/y"]}, settings) == ["x/y"]
+    assert crackscan._seed_repos({"use_vault_seed_lane": False}, settings) == []
+
+
+def test_shipped_config_defaults_the_lane_off():
+    import yaml
+    from pathlib import Path
+    cfg = yaml.safe_load(Path("config/sources.yaml").read_text(encoding="utf-8"))
+    assert cfg["crackscan"]["use_vault_seed_lane"] is False
+
+
+def test_fetch_over_a_seeded_vault_with_the_flag_off_emits_zero_signals(monkeypatch, tmp_path):
+    """The considered-Signal leak is not widened by e01.
+
+    crackscan is enabled: true in production and fetch() still emits a
+    `crackscan/considered` Signal per non-admitted candidate. The ONLY thing keeping
+    that funnel inert is _seed_repos() returning []. This test fails loudly if a later
+    commit flips the default.
+    """
+    p = _write_roster(tmp_path)
+    before = p.read_text(encoding="utf-8")
+    settings = types.SimpleNamespace(vault_path=_seeded_vault(tmp_path), github={})
+    fake = CountingClient(users={"alpha": _human("alpha")})
+    monkeypatch.setattr(crackscan, "GitHubClient", lambda settings=None, token=None: fake)
+    called = []
+    monkeypatch.setattr(roster_mod, "append_devs",
+                        lambda *a, **k: called.append(a) or [])
+
+    out = crackscan.fetch({"roster_path": str(p)}, settings)
+
+    assert out == []                                    # zero Signals of either tag
+    assert fake.calls == 0                              # zero GitHub client calls
+    assert called == []                                 # no roster write
+    assert p.read_text(encoding="utf-8") == before

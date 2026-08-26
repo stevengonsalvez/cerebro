@@ -4,6 +4,7 @@ from datetime import date
 from pathlib import Path
 
 from ..gitintel import roster as roster_mod
+from ..gitintel import vault_seed
 from ..gitintel.crackscore import cheap_score, deep_score
 from ..gitintel.github_client import GitHubClient, resolve_token
 from ..gitintel.owner_resolve import resolve_owner
@@ -88,7 +89,8 @@ def fetch(cfg: dict, settings) -> list[Signal]:
 
 
 def _seed_repos(cfg: dict, settings) -> list[str]:
-    """Candidate 'owner/name' repos from explicit cfg plus the vault's repo entities.
+    """Candidate 'owner/name' repos from explicit cfg, the vault's repo entities, and
+    — only when `cfg['use_vault_seed_lane']` is truthy — the vault's Signal notes.
 
     ponytail: seed_handles (x/reddit->github) and trending re-mining are deferred —
     no identity resolver exists for x/reddit yet, and trending fan-out is untested
@@ -99,7 +101,14 @@ def _seed_repos(cfg: dict, settings) -> list[str]:
         r = str(r).strip()
         if "/" in r:
             repos.append(r)
-    repos += _vault_repos(getattr(settings, "vault_path", ""))
+    vault_path = getattr(settings, "vault_path", "")
+    repos += _vault_repos(vault_path)
+    if cfg.get("use_vault_seed_lane") and vault_path:
+        # F001 vault Signal-note lane. OFF by default: turning it on before e03's
+        # fetch() opt-out gate lands would feed ~175 un-admitted vault owners into
+        # the condemned cheap_score/deep_score funnel, which still emits a
+        # `crackscan/considered` Signal per candidate.
+        repos += [s.full_name for s in vault_seed.seed_repos(vault_path)]
 
     out, seen = [], set()
     for r in repos:
