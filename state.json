@@ -1,13 +1,22 @@
 {
   "beads_mode": "state-only",
   "branch": "main",
-  "current_epic": null,
-  "current_note": "DISCOVER done: 70-feature registry (40 tier-1, 22 tier-2, 8 tier-3) with an empirical GH-Archive appendix. The recon confirmed the PushEvent skew with numbers (96.2% vs 68.5% in early 2025, stronger than the charter implied), proved 176 logins can be scored in ONE sub-3s query, and found push/active_day as a discriminator with a claimed 120x gap and zero overlap across 16 humans / 6 non-humans. It also correctly registered explicit REJECTION rows for raw volume (F020) and stars/followers (F021). DRIVER VALIDATED THE THRESHOLD AGAINST THE REAL POOL AND IT REFINES THE CLAIM: 167 distinct repo owners extracted from the vault, 87 with 90-day push activity. Only 2 of 87 exceed 15 pushes/active-day. But the distribution is CONTINUOUS, not cleanly separated - 14.52 and 14.45 sit immediately below the proposed threshold and 25.85 immediately above, so 15 is a knife-edge rather than the recon's clean gap, which was an artifact of sampling obvious bots. The shape matters more than the rate: Dicklesworthstone is 305/day across 109 repos with ZERO not-owned (mass self-repo spam) while diegosouzapw is 25.85/day across 130 repos with 124 not-owned (high-volume contribution to OTHERS' repos, plausibly a real contributor or a PR bot). push/active_day alone cannot tell those two apart and they deserve opposite verdicts - that finding is embedded in the Court's brief so it reasons from real data, not the easy sample. COURT + ROADMAP now running (wf_caedee4a-f6d): 5 grounding agents, per-cluster verdicts, a President to settle the 10 open questions, then epic clustering. Roadmap gate is pre-blessed.",
+  "current_epic": "e01",
+  "current_note": "COURT + ROADMAP DONE: 55 SHIP / 6 DOWNGRADE / 9 PARK across 70 features, 8 epics, all 10 open questions settled. Key rulings, all of which bind the build: the push/active_day threshold of 15 is FLAG-FOR-REVIEW ONLY and never an auto-exclude, because the driver's validation showed the distribution is continuous rather than gapped - every exclusion becomes a recorded human denylist verdict. NO COMPOSITE SCORE ANYWHERE (F029 beat F028): admission is three independent floors and the index sorts by facets, so it is a directory and not a league table, which matches the owner's ethics choice. REST contributor fan-out beat GH-Archive co-pushers on measured evidence (2.4 calls/repo and correct attribution vs 1.5-22.6% recall with merge-bot noise). Stargazer enumeration was rejected on cost - roughly 35,600 API calls for the top 20 repos alone - leaving only a capped post-launch experiment. The hard pair was settled by SHAPE not rate: Dicklesworthstone is self-repo mass push, diegosouzapw is fork-farm basename concentration, both denylisted day one. A LIVE PRIVACY FINDING emerged: crackscan already emits Signals for merely-CONSIDERED candidates, so names can reach the public vault today without ever being admitted. The opt-out is therefore gated at crackscan.fetch() itself as well as at the site, and F067 tests both layers. The Court's stated biggest risk is honest: the automation boundary is continuous, so safety rests on shape heuristics plus a human review loop rather than a mechanical threshold, and a novel automation shape below 15 push/day that avoids the known fingerprints could reach a published profile beside real named people. E01 NOW BUILDING (wf_f4e3675d-f92) - the risk-first sanity spike. Its whole purpose is the launch-blocking F066 gate: produce a real ranked top-20 from the vault lane over the real corpus and justify every one of the 20 individually. If it contains a single bot, service account or mass-repo spammer, the epic has failed and nothing downstream ships.",
   "dashboard_slug": "cerebro-devs",
-  "epics": {},
+  "epics": {
+    "e01": "BUILDING",
+    "e02": "QUEUED",
+    "e03": "QUEUED",
+    "e04": "QUEUED",
+    "e05": "QUEUED",
+    "e06": "QUEUED",
+    "e07": "QUEUED",
+    "e08": "QUEUED"
+  },
   "human_gate": "blessed",
-  "phase": "FEASIBILITY_COURT",
-  "phase_since": "2026-08-26T21:35:00Z",
+  "phase": "E01_SANITY_SPIKE",
+  "phase_since": "2026-08-26T22:00:00Z",
   "stop_counters": {
     "epic_validation_fails": {},
     "stage_errors": {}
@@ -16,6 +25,6 @@
     "backlog_dry": true,
     "budget_tokens": null,
     "deadline": null,
-    "spent_tokens_estimate": 519141
+    "spent_tokens_estimate": 1791385
   }
 }
