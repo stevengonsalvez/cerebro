@@ -118,6 +118,20 @@ cleared:
     evidence: "90d live 2026-08-26: 137 pushes / 13 distinct repos / 56 active days / 9 not-owned across 2 basenames / concentration 0.6154 / 2.45 pushes per active day. Kite, AI engineer at Alibaba and stated creator of OpenCodeReview; all 8 same-basename repos are open-code-review, his own project"
     reviewed_by: e01-builder
     reviewed_on: 2026-08-26
+  # mass_self_repo has the mirror-image limitation of fork_farm above, and mvanhorn is
+  # the account that proves it. The shape keys on "many distinct repos, almost none of
+  # them owned by anyone else", which cannot distinguish Dicklesworthstone's 109
+  # manufactured repos from a 15-year-old account that forks upstream projects INTO ITS
+  # OWN NAMESPACE to read and patch them. A fork under your own login is indistinguishable
+  # from an original repo in the PushEvent stream: both carry actor_login == repo owner.
+  # The separating fact is whether each repo is a fork and of what, which needs the REST
+  # repo lane e02 adds. Until then this is a review request, exactly as intended.
+  - login: mvanhorn
+    verdict: human
+    shape: mass_self_repo
+    evidence: "90d live 2026-08-26: 716 pushes / 204 distinct repos / 81 active days / 4 not-owned across 1 basenames / concentration 0.0245 / 8.84 pushes per active day. Matt Van Horn, GitHub user since 2010, 4901 followers, 2104 public repos; co-founded June (acquired by @webergrills) and the company that became Lyft. Per-repo distribution is head-heavy human work, not fan-out: printing-press-library 208 pushes over 52 days, cli-printing-press 120 over 35, last30days-skill 69 over 18, agentcookie 24, then a 1-4-push tail of self-namespaced forks of upstream projects (react-spectrum, penpot, podman)"
+    reviewed_by: e01-fixer
+    reviewed_on: 2026-08-26
   - login: nwparker
     verdict: human
     shape: high_push_rate
