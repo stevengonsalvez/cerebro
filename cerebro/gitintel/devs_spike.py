@@ -36,6 +36,17 @@ from .owner_resolve import VENDOR_ORGS
 TOP_N = 20
 WINDOWS = (7, 30, 90)
 
+#: WARNING-ONLY, never a failure. The Court ruled that name-pattern filtering is
+#: provably insufficient — `github-actions[bot]` is caught by the `[bot]` suffix, but
+#: the mass-repo spammers and service accounts that actually reached the top of a volume
+#: ranking were not, and every bad account found so far was found by SHAPE or by a person
+#: looking. A `-bot`/`-ci` suffix is therefore worth routing into the eyeball queue and
+#: is worth nothing as a gate: it both misses automation and would silently drop a human
+#: whose login happens to end that way. Failing on it would re-create name filtering as
+#: an auto-exclude, which is exactly what the ruling forbids.
+SUSPECT_LOGIN_SUFFIXES = ("-bot", "_bot", "-ci", "_ci", "-actions", "-automation",
+                          "-runner", "-service", "-app")
+
 
 @dataclass
 class DevRecord:
@@ -98,6 +109,28 @@ def sanity_check(top, verdicts) -> SanityResult:
         state = rec.automation.get("state")
         if state != "clear":
             failures.append(f"{rec.login}: automation state is {state!r}, not clear")
+
+        suffix = next((sfx for sfx in SUSPECT_LOGIN_SUFFIXES if low.endswith(sfx)), None)
+        if suffix:
+            warnings.append(
+                f"{rec.login}: login ends in {suffix!r} — a bot-shaped name that carries "
+                f"no [bot] suffix. Not a failure and never an auto-exclude (name-pattern "
+                f"filtering is provably insufficient in both directions); eyeball it.")
+
+    # WHOSE EYE. Charter success criterion 4 is "verified by eye", so a run has to say
+    # which admissions rest on a verdict an agent recorded versus one the owner signed.
+    # Warning, not failure: an agent-recorded verdict carries real evidence from a real
+    # review and blocking on it would strand the epic, but the outstanding countersign
+    # must be visible on every run rather than discovered at the F070 launch probe.
+    unsigned = [(rec.login, entry) for rec in top
+                for entry in [verdicts.cleared.get(rec.login.lower())]
+                if entry is not None and not denylist.is_owner_signed(entry)]
+    if unsigned:
+        who = ", ".join(f"{login} (by {e.reviewed_by})" for login, e in unsigned)
+        warnings.append(
+            f"{len(unsigned)} of the top {len(top)} are admitted on an AGENT-recorded "
+            f"`cleared:` verdict, not an owner-signed one: {who}. The mandated human "
+            f"eyeball is owner-countersigned before launch (F070/e07).")
 
     return SanityResult(ok=not failures, failures=failures, warnings=warnings)
 

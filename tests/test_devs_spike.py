@@ -147,6 +147,60 @@ def test_predicate_names_every_offender_not_just_the_first():
     assert len(r.failures) == 3
 
 
+def test_a_bot_shaped_login_without_the_bot_suffix_warns_and_never_fails():
+    """The Court ruled name-pattern filtering provably insufficient, so this is a
+    routing hint into the eyeball queue and nothing more. Failing on it would rebuild
+    name filtering as an auto-exclude — the exact thing the ruling forbids — and would
+    drop a human whose login happens to end in `-ci`."""
+    r = sanity_check([_rec("renovate-bot"), _rec("deploy-ci")], denylist.EMPTY)
+    assert r.ok is True and r.failures == []
+    hits = [w for w in r.warnings if "ends in" in w]
+    assert len(hits) == 2
+    assert "renovate-bot" in hits[0] and "'-bot'" in hits[0]
+    assert "deploy-ci" in hits[1] and "'-ci'" in hits[1]
+
+
+def test_a_plain_human_login_raises_no_suffix_warning():
+    r = sanity_check([_rec("simonw"), _rec("Rich-Harris"), _rec("t3dotgg")],
+                     denylist.EMPTY)
+    assert r.ok is True
+    assert not [w for w in r.warnings if "ends in" in w]
+
+
+def test_an_agent_recorded_clearing_is_named_in_the_warnings(tmp_path):
+    """WHOSE EYE. Charter success criterion 4 is 'verified by eye'; an admission that
+    rests on a verdict an AGENT recorded is not yet an admission the owner signed, and
+    the run has to say so every time rather than at the launch probe."""
+    from cerebro.gitintel.denylist import VerdictEntry, Verdicts
+    agent = VerdictEntry(login="koala73", verdict="human", shape="fork_farm",
+                         evidence="90d live: 960 pushes / 24 repos",
+                         reviewed_by="e01-builder", reviewed_on="2026-08-26")
+    owner = VerdictEntry(login="mvanhorn", verdict="human", shape="mass_self_repo",
+                         evidence="90d live: 716 pushes / 204 repos",
+                         reviewed_by="owner", reviewed_on="2026-08-26")
+    v = Verdicts(cleared={"koala73": agent, "mvanhorn": owner})
+    r = sanity_check([_rec("koala73"), _rec("mvanhorn"), _rec("simonw")], v)
+    assert r.ok is True, "an agent-recorded verdict warns, it never blocks"
+    hit = [w for w in r.warnings if "AGENT-recorded" in w]
+    assert len(hit) == 1
+    assert "koala73 (by e01-builder)" in hit[0]
+    assert "mvanhorn" not in hit[0], "an owner-signed verdict is not outstanding"
+    assert "simonw" not in hit[0], "an unflagged account needs no verdict at all"
+
+
+def test_the_live_verdicts_file_is_honest_about_who_reviewed_what():
+    """Not a mock. Every cleared entry that ships names its reviewer, and the split
+    between owner-signed and agent-recorded is a fact of the file, not a claim."""
+    from cerebro.gitintel import denylist as dl
+    v = dl.load()
+    assert v.cleared, "the cleared section is load-bearing and must not be empty"
+    for entry in list(v.cleared.values()) + list(v.denied.values()):
+        assert entry.reviewed_by.strip(), f"{entry.login}: no reviewer recorded"
+    agent = [e.login for e in v.cleared.values() if not dl.is_owner_signed(e)]
+    assert agent, ("if every clearing is owner-signed, delete the warning path rather "
+                   "than letting it rot untested")
+
+
 def test_zero_rows_is_a_failure_but_a_short_list_is_only_a_warning():
     assert sanity_check([], denylist.EMPTY).ok is False
     short = sanity_check([_rec("simonw")], denylist.EMPTY)

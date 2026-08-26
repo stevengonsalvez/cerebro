@@ -29,6 +29,15 @@ DEFAULT_PATH = "config/devs_denylist.yaml"
 #: Every entry in EITHER section carries all five. A bare login is not a verdict.
 REQUIRED_FIELDS = ("login", "verdict", "shape", "evidence", "reviewed_by", "reviewed_on")
 
+#: Reviewers whose signature is the OWNER'S OWN, not an agent acting on their behalf.
+#: The charter's success criterion 4 says the top-20 is "verified by eye", so the record
+#: has to say WHOSE eye. Everything outside this set is an agent-recorded verdict: still
+#: a real review with real evidence, but not yet countersigned by the person who is
+#: accountable for publishing a page about a named human. Agent-recorded clearings are
+#: surfaced as a warning on every sanity-gate run so the outstanding countersign cannot
+#: be lost between here and the F070 launch probe.
+OWNER_REVIEWERS = frozenset({"owner", "stevie", "stevengonsalvez"})
+
 
 @dataclass(frozen=True)
 class VerdictEntry:
@@ -51,6 +60,11 @@ class Verdicts:
 
 
 EMPTY = Verdicts()
+
+
+def is_owner_signed(entry) -> bool:
+    """True only when a human owner, not an agent, recorded this verdict."""
+    return bool(entry) and (entry.reviewed_by or "").strip().lower() in OWNER_REVIEWERS
 
 
 def load(path=DEFAULT_PATH) -> Verdicts:
