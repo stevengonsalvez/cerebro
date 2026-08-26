@@ -1,22 +1,30 @@
 {
   "beads_mode": "state-only",
-  "branch": "main",
-  "current_epic": "e01",
-  "current_note": "TICK 23:05. E01 build well advanced on f/devs-sanity-spike: 8+ signed commits, 25 files, worktree clean after the driver removed a stray q3.sql build-scratch file. Review/fix still in flight. DRIVER INDEPENDENTLY VERIFIED THE TWO FALSE-POSITIVE FIXTURES BY RUNNING THE EPIC'S ACTUAL CODE, not by reading its claims: admission.flags() returns (none) for mvanhorn and for simonw, fork_farm for koala73, high_push_rate+mass_self_repo+fork_farm for Dicklesworthstone, and high_push_rate+fork_farm for diegosouzapw. Both fixtures therefore behave correctly - mvanhorn passes clean with no verdict needed, koala73 flags but sits in the CLEARED section with a recorded human verdict naming Elie Habib, 4,099 followers and worldmonitor as his own 84.3k-star project. The builder reached the same conclusion the driver did and grounded it better, having checked the star count the driver did not. THREE DESIGN DECISIONS IN THE EPIC WORTH KEEPING: quality verdicts and opt-out consent live in SEPARATE files with a load-time error if a login appears in both, because a judgement about shape and a request by a person are different things; every evidence string is regenerated from the run that produced it, which caught the registry's own diegosouzapw not-owned-basename count having drifted from 3 to 2 across runs; and the shape flags are deliberately non-collapsible because, in the builder's words, any single predicate wide enough to cover both known-bad shapes swallows the entire human band between them. 25 accounts now carry recorded human verdicts in both directions, including wesm, steipete, steve8708 and teknium1. SEPARATE: the driver mapped issue #20 against this programme at the owner's request. Its production numbers were verified against the live DB and all hold (59/68 capped at 25, 7 zero-output runs, 0 errors ever recorded, 0 of 1012 rated, X 38/67, crackscan 6/6). Item 5 overlaps this programme but diverges: #20 wants a PRIVATE human-gated roster while this programme PUBLISHES /cerebro/devs, and #20's 'deliberately skipped' section explicitly counsels against rebuilding crackedness weights, which this programme is doing. Items 1-4 (one-tap feedback, run health, five must-reads, LLM call reduction) are untouched by any current work. The strongest unqueued item is run health: on 2026-07-09 the pipeline fetched 597 raw items, triaged 0, published an empty brief, recorded no error and pushed it.",
+  "branch": "f/devs-sanity-spike",
+  "current_epic": "e02+e04",
+  "current_note": "TICK 23:56. OWNER GATE OPEN AND HOLDING. The charter's criterion 4 ('verified by eye') was restored after the ATC correction and AMENDMENT A1 is gone; config/devs_denylist.yaml still carries exactly 2 reviewed_by=owner entries, the pre-existing denied pair, and none of the 24 agent-cleared verdicts has been stamped. e01 PR #21 is green (MERGEABLE/CLEAN, 427 tests) and is DELIBERATELY HELD UNMERGED while Stevie reads the 24. DRIVER SELF-CORRECTION, MATERIAL: I told Stevie that #7 guyb1 and #15 qin-ctx had 'empty evidence strings' and to look at those two first. That was WRONG. Both carry full evidence and NO entry in the set is empty, verified by parsing the yaml. What is actually true is narrower: those two are the only entries whose evidence records no INDEPENDENT CORROBORATING FIGURE, where every other entry cites stars or followers. I have now gathered that corroboration from the unauthenticated public API and appended it to .agents/scratch/devs-24-cleared-for-owner-review.md as a dated addendum that leads with the correction. guyb1 is Guy Ben-Aharon, OneCLI YC S26 founder, account since 2014, 90 followers, 97 of 100 recent events on onecli/onecli, and the vault holds the two signals that seeded him (a Launch HN yc-launch signal and a Product Hunt rss signal). qin-ctx is Qin Haojie at ByteDance, 130 followers, 97 of 100 events on volcengine/OpenViking which is in the corpus as a repo/trending signal, and critically his activity is 20 PullRequestReviewEvent plus 12 IssuesEvent, not push-only, which is the hardest signal for automation to fake. The one caveat worth Stevie's eye is that qin-ctx's account was created 2025-09-26 and is the newest in the set. I recorded the honest limit on my own re-run: the events API caps at 100 so my window is 8-23 days not 90, rates are inflated for everyone on it (simonw reads 9.67 pushes/active-day against roughly 3.1 on the charter's 30d figure), so the flags() re-runs are directional corroboration and not a second 90-day measurement. WAVE LAUNCHED: e02 (three-lane pool, REST contributor fan-out at the Court-measured 2.4 calls/repo, facet metrics, and the fork-provenance signal that must separate koala73 from diegosouzapw) in CEREBRO off f/devs-sanity-spike, in parallel with e04 (/cerebro/devs loader, facet index, per-dev pages) in SITE off origin/main. Both are BUILD-ONLY: the ground prompt forbids publishing, merging and deploying this wave, forbids copy implying human curation, and reminds both epics the owner has not ratified anything. e04 builds against fixtures because the vault has no Devs/ directory until e03 writes it. The review stage retries once and reports REVIEW DIED TWICE rather than a false green.",
   "dashboard_slug": "cerebro-devs",
   "epics": {
-    "e01": "BUILDING",
-    "e02": "QUEUED",
+    "e01": "BUILT_PR_HELD",
+    "e02": "BUILDING",
     "e03": "QUEUED",
-    "e04": "QUEUED",
+    "e04": "BUILDING",
     "e05": "QUEUED",
     "e06": "QUEUED",
     "e07": "QUEUED",
-    "e08": "QUEUED"
+    "e08": "BLOCKED_ON_OWNER_REVIEW"
   },
   "human_gate": "blessed",
-  "phase": "E01_SANITY_SPIKE",
-  "phase_since": "2026-08-26T22:00:00Z",
+  "owner_review_gate": {
+    "artifact": ".agents/scratch/devs-24-cleared-for-owner-review.md",
+    "blocks": "e08 launch, any published surface, any reviewed_by=owner stamp",
+    "does_not_block": "e02 e03 e04 e05 e06 e07 build work",
+    "stamped_owner": 2,
+    "state": "OPEN_AWAITING_OWNER",
+    "verdicts_awaiting": 24
+  },
+  "phase": "E02_E04_WAVE",
+  "phase_since": "2026-08-26T23:56:00Z",
   "stop_counters": {
     "epic_validation_fails": {},
     "stage_errors": {}
