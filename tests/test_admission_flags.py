@@ -155,6 +155,56 @@ def test_ljharb_and_obra_clear_the_synthetic_repo_guard():
         assert "synthetic_repo" not in names(login)
 
 
+# --- F012: the synthetic-repo shape, and the humans nearest to it -----------
+#
+# THIS SHAPE ONLY BECOMES REACHABLE WHEN FAN-OUT OPENS THE POOL. e01's vault lane never
+# produced an account anywhere near it, so the rule shipped uncalibrated against a live
+# positive. e02 is the epic that makes the shape reachable, so it is the epic that owes
+# the regression row and the nearest-miss humans beside it.
+
+def test_the_mishapos_regression_row_fires_synthetic_repo():
+    """RECON-GHARCHIVE s3, the shape the rule was written for: 195,021 pushes across
+    194,964 distinct repos — exactly 1.00 push per repo, sustained. Nothing a human does
+    looks like this, and nothing in the e01 pool did either."""
+    from cerebro.gitintel.gharchive import WindowMetrics
+    from cerebro.gitintel.shape import pushes_per_repo
+    mishapos = WindowMetrics(window_days=90, pushes=195021, distinct_repos=194964,
+                             active_days=90, repos_not_owned=0, not_owned_basenames=0,
+                             max_basename_group=1)
+    assert round(pushes_per_repo(mishapos), 2) == 1.00
+    fired = {f.name for f in flags(mishapos)}
+    assert "synthetic_repo" in fired
+
+
+def test_the_synthetic_repo_flag_is_still_only_a_flag():
+    """Even at 194,964 repos. `excluded` is reachable only from a recorded human verdict,
+    and no arithmetic path reaches it — not even this one."""
+    from cerebro.gitintel.gharchive import WindowMetrics
+    mishapos = WindowMetrics(window_days=90, pushes=195021, distinct_repos=194964,
+                             active_days=90, max_basename_group=1)
+    assert automation_state(mishapos, "mishapos", Verdicts()) == "flagged"
+
+
+@pytest.mark.parametrize("login,ppr", [("wesbos", 1.50), ("ljharb", 2.65)])
+def test_the_nearest_miss_humans_sit_just_above_the_push_per_repo_line(login, ppr):
+    """THE HEADROOM, STATED. wesbos is the human MINIMUM measured at 1.50 against a 1.2
+    line: 0.30 of clearance, 25%. Raising SYNTHETIC_PUSH_PER_REPO past 1.50 reaches a
+    real named engineer immediately."""
+    from cerebro.gitintel.shape import pushes_per_repo
+    m = COHORT[login]
+    assert pushes_per_repo(m) == pytest.approx(ppr, abs=0.01)
+    assert pushes_per_repo(m) > admission.SYNTHETIC_PUSH_PER_REPO
+    assert "synthetic_repo" not in names(login)
+
+
+def test_wesbos_is_held_clear_by_the_repo_count_guard_not_only_by_the_rate():
+    """wesbos is below the 50-repo line as well, so TWO independent conjuncts keep him
+    out. The rate headroom alone is 25% and that is thinner than it should be to rest on."""
+    m = COHORT["wesbos"]
+    assert m.distinct_repos < admission.SYNTHETIC_REPO_MIN_REPOS
+    assert "synthetic_repo" not in names("wesbos")
+
+
 # --- the false-positive floor (kill criterion 3) -----------------------------
 
 @pytest.mark.parametrize("login", S2_HUMANS)
