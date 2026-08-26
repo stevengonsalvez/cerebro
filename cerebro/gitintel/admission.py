@@ -90,6 +90,26 @@ SYNTHETIC_PUSH_PER_REPO = 1.2
 """Human minimum measured: wesbos 1.50, ljharb 2.65 (at 65 repos, the only s2 human
 above the 50-repo guard alongside obra 8.49 and simonw 5.72)."""
 
+#: The `fork_farm` sub-shapes. ALL THREE ARE FLAGS. All three enter the review queue.
+#: NONE of them clears anybody, and `automation_state()` below is untouched: `excluded`
+#: stays reachable only from `verdicts.denied` and `clear` only from nothing-firing or a
+#: recorded `cleared:` verdict.
+#:
+#: THE SEPARATOR e01 ASKED FOR DOES NOT EXIST, AND THAT IS WHY THESE ARE NAMES AND NOT
+#: DECISIONS. e01's denylist header predicted that "forks of an upstream the person also
+#: authors" would separate a maintainer from a fork farm. Measured live: koala73
+#: (cleared: human) and diegosouzapw (denied: automation) BOTH return own_upstream 5,
+#: third_party 0, and both upstreams are non-fork repos the candidate owns
+#: (koala73/worldmonitor 84,341 stars; diegosouzapw/OmniRoute 56,206 stars). A rule that
+#: cleared one would clear the other. `tests/test_admission_flags.py` pins the equality
+#: so no future editor re-derives a separator that is not there.
+#:
+#: What the sub-shape buys is a CHEAPER, BETTER-INFORMED human decision: the reviewer
+#: reads "forks of diegosouzapw/OmniRoute, itself not a fork" instead of a bare
+#: concentration ratio. The decision stays theirs.
+FORK_SUBSHAPES = ("fork_farm_own_upstream", "fork_farm_third_party",
+                  "fork_farm_no_upstream")
+
 @dataclass(frozen=True)
 class Flag:
     """One automation shape that fired, carrying the numbers that fired it."""
@@ -108,6 +128,15 @@ def flags(m90) -> list[Flag]:
     diegosouzapw is 130 repos with 124 not-owned at concentration 0.9538. They are
     opposite shapes. Any single predicate wide enough to cover both swallows the entire
     human band between them.
+
+    THE SIGNATURE IS DELIBERATELY UNCHANGED FROM e01 AND TAKES NO KEYWORD. Two tests
+    (`test_flags_and_automation_state_take_no_threshold_kwargs`,
+    `test_no_admission_entry_point_has_a_default_valued_parameter`) forbid every
+    default-valued parameter on this function, because the scorer this replaces shipped
+    broken for six production runs behind exactly such an override seam. e02's fork
+    provenance is therefore applied by `name_fork_subshape()` AFTER this function
+    returns, rather than by growing a `fork_evidence=None` keyword here. Metrics in,
+    shapes out; refining a shape's NAME from external evidence is a separate step.
     """
     out: list[Flag] = []
     ppd = shape.push_per_active_day(m90)
@@ -170,6 +199,58 @@ def flags(m90) -> list[Flag]:
         ))
 
     return out
+
+
+def name_fork_subshape(fired, fork_evidence):
+    """Refine a fired `fork_farm` flag's NAME using fork provenance. Returns a new list.
+
+    A SEPARATE FUNCTION RATHER THAN A KEYWORD ON `flags()`, on purpose. e01 forbids every
+    default-valued parameter on the admission entry points because the condemned scorer
+    shipped broken behind an override seam of exactly that shape, and that guard is worth
+    more than the convenience of one keyword. Splitting the step also states the real
+    decomposition: `flags()` derives shapes from metrics, this derives a more precise
+    NAME from evidence gathered elsewhere.
+
+    IT RENAMES. IT NEVER ADDS, REMOVES, CLEARS OR EXCLUDES. The returned list has the
+    same length and the same order, `automation_state()` reads the same predicate it
+    always did, and every sub-shape is a flag that enters the review queue exactly as the
+    bare `fork_farm` would have.
+
+    Incomplete evidence — no evidence at all, a partial sample, an unresolved REST call,
+    an exhausted budget, or a genuinely mixed result — leaves the bare name standing. That
+    direction is the safe one: the bare flag still routes the account to a human, so
+    falling back costs a reviewer some context and costs nobody a wrong automatic outcome.
+    A flag is never renamed to a sub-shape it did not earn.
+    """
+    sub = _subshape_name(fork_evidence)
+    if not sub:
+        return list(fired)
+    from .fork_provenance import describe
+    detail = describe(fork_evidence)
+    return [
+        Flag(sub, f"{f.evidence} — {detail}", f.metric_values)
+        if f.name == "fork_farm" else f
+        for f in fired
+    ]
+
+
+def _subshape_name(ev) -> str | None:
+    """The precise sub-shape name, or None to leave the bare `fork_farm` standing.
+
+    Every branch returns a FLAG NAME. There is no branch that returns "clear", none that
+    returns "excluded", and none that returns a boolean.
+    """
+    if ev is None or not getattr(ev, "complete", False):
+        return None
+    if ev.third_party > 0:
+        # Any sample forking somebody else's repo is the shape worth naming, whatever
+        # else is in the sample.
+        return "fork_farm_third_party"
+    if ev.own_upstream == ev.checked and ev.checked > 0:
+        return "fork_farm_own_upstream"
+    if ev.no_upstream == ev.checked and ev.checked > 0:
+        return "fork_farm_no_upstream"
+    return None
 
 
 def automation_state(m90, login: str, verdicts) -> AutomationState:
