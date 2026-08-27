@@ -624,21 +624,6 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
         log(f"WARNING: {budget.rest_failures} REST call(s) FAILED (rate limit, 5xx or "
             f"transport). Today's absences are untrustworthy and this run is DEGRADED.")
 
-    result = sanity_check(top, verdicts)
-
-    top_path = out / f"devs-top20-{stamp}.md"
-    body = _render_top(top, stamp, generated_at, lanes)
-    digest = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
-    top_path.write_text(body + f"\nartifact-hash: {digest}\n", encoding="utf-8")
-
-    queue_path = out / f"devs-flagqueue-{stamp}.md"
-    queue_path.write_text(
-        _render_queue(records, flags_by_login, verdicts, stamp), encoding="utf-8")
-
-    census_path = out / f"devs-lanecensus-{stamp}.md"
-    census_path.write_text(
-        _render_census(census, budget, roster_skipped, stamp), encoding="utf-8")
-
     # --- F024: growth, from the history this run just extended -----------------
     #
     # Written as an ARTIFACT and nowhere else. It reaches no `Devs/*.md` field in this
@@ -667,6 +652,22 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
     if getattr(client, "_calls", calls_before_freshness) != calls_before_freshness:
         log("WARNING: the freshness pass spent REST calls — it is supposed to read only "
             "repos[] that the repo lane already fetched")
+
+
+    result = sanity_check(top, verdicts)
+
+    top_path = out / f"devs-top20-{stamp}.md"
+    body = _render_top(top, stamp, generated_at, lanes)
+    digest = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+    top_path.write_text(body + f"\nartifact-hash: {digest}\n", encoding="utf-8")
+
+    queue_path = out / f"devs-flagqueue-{stamp}.md"
+    queue_path.write_text(
+        _render_queue(records, flags_by_login, verdicts, stamp), encoding="utf-8")
+
+    census_path = out / f"devs-lanecensus-{stamp}.md"
+    census_path.write_text(
+        _render_census(census, budget, roster_skipped, stamp), encoding="utf-8")
 
     budget_path = out / f"devs-budget-{stamp}.json"
     budget_path.write_text(
@@ -1113,7 +1114,6 @@ def _render_census(census: dict, budget, roster_skipped, stamp: str) -> str:
         f"| REST failures (both clients) | {b['rest_failures']} | 0 |",
         f"| ClickHouse scans | {b['clickhouse_scans']} | 3 |",
         f"| history snapshots written | {b['snapshots_written']} | — |",
-        f"| response cache rows deleted | {b['responses_deleted']} | — |",
         f"| fork provenance calls | {b['fork_calls_used']} | {b['fork_calls_cap']} |",
         "",
     ]
@@ -1125,8 +1125,9 @@ def _render_census(census: dict, budget, roster_skipped, stamp: str) -> str:
                      f"run's absences are untrustworthy. Churn deletions are refused.")
     else:
         lines.append("- No REST call failed.")
-    if census.get("growth"):
-        lines.append(f"- {census['growth']}")
+    for key in ("growth", "freshness"):
+        if census.get(key):
+            lines.append(f"- {census[key]}")
     if b["truncated"]:
         lines.append(f"- **REST BUDGET TRUNCATED**: {b['skipped_logins']} candidate(s) "
                      f"were never humanness-checked. They are in the pool, labelled, and "
