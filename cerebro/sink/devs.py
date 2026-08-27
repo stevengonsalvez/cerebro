@@ -33,6 +33,11 @@ register: describe the activity, never judge the person.
 
 from __future__ import annotations
 
+import os
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+
 from ..gitintel import facets as facets_mod
 
 #: The 16 frozen top-level keys, in the order the site's serialization contract lists
@@ -397,3 +402,235 @@ def withheld(records, *, optout=None, verdicts=None):
         if not ok:
             out.append((str(_field(rec, "login", "")), reason))
     return out
+
+
+# --- the reconciling writer -----------------------------------------------------
+#
+# AN APPEND-ONLY WRITER CANNOT HONOUR AN OPT-OUT. If `Devs/` is only ever added to, a
+# person who asks to be removed keeps their page for ever and charter outcome 4 is
+# unmet. So this module OWNS `Devs/*.md` and nothing else: it computes a plan over
+# {today's publish set} against {the notes already on disk}, and it touches no other path
+# in the vault, ever.
+#
+# DELETIONS HAVE TWO SOURCES AND TWO RISK PROFILES, SO THEY GET TWO RULES.
+#
+#   CONSENT  a login in the opt-out file, or carrying a `denied:` verdict
+#            -> executed ALWAYS. Including on a failed run. Uncapped.
+#   CHURN    on disk, absent from today's publish set for any other reason
+#            -> executed only on a HEALTHY run, and only under the churn cap.
+#
+# Those two sentences are the whole design. A lane that half-fails must not quietly
+# unpublish four hundred people; a person who asked to be removed must be removed even
+# when the lane half-failed.
+#
+# ZERO OUTPUT IS SAFE BY CONSTRUCTION. A run with an empty publish set writes nothing,
+# deletes no churn, still executes consent deletes, and never creates or empties
+# `Devs/` — so the site's `assertDevsIntegrity()` empty-corpus floor cannot be tripped by
+# one bad CEREBRO morning.
+
+#: The directory this module owns. It touches nothing else under the vault root.
+CORPUS_DIR = "Devs"
+
+#: The churn cap. Refuse the churn deletions WHOLESALE past `max(25, 25% of corpus)`,
+#: keep the corpus intact, and return a loud reason the pipeline stage turns into a page.
+#: Wholesale rather than "delete the first 25": a partial unpublish is a corpus that
+#: agrees with neither today's run nor yesterday's.
+CHURN_CAP_MIN = 25
+CHURN_CAP_FRACTION = 0.25
+
+#: `refused_reason` values. Distinct strings because the operator response differs: one
+#: is "the run was bad, look at the run", the other is "the run was fine and produced
+#: nobody, look at the lanes".
+REFUSED_EMPTY = "empty-publish-set"
+REFUSED_UNHEALTHY = "unhealthy-run"
+REFUSED_CHURN_CAP = "churn-cap-exceeded"
+
+_TIMESTAMP_LINE = re.compile(r'^generated_at: .*$', re.MULTILINE)
+
+
+@dataclass(frozen=True)
+class CorpusPlan:
+    """What a run WOULD do to `Devs/`. Pure: no clock, no disk, no network."""
+
+    writes: list = field(default_factory=list)
+    deletes_consent: list = field(default_factory=list)
+    deletes_churn: list = field(default_factory=list)
+    withheld: list = field(default_factory=list)
+    #: Non-empty when churn deletions were refused, and why. Never suppresses a consent
+    #: deletion: those have no refusal path at all.
+    refused_reason: str = ""
+
+    @property
+    def deletes(self) -> list:
+        return list(self.deletes_consent) + list(self.deletes_churn)
+
+
+def churn_cap(corpus_size: int) -> int:
+    return max(CHURN_CAP_MIN, int(corpus_size * CHURN_CAP_FRACTION))
+
+
+def plan(records, existing_logins, *, optout=None, verdicts=None, healthy=True):
+    """Today's publish set against what is on disk. PURE.
+
+    `existing_logins` is the set of `<login>` stems already in `Devs/`, exactly as the
+    filenames spell them, because a deletion has to name a real file.
+    """
+    publish = publish_set(records, optout=optout, verdicts=verdicts)
+    held = withheld(records, optout=optout, verdicts=verdicts)
+
+    existing = list(existing_logins or [])
+    optout_logins = getattr(optout, "logins", frozenset()) or frozenset()
+    denied = set(getattr(verdicts, "denied", {}) or {})
+
+    # CONSENT DELETES ARE COMPUTED FIRST AND ARE NEVER SUBJECT TO ANYTHING BELOW.
+    deletes_consent = [x for x in existing
+                       if slug(x) in optout_logins or slug(x) in denied]
+    consent_keys = {slug(x) for x in deletes_consent}
+    publish_keys = {slug(_field(r, "login", "")) for r in publish}
+    churn = [x for x in existing
+             if slug(x) not in publish_keys and slug(x) not in consent_keys]
+
+    refused = ""
+    if not publish:
+        # Nothing to publish is not the same as "unpublish everybody". It writes nothing,
+        # deletes no churn, and leaves the corpus exactly as it was.
+        refused, churn = REFUSED_EMPTY, []
+    elif not healthy:
+        refused, churn = REFUSED_UNHEALTHY, []
+    elif len(churn) > churn_cap(len(existing)):
+        refused, churn = REFUSED_CHURN_CAP, []
+
+    # THE BELT. A denied login reaching `writes` is a DEFECT, not an outcome: without the
+    # sixth clause the same run would delete this person as a consent delete and re-write
+    # them from this very plan. Raising is correct — the alternative is handing `apply()`
+    # a page about somebody a reviewer excluded.
+    leaked = sorted(k for k in publish_keys if k in denied)
+    if leaked:
+        raise AssertionError(
+            f"denied login(s) {', '.join(leaked)} reached plan().writes. The write gate's "
+            f"sixth clause exists precisely to make this unreachable; a page about a "
+            f"person a reviewer excluded must never be handed to apply().")
+
+    return CorpusPlan(writes=list(publish), deletes_consent=deletes_consent,
+                      deletes_churn=list(churn), withheld=held,
+                      refused_reason=refused)
+
+
+def apply(corpus_plan: CorpusPlan, root) -> dict:
+    """Execute a plan against `<root>/Devs/`. The only function here that touches disk.
+
+    A note whose ONLY difference from the one on disk is `generated_at` is LEFT ALONE.
+    `generated_at` means "when these facts last changed"; stamping it from the clock on
+    every run would hand the public vault a full-corpus commit every morning and make its
+    history mean nothing.
+    """
+    directory = Path(root) / CORPUS_DIR
+    result = {
+        "dir": str(directory),
+        "written": [],
+        "unchanged": [],
+        "deleted": [],
+        "refused_reason": corpus_plan.refused_reason,
+        "withheld": len(corpus_plan.withheld),
+    }
+
+    if not corpus_plan.writes and not corpus_plan.deletes:
+        # NEVER create the directory just to leave it empty: the site treats an existing
+        # but empty `Devs/` as a broken clone and makes it a build-killing throw.
+        return result
+
+    if corpus_plan.writes:
+        directory.mkdir(parents=True, exist_ok=True)
+        _sweep_stale(directory)
+
+    for record in corpus_plan.writes:
+        login = str(_field(record, "login", ""))
+        target = directory / f"{login}.md"
+        text = render(_as_dict(record))
+        if target.exists() and _same_facts(target.read_text(encoding="utf-8"), text):
+            result["unchanged"].append(login)
+            continue
+        _atomic_write(target, text)
+        result["written"].append(login)
+
+    for login in corpus_plan.deletes:
+        target = directory / f"{login}.md"
+        try:
+            target.unlink()
+            result["deleted"].append(login)
+        except FileNotFoundError:
+            pass
+
+    return result
+
+
+def write_corpus(records, settings, *, optout=None, verdicts=None, healthy=True):
+    """Resolve the root the way the roundup does, plan, and apply. Returns the result.
+
+    `settings.dry_run` sends the whole corpus to `<vault>/_scratch/Devs/`, which is the
+    only mode this epic ever runs.
+    """
+    root = (Path(settings.vault_path) / "_scratch") if settings.dry_run \
+        else Path(settings.vault_path)
+    existing = existing_logins(root)
+    corpus_plan = plan(records, existing, optout=optout, verdicts=verdicts,
+                       healthy=healthy)
+    out = apply(corpus_plan, root)
+    out["dry_run"] = bool(settings.dry_run)
+    out["plan"] = {
+        "writes": len(corpus_plan.writes),
+        "deletes_consent": len(corpus_plan.deletes_consent),
+        "deletes_churn": len(corpus_plan.deletes_churn),
+        "withheld": len(corpus_plan.withheld),
+        "existing": len(existing),
+    }
+    return corpus_plan, out
+
+
+def existing_logins(root) -> list[str]:
+    """The `<login>` stems already in `<root>/Devs/`, sorted. Empty when absent."""
+    directory = Path(root) / CORPUS_DIR
+    if not directory.is_dir():
+        return []
+    return sorted(p.stem for p in directory.glob("*.md"))
+
+
+def _as_dict(record) -> dict:
+    if isinstance(record, dict):
+        return record
+    from dataclasses import asdict, is_dataclass
+    return asdict(record) if is_dataclass(record) else dict(record)
+
+
+def _same_facts(old: str, new: str) -> bool:
+    """Equal once `generated_at` is elided from both. See 1.6."""
+    blank = 'generated_at: ""'
+    return (_TIMESTAMP_LINE.sub(blank, old, count=1)
+            == _TIMESTAMP_LINE.sub(blank, new, count=1))
+
+
+def _sweep_stale(directory: Path) -> None:
+    for stale in directory.glob(".*.md.tmp"):
+        try:
+            stale.unlink()
+        except OSError:
+            pass
+
+
+def _atomic_write(target: Path, text: str) -> None:
+    """Full temp file, then `os.replace`. The roundup's discipline, restated.
+
+    `os.replace` is atomic on POSIX, so a reader (including `run.sh`'s `git add`) can
+    only ever observe a complete note. A plain `write_text` killed mid-flush would leave
+    a TRUNCATED note that the next run's unchanged-comparison reads as "changed" and that
+    `git add -- Devs` would push to a PUBLIC repository in the meantime.
+    """
+    tmp = target.with_name(f".{target.name}.tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, target)
+    finally:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass

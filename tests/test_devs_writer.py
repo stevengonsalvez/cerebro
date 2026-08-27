@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import json
+import types
 from pathlib import Path
 
 import pytest
@@ -186,3 +187,251 @@ def test_the_gate_reads_the_vocabulary_from_the_producer_not_a_copy():
     src = inspect.getsource(devs.publishable)
     assert "PREFILTER_UNCHECKED" in src and "pool." in src
     assert "deferred_below_activity_floor" not in src
+
+
+# --- the reconciling writer ----------------------------------------------------
+
+def scratch_vault(tmp_path, *, devs=(), other=True) -> Path:
+    """A vault root holding Daily/, Signals/, Weekly/ and some Devs/ notes."""
+    root = tmp_path / "vault"
+    (root / "Devs").mkdir(parents=True)
+    for login in devs:
+        (root / "Devs" / f"{login}.md").write_text(
+            devs_note(login), encoding="utf-8")
+    if other:
+        for sub, name in (("Daily", "2026-08-27.md"), ("Signals", "abc.md"),
+                          ("Weekly", "2026-w35.md")):
+            (root / sub).mkdir(parents=True, exist_ok=True)
+            (root / sub / name).write_text(f"{sub} content\n", encoding="utf-8")
+    return root
+
+
+def devs_note(login: str) -> str:
+    return devs.render(rec(login=login))
+
+
+def snapshot(root: Path) -> dict:
+    return {str(p.relative_to(root)): p.read_bytes()
+            for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+def settings_for(root, dry_run=True):
+    return types.SimpleNamespace(vault_path=root, dry_run=dry_run)
+
+
+# --- deletions: the two rules ---------------------------------------------------
+
+def test_a_consent_delete_fires_on_a_healthy_run():
+    got = devs.plan([rec(login="keepme")], ["keepme", "removeme"],
+                    optout=consent("removeme"), verdicts=VERDICTS, healthy=True)
+    assert got.deletes_consent == ["removeme"]
+    assert [r["login"] for r in got.writes] == ["keepme"]
+
+
+def test_a_consent_delete_fires_on_an_UNHEALTHY_run_too():
+    """THE WHOLE POINT. A person who asked to be removed must be removed even when the
+    lane half-failed. Consent deletions are exempt from every guard below."""
+    got = devs.plan([rec(login="keepme")], ["keepme", "removeme"],
+                    optout=consent("removeme"), verdicts=VERDICTS, healthy=False)
+    assert got.deletes_consent == ["removeme"]
+    assert got.refused_reason == devs.REFUSED_UNHEALTHY
+    assert got.deletes_churn == []
+
+
+def test_a_denied_verdict_is_a_consent_class_delete():
+    """The DELETE half of the sixth clause. `GCGH159` carries a recorded verdict, so a
+    note for him on disk is removed even though nobody asked."""
+    denied = sorted(VERDICTS.denied)[0]
+    got = devs.plan([rec(login="keepme")], ["keepme", denied],
+                    optout=NO_ONE, verdicts=VERDICTS, healthy=True)
+    assert got.deletes_consent == [denied]
+
+
+def test_a_denied_login_is_deleted_and_not_re_written_in_the_same_run():
+    """Without clause six this exact plan would delete GCGH159 and re-write him from the
+    same publish set. The record is the REAL stale one, off the run artifact."""
+    got = devs.plan([STALE_DENIED], ["GCGH159"], optout=NO_ONE, verdicts=VERDICTS,
+                    healthy=True)
+    assert got.deletes_consent == ["GCGH159"]
+    assert [devs.slug(r["login"]) for r in got.writes] == []
+
+
+def test_the_belt_raises_when_the_gate_is_weakened_to_five_clauses(monkeypatch):
+    """Proves the assertion in plan() is load-bearing rather than decorative: with
+    publishable() monkeypatched back to the five-clause form, the denied login reaches
+    writes and plan() refuses to hand it to apply()."""
+    monkeypatch.setattr(devs, "publish_set", lambda records, **kw: list(records))
+    with pytest.raises(AssertionError, match="sixth clause"):
+        devs.plan([STALE_DENIED], [], optout=NO_ONE, verdicts=VERDICTS, healthy=True)
+
+
+def test_churn_deletes_fire_on_a_healthy_run_and_only_then():
+    on_disk = ["keepme"] + [f"gone{i}" for i in range(5)]
+    healthy = devs.plan([rec(login="keepme")], on_disk, optout=NO_ONE,
+                        verdicts=VERDICTS, healthy=True)
+    assert sorted(healthy.deletes_churn) == sorted(f"gone{i}" for i in range(5))
+    sick = devs.plan([rec(login="keepme")], on_disk, optout=NO_ONE,
+                     verdicts=VERDICTS, healthy=False)
+    assert sick.deletes_churn == [] and sick.refused_reason == devs.REFUSED_UNHEALTHY
+
+
+def test_the_churn_cap_refuses_wholesale_and_keeps_the_corpus():
+    """A degraded morning must not silently unpublish hundreds of real people. Wholesale
+    rather than partial: half a reconciliation agrees with neither run."""
+    on_disk = [f"dev{i}" for i in range(200)]
+    got = devs.plan([rec(login="dev0")], on_disk, optout=NO_ONE, verdicts=VERDICTS,
+                    healthy=True)
+    assert got.deletes_churn == []
+    assert got.refused_reason == devs.REFUSED_CHURN_CAP
+
+
+def test_a_churn_delete_just_under_the_cap_still_executes():
+    """Negative control for the cap: without it the test above would pass against a
+    writer that never deletes anything."""
+    on_disk = [f"dev{i}" for i in range(100)]
+    keep = [rec(login=f"dev{i}") for i in range(76)]
+    got = devs.plan(keep, on_disk, optout=NO_ONE, verdicts=VERDICTS, healthy=True)
+    assert len(got.deletes_churn) == 24 <= devs.churn_cap(100)
+    assert got.refused_reason == ""
+
+
+def test_an_empty_publish_set_writes_nothing_and_deletes_no_churn():
+    got = devs.plan([], ["a", "b", "c"], optout=NO_ONE, verdicts=VERDICTS,
+                    healthy=True)
+    assert got.writes == [] and got.deletes_churn == []
+    assert got.refused_reason == devs.REFUSED_EMPTY
+
+
+def test_an_empty_publish_set_still_honours_a_removal_request():
+    got = devs.plan([], ["a", "removeme"], optout=consent("removeme"),
+                    verdicts=VERDICTS, healthy=True)
+    assert got.deletes_consent == ["removeme"]
+    assert got.refused_reason == devs.REFUSED_EMPTY
+
+
+def test_plan_is_pure(tmp_path):
+    """No clock, no disk, no network. Called twice with the same input it returns the
+    same answer, and it creates nothing."""
+    before = sorted(tmp_path.rglob("*"))
+    a = devs.plan([rec(login="x")], ["x", "y"], optout=NO_ONE, verdicts=VERDICTS)
+    b = devs.plan([rec(login="x")], ["x", "y"], optout=NO_ONE, verdicts=VERDICTS)
+    assert a == b
+    assert sorted(tmp_path.rglob("*")) == before
+
+
+# --- apply(): what actually touches disk ----------------------------------------
+
+def test_apply_writes_deletes_and_leaves_the_rest_of_the_vault_alone(tmp_path):
+    root = scratch_vault(tmp_path, devs=["stale"])
+    outside = {k: v for k, v in snapshot(root).items() if not k.startswith("Devs/")}
+    got = devs.plan([rec(login="fresh")], ["stale"], optout=NO_ONE, verdicts=VERDICTS)
+    result = devs.apply(got, root)
+    assert result["written"] == ["fresh"] and result["deleted"] == ["stale"]
+    assert (root / "Devs" / "fresh.md").is_file()
+    assert not (root / "Devs" / "stale.md").exists()
+    after = {k: v for k, v in snapshot(root).items() if not k.startswith("Devs/")}
+    assert after == outside, "the writer owns Devs/*.md and nothing else"
+
+
+def test_an_empty_plan_never_creates_the_directory(tmp_path):
+    """The site treats an existing but EMPTY Devs/ as a broken clone and makes it a
+    build-killing throw. A bad CEREBRO morning must not be able to cause that."""
+    root = tmp_path / "vault"
+    root.mkdir()
+    got = devs.plan([], [], optout=NO_ONE, verdicts=VERDICTS)
+    devs.apply(got, root)
+    assert not (root / "Devs").exists()
+
+
+def test_a_note_whose_only_difference_is_the_timestamp_is_left_untouched(tmp_path):
+    """1.6. Otherwise 1,300 notes rewrite every morning and the public vault's history
+    stops meaning anything."""
+    root = scratch_vault(tmp_path, devs=["esengine"])
+    before = (root / "Devs" / "esengine.md").stat().st_mtime_ns
+    restamped = rec(login="esengine", generated_at="2099-01-01T00:00:00+00:00")
+    result = devs.apply(
+        devs.plan([restamped], ["esengine"], optout=NO_ONE, verdicts=VERDICTS), root)
+    assert result["unchanged"] == ["esengine"] and result["written"] == []
+    assert (root / "Devs" / "esengine.md").stat().st_mtime_ns == before
+    assert "2099" not in (root / "Devs" / "esengine.md").read_text(encoding="utf-8")
+
+
+def test_a_note_whose_numbers_moved_is_rewritten_with_the_new_timestamp(tmp_path):
+    """Negative control for the test above."""
+    root = scratch_vault(tmp_path, devs=["esengine"])
+    moved = rec(login="esengine", generated_at="2099-01-01T00:00:00+00:00")
+    moved["windows"]["90d"]["pushes"] += 1
+    result = devs.apply(
+        devs.plan([moved], ["esengine"], optout=NO_ONE, verdicts=VERDICTS), root)
+    assert result["written"] == ["esengine"] and result["unchanged"] == []
+    text = (root / "Devs" / "esengine.md").read_text(encoding="utf-8")
+    assert "2099-01-01" in text
+
+
+def test_the_written_note_is_exactly_what_the_renderer_produced(tmp_path):
+    root = tmp_path / "vault"
+    root.mkdir()
+    record = rec(login="esengine")
+    devs.apply(devs.plan([record], [], optout=NO_ONE, verdicts=VERDICTS), root)
+    assert (root / "Devs" / "esengine.md").read_text(encoding="utf-8") \
+        == devs.render(record)
+
+
+def test_a_stale_temp_file_is_swept_before_anything_is_written(tmp_path):
+    """`git add -- Devs` would otherwise push a power-loss stump to a PUBLIC repo."""
+    root = scratch_vault(tmp_path, devs=[])
+    (root / "Devs" / ".esengine.md.tmp").write_text("half a note", encoding="utf-8")
+    devs.apply(devs.plan([rec(login="esengine")], [], optout=NO_ONE,
+                         verdicts=VERDICTS), root)
+    assert not list((root / "Devs").glob(".*.tmp"))
+
+
+def test_deleting_a_note_that_is_already_gone_is_not_an_error(tmp_path):
+    root = scratch_vault(tmp_path, devs=[])
+    got = devs.CorpusPlan(deletes_consent=["never-existed"])
+    assert devs.apply(got, root)["deleted"] == []
+
+
+# --- write_corpus(): where the corpus lands --------------------------------------
+
+def test_a_dry_run_lands_under_scratch_and_a_real_write_does_not(tmp_path):
+    root = tmp_path / "vault"
+    (root / "Devs").mkdir(parents=True)
+    record = rec(login="esengine")
+    _, out = devs.write_corpus([record], settings_for(root, dry_run=True),
+                               optout=NO_ONE, verdicts=VERDICTS)
+    assert (root / "_scratch" / "Devs" / "esengine.md").is_file()
+    assert not (root / "Devs" / "esengine.md").exists()
+    assert out["dry_run"] is True
+
+    _, out = devs.write_corpus([rec(login="obra")], settings_for(root, dry_run=False),
+                               optout=NO_ONE, verdicts=VERDICTS)
+    assert (root / "Devs" / "obra.md").is_file()
+
+
+def test_write_corpus_reconciles_against_what_is_already_in_scratch(tmp_path):
+    root = tmp_path / "vault"
+    scratch = root / "_scratch" / "Devs"
+    scratch.mkdir(parents=True)
+    (scratch / "gone.md").write_text(devs_note("gone"), encoding="utf-8")
+    _, out = devs.write_corpus([rec(login="esengine")], settings_for(root),
+                               optout=NO_ONE, verdicts=VERDICTS)
+    assert out["deleted"] == ["gone"] and out["written"] == ["esengine"]
+    assert out["plan"]["existing"] == 1
+
+
+def test_existing_logins_is_empty_and_quiet_when_the_directory_is_absent(tmp_path):
+    assert devs.existing_logins(tmp_path / "nowhere") == []
+
+
+def test_a_dataclass_record_writes_the_same_bytes_as_its_dict(tmp_path):
+    """The writer takes RECORDS, and they arrive both ways: off the producer as a
+    DevRecord and out of a run json as a dict."""
+    from cerebro.gitintel.devs_spike import DevRecord
+    record = rec(login="esengine")
+    as_dataclass = DevRecord(**record)
+    root = tmp_path / "vault"
+    root.mkdir()
+    devs.apply(devs.plan([as_dataclass], [], optout=NO_ONE, verdicts=VERDICTS), root)
+    assert (root / "Devs" / "esengine.md").read_text(encoding="utf-8") \
+        == devs.render(record)
