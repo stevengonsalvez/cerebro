@@ -222,3 +222,68 @@ def test_the_cache_ttl_is_a_week_and_that_is_the_whole_cost_argument():
     weekly. 168h means a cold run populates the cap, the next two finish the corpus, and
     the steady state is roughly corpus/7 calls a day."""
     assert repo_facts.REPO_CACHE_TTL_HOURS == 168
+
+
+# --- the budget bounds REST calls, not cache hits ------------------------------
+
+class _CachingClient:
+    """A client with the real one's two counters, serving a repeat from cache."""
+
+    def __init__(self):
+        self.seen: set[str] = set()
+        self._calls = 0
+        self._cache_hits = 0
+
+    def request(self, path, params=None):
+        if path in self.seen:
+            self._cache_hits += 1
+        else:
+            self.seen.add(path)
+            self._calls += 1
+        return PAYLOAD
+
+
+def test_a_cache_hit_gives_the_budget_claim_back():
+    """WITHOUT THIS THE CORPUS NEVER FILLS AND EVERY METER STILL READS HEALTHY. A cold
+    run buys the cap; the next run would otherwise spend the whole ceiling re-reading the
+    same devs out of the 168-hour cache and never reach the rest."""
+    client = _CachingClient()
+    budget = repo_facts.RepoBudget(2)
+    repo_facts.facts_for("simonw", client, budget=budget)
+    assert budget.used == 1
+    facts, populated = repo_facts.facts_for("simonw", client, budget=budget)
+    assert populated is True and facts
+    assert budget.used == 1, "the second read was a cache hit and cost no quota"
+    assert client._calls == 1 and client._cache_hits == 1
+
+
+def test_a_second_run_over_a_warm_cache_reaches_devs_the_first_run_could_not():
+    """The shape the whole 168-hour TTL argument depends on, asserted end to end."""
+    client = _CachingClient()
+    everyone = [f"dev{i}" for i in range(6)]
+
+    def a_run(cap):
+        budget = repo_facts.RepoBudget(cap)
+        return {login for login in everyone
+                if repo_facts.facts_for(login, client, budget=budget)[1]}
+
+    first = a_run(3)
+    assert first == {"dev0", "dev1", "dev2"}
+    second = a_run(3)
+    assert second == set(everyone), "the warm three cost nothing, so all six are reached"
+
+
+def test_a_client_with_no_cache_counter_still_charges_for_every_call():
+    """A stub client reports no counters. Refunding on "unknown" would make the ceiling
+    unbounded against exactly the clients that cannot prove they cached anything."""
+    budget = repo_facts.RepoBudget(5)
+    client = _Client()
+    for login in ("a", "b", "c"):
+        repo_facts.facts_for(login, client, budget=budget)
+    assert budget.used == 3
+
+
+def test_refund_never_goes_below_zero():
+    budget = repo_facts.RepoBudget(2)
+    budget.refund()
+    assert budget.used == 0

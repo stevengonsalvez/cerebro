@@ -123,6 +123,23 @@ class RepoBudget:
         self.used += 1
         return True
 
+    def refund(self) -> None:
+        """Give a claim back, because A CACHE HIT IS NOT A REST CALL.
+
+        WITHOUT THIS THE CORPUS NEVER FILLS, and the failure is silent. The budget is
+        claimed before the request, because that is the only ordering that can bound
+        anything; but the client answers most of those requests out of a 168-hour cache,
+        and a cache hit costs no quota. Charging for one means the second run spends its
+        whole ceiling re-reading the SAME 500 devs it already has, the next 816 are never
+        reached, and `repos_populated: false` becomes permanent for two thirds of the
+        corpus while every meter reports a healthy run.
+
+        With the refund the intended shape holds: a cold run buys the cap, the next runs
+        pay nothing for what they already hold and spend the whole cap on new devs, and
+        the steady state is roughly corpus/7 calls a day.
+        """
+        self.used = max(0, self.used - 1)
+
 
 def select(login: str, payload) -> tuple[dict, ...]:
     """The repos a profile shows, from one raw API page. PURE, and star-blind.
@@ -197,6 +214,7 @@ def facts_for(login: str, client, *, first_seen_by_repo=None, budget: RepoBudget
     """
     if not budget.take():
         return (), False
+    hits_before = getattr(client, "_cache_hits", None)
     try:
         payload = client.request(USER_REPOS_PATH.format(login=login), {
             "per_page": PER_PAGE,
@@ -205,6 +223,11 @@ def facts_for(login: str, client, *, first_seen_by_repo=None, budget: RepoBudget
         })
     except Exception:  # noqa: BLE001 — one bad account must not sink the lane
         return (), False
+    # The budget bounds REST CALLS. An answer served from the 168-hour cache cost no
+    # quota, so it gives the claim back and the ceiling is spent on devs nobody has read
+    # yet. See `RepoBudget.refund`: without this the corpus never fills.
+    if hits_before is not None and getattr(client, "_cache_hits", hits_before) > hits_before:
+        budget.refund()
     if not isinstance(payload, list):
         # A 404 (deleted account) or a malformed body. Nobody was successfully looked at,
         # so this is NOT "they have no repos".
