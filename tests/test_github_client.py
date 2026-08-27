@@ -111,6 +111,51 @@ def test_a_4xx_that_raises_still_counts(tmp_path, monkeypatch):
     assert cl._calls == 1
 
 
+# --- the third counter: calls that RAISED --------------------------------------
+#
+# `_calls` says what left the process and `_errors` says how much of it came back
+# broken. The split is what lets `devs-refresh` tell a DEGRADED run from a small one:
+# every REST consumer in the devs lane swallows its own exceptions on purpose, so
+# without a counter at the client a rate-limited run resolves nobody and reports a
+# clean bill of health. See `tests/test_devs_degraded.py`.
+
+def test_a_fresh_client_starts_at_zero_errors(tmp_path, monkeypatch):
+    cl = _client(tmp_path, monkeypatch, [_Resp(200, {})])
+    assert cl._errors == 0
+    assert "_errors" in vars(cl), "a getattr default would report a healthy run vacuously"
+
+
+def test_a_403_increments_errors(tmp_path, monkeypatch):
+    """The measured production case: `GitHub 403 ... API rate limit exceeded`."""
+    cl = _client(tmp_path, monkeypatch, [_Resp(403, {"message": "API rate limit exceeded"})])
+    with pytest.raises(GitHubClientError):
+        cl.request("/users/simonw")
+    assert (cl._calls, cl._errors) == (1, 1)
+
+
+def test_a_transport_exception_increments_errors(tmp_path, monkeypatch):
+    cl = _client(tmp_path, monkeypatch, [requests.ConnectionError("reset by peer")])
+    with pytest.raises(GitHubClientError):
+        cl.request("/users/simonw")
+    assert (cl._calls, cl._errors) == (1, 1)
+
+
+def test_a_404_is_an_answer_and_not_an_error(tmp_path, monkeypatch):
+    """A 404 for `/users/{login}` MEANS the account is gone, and a run that met one
+    deleted account is not degraded. A health predicate that cried wolf on this would be
+    turned off, which is worse than not having one."""
+    cl = _client(tmp_path, monkeypatch, [_Resp(404, {"message": "Not Found"})])
+    assert cl.request("/users/ghost") is None
+    assert (cl._calls, cl._errors) == (1, 0)
+
+
+def test_a_success_never_increments_errors(tmp_path, monkeypatch):
+    cl = _client(tmp_path, monkeypatch, [_Resp(200, {"login": "simonw"})])
+    cl.request("/users/simonw")
+    cl.request("/users/simonw")           # cache hit
+    assert cl._errors == 0
+
+
 def test_distinct_paths_do_not_share_a_cache_entry(tmp_path, monkeypatch):
     cl = _client(tmp_path, monkeypatch,
                  [_Resp(200, {"login": "a"}), _Resp(200, {"login": "b"})])
