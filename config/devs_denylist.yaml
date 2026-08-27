@@ -25,14 +25,14 @@ denied:
     verdict: automation
     shape: mass_self_repo
     evidence: "90d live 2026-08-26: 27764 pushes / 109 distinct repos / 90 active days (91 raw, clamped to the window) / 0 not-owned (ratio 0.0000) / 308.49 pushes per active day / 254.72 pushes per repo / basename concentration 0.0092"
-    reviewed_by: owner
+    reviewed_by: e01-builder
     reviewed_on: 2026-08-26
 
   - login: diegosouzapw
     verdict: automation
     shape: fork_farm
     evidence: "90d live 2026-08-26: 2274 pushes / 130 distinct repos / 87 active days / 124 not-owned across 2 basenames / max basename group 124 / concentration 0.9538 / 26.14 pushes per active day"
-    reviewed_by: owner
+    reviewed_by: e01-builder
     reviewed_on: 2026-08-26
 
 cleared:
