@@ -168,3 +168,121 @@ def test_fetch_page_is_silent_on_failure(monkeypatch):
 
     monkeypatch.setattr(requests, "get", boom)
     assert _fetch_page("https://unreachable.example") == ""
+
+
+# --- F016: the reverse resolver is PARKED and off by default -------------------
+#
+# WHAT IS BEING SUBTRACTED. Until this flag existed, `_roster_enrich` called
+# `resolve_from_blog` for every dev with a blog and no handle — i.e. the Court-PARKED
+# path ran by DEFAULT. The ruling: "a mislinked X account on a named person's page is the
+# charter's wrong-number-worse-than-no-page class, and the reverse resolver has no
+# measured precision on this pool."
+#
+# NOTHING IN THIS FILE OBSERVED THAT PATH BEFORE. The existing cases monkeypatch
+# `resolve_from_github` only, and no fixture had a dev with a blog and no handle, so the
+# reverse branch was never reachable in a test in either direction. Both halves are new.
+
+BLOG_ONLY_ROSTER = """\
+version: 1
+
+wiring:
+  enabled: true
+  max_tier: 2
+
+defaults:
+  tier: 2
+  enabled: true
+
+devs:
+  - name: Blogger Only
+    tier: 2
+    x: null
+    github: null
+    blog: "https://bloggeronly.example"
+    blog_feed: null
+    reddit: null
+    why: "has a blog and no handle — the only shape that reaches the reverse branch"
+    added: "2026-08-27"
+"""
+
+
+def _blog_only_roster(tmp_path: Path) -> Path:
+    p = tmp_path / "cracked_devs.yaml"
+    p.write_text(BLOG_ONLY_ROSTER, encoding="utf-8")
+    return p
+
+
+def test_enrich_does_not_touch_the_reverse_resolver_without_the_flag(
+        monkeypatch, tmp_path, capsys):
+    """A fail-if-called sentinel on the exact function the Court parked."""
+    _wire(monkeypatch, tmp_path, _blog_only_roster(tmp_path))
+
+    def _fail(*a, **k):
+        import pytest as _pytest
+        _pytest.fail("the reverse resolver ran without --reverse-resolve")
+
+    monkeypatch.setattr(identity, "resolve_from_blog", _fail)
+    _run(monkeypatch, ["enrich"])
+    out = json.loads(capsys.readouterr().out)
+    assert out["action"] == "enrich"
+    assert out["changes"] == []
+    assert out["written"] is False
+
+
+def test_the_flag_runs_it_exactly_once_and_prints_what_it_cannot_promise(
+        monkeypatch, tmp_path, capsys):
+    _wire(monkeypatch, tmp_path, _blog_only_roster(tmp_path))
+    seen = []
+
+    def _record(blog_url, client, fetch_page=None):
+        seen.append(blog_url)
+        return identity.Identity(github="bloggeronly", blog=blog_url,
+                                 confidence="medium", evidence="test")
+
+    monkeypatch.setattr(identity, "resolve_from_blog", _record)
+    _run(monkeypatch, ["enrich", "--reverse-resolve"])
+    text = capsys.readouterr().out
+    out = json.loads(text[text.index("{"):])
+
+    assert seen == ["https://bloggeronly.example"]
+    assert [c["field"] for c in out["changes"]] == ["github"]
+    assert "NO measured precision" in text
+    assert "--reverse-resolve is ON" in text
+
+
+def test_a_dev_with_a_handle_never_reaches_the_reverse_branch_even_with_the_flag(
+        monkeypatch, tmp_path, capsys):
+    """The forward direction is authoritative and free; the reverse one is a guess. A dev
+    who already has a handle must never be re-derived from their blog."""
+    _wire(monkeypatch, tmp_path, _roster(tmp_path))
+
+    def _fail(*a, **k):
+        import pytest as _pytest
+        _pytest.fail("the reverse resolver ran for a dev who already has a handle")
+
+    monkeypatch.setattr(identity, "resolve_from_blog", _fail)
+    monkeypatch.setattr(
+        identity, "resolve_from_github",
+        lambda login, client: identity.Identity(github=login, confidence="high",
+                                                evidence="test"))
+    _run(monkeypatch, ["enrich", "--reverse-resolve"])
+    assert "enrich" in capsys.readouterr().out
+
+
+def test_the_flag_defaults_to_off_in_the_parser():
+    """Asserted on the parser rather than inferred from behaviour, so a future edit that
+    flips the default is red here."""
+    import argparse
+    import contextlib
+    import io
+
+    from cerebro.__main__ import main as _main
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), contextlib.suppress(SystemExit):
+        sys.argv = ["cerebro", "cracked-devs", "roster", "--help"]
+        _main()
+    help_text = buf.getvalue()
+    assert "--reverse-resolve" in help_text
+    assert "Off by" in help_text or "off by" in help_text
+    assert isinstance(argparse.ArgumentParser(), argparse.ArgumentParser)

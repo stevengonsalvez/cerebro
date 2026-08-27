@@ -60,6 +60,12 @@ def main() -> None:
     cd_roster.add_argument("--overwrite", action="store_true",
                            help="let resolution replace curated values (default: fill blanks only)")
     cd_roster.add_argument("--limit", type=int, default=20, help="suggest: max candidates")
+    cd_roster.add_argument(
+        "--reverse-resolve", action="store_true",
+        help="enrich: also try to resolve a GitHub login FROM a dev's blog. Off by "
+             "default and Court-PARKED: the reverse resolver has no measured precision "
+             "on this pool, and a mislinked account on a named person's page is worse "
+             "than no link at all")
 
     dc = sub.add_parser(
         "devs-contract",
@@ -684,10 +690,21 @@ def _roster_enrich(args, settings, devs, roster_mod) -> dict[str, Any]:
     client = GitHubClient(settings)
     changes: list[tuple[str, str, str]] = []
     diffs: list[dict[str, Any]] = []
+    # F016. THE REVERSE DIRECTION IS A SUBTRACTION, NOT A FEATURE. Until this flag existed
+    # `resolve_from_blog` ran by DEFAULT for every dev with a blog and no handle, and the
+    # Court PARKED that path: it has no measured precision on this pool, and a mislinked X
+    # account on a named person's page is the charter's wrong-number-worse-than-no-page
+    # class. The resolver stays in the module, parked rather than deleted, behind a flag
+    # that prints what it cannot promise.
+    reverse = bool(getattr(args, "reverse_resolve", False))
+    if reverse:
+        print("NOTE: --reverse-resolve is ON. Resolving a GitHub login from a blog has "
+              "NO measured precision on this pool; every value it fills is a guess and a "
+              "wrong one is a false claim about a named person. Review before --write.")
     for dev in devs:
         if dev.github:
             ident = identity.resolve_from_github(dev.github, client)
-        elif dev.blog:
+        elif dev.blog and reverse:
             ident = identity.resolve_from_blog(dev.blog, client, fetch_page=_fetch_page)
         else:
             continue

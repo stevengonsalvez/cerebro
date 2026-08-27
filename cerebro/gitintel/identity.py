@@ -57,6 +57,42 @@ def resolve_from_github(login: str, client: GitHubClient) -> Identity:
     )
 
 
+def forward_links_cached(login: str, client) -> Identity | None:
+    """F016 FORWARD-ONLY, AND FREE: the self-declared blog/twitter, from the cache alone.
+
+    Returns `None` on a cache miss and MAKES NO CALL — the REST delta of this path is 0,
+    asserted by a client counter delta rather than by inspection. Every published dev
+    already cost a `GET /users/{login}` in the humanness pre-filter or in owner
+    resolution, so the payload is usually already on disk; a dev whose payload is not
+    there gets `None`, which is "not known" and never a blank profile field.
+
+    `resolve_from_github` remains the paying version for callers that need the call.
+    """
+    cache = getattr(client, "cache", None)
+    key_of = getattr(client, "_cache_key", None)
+    if cache is None or not callable(key_of):
+        return None
+    try:
+        got = cache.get_response(key_of("GET", f"/users/{login}", None))
+    except Exception:  # noqa: BLE001 — a cache read must never sink an enrichment pass
+        return None
+    if not got:
+        return None
+    status, data = got
+    if not (200 <= int(status) < 300) or not isinstance(data, dict):
+        return None
+    u = user_from_api(data)
+    if not u.login:
+        return None
+    return Identity(
+        github=u.login,
+        x=u.twitter_username,
+        blog=u.blog,
+        confidence="high",
+        evidence=f"github.com/{u.login} api profile (from the response cache, 0 calls)",
+    )
+
+
 def resolve_from_blog(
     blog_url: str,
     client: GitHubClient,
