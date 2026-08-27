@@ -1,57 +1,66 @@
 {
   "authority_update_2026_08_27": {
-    "does_not_remove": "the ATC bar on stamping reviewed_by=owner; e08 launch still needs his eye",
+    "does_not_remove": "the ATC bar on stamping reviewed_by=owner, and publishing judgements about named people in his name",
     "granted": "do not wait for human; use codex or take the recommended option",
-    "removes": "blocking on owner for decisions"
+    "removes": "blocking on owner for decisions I can take"
   },
   "beads_mode": "state-only",
-  "branch": "f/devs-writer",
-  "current_epic": "e06",
-  "current_note": "TICK 04:20. e03 and e05 BOTH APPROVE. e03 is PR #23 with 17 build commits plus 6 fix commits, 28 files, +4,468/-32, all three CI checks green. e05 is 11 commits on f/devs-filters-optout. THE E03 REVIEW MADE THE BEST CATCH OF THE PROGRAMME SO FAR AND IT REPRODUCED IT LIVE: it re-ran devs-refresh with no token against a 1,036-note corpus copy, the log carried 273 lines of 'GitHub 403 API rate limit exceeded', and the run still printed healthy: true with the publish set collapsed from 1,316 to 31. simonw himself dropped to the provenance floor. Only the churn-refusal path saved the corpus, and a smaller degradation would have slipped under the cap and churn-deleted roughly 329 real people's published notes while every meter read healthy. Root cause: Budget.truncated is set only on budget exhaustion, never on 403s, and resolve failures were counted nowhere. Fixed by counting errors at the client rather than at each swallow, because the swallows are not all reachable (owner_resolve returns None on a failed contributors call, indistinguishable from 'no human found'), and a 404 is deliberately NOT counted because it is an answer, not a failure, and a predicate that cries wolf gets muted. Two more e03 fixes: a refused-churn run exited 0 so run.sh never paged, now _page_if_degraded; and the writer had a path-traversal, a login of '../escaped' wrote outside Devs/ at the vault root, now a seventh write-gate clause pinning the GitHub login alphabet. E05 APPROVE WITH THREE LOWS, TWO OF WHICH I AM FIXING ANYWAY BECAUSE THEY SIT ON THE OPT-OUT PROMISE, WHICH THE CHARTER CALLS A LAUNCH REQUIREMENT. First, the consent list is reached by a bundled import so it is inlined into a server chunk; optedOut is [] today so nothing leaks yet, but the moment a real person opts out THEIR LOGIN SHIPS IN THE DEPLOYED JAVASCRIPT in a public repo for ever, which inverts the whole point of asking to be removed. Second, the gate writes a synthetic consent entry into the REAL committed file and restores it only in finally, which never runs on SIGKILL, so a crash plus a careless commit fabricates an opt-out request for a real person. I verified the committed file is clean (optedOut: []) so this is latent, not live. A superstar-engineer agent is fixing both with proof required over the ENTIRE dist tree, not one chunk. The third low (a gate run without --keep deleting a previous --keep run's dist) is cosmetic and explicitly out of scope. E06 LAUNCHED, the last build epic before launch: snapshots so the history actually accumulates (the original crackscan set record=False and could never self-heal), lane resilience, enrichment, and token ops including the recommendation to replace the xyora token, which carries admin:enterprise, admin:org, repo, workflow and delete:packages despite being described as public-read-only. The reviewer is told to induce a REAL failure in every lane and prove each health signal goes red, because e03 just proved a meter will happily read healthy through 273 rate-limit errors. e07 is unblocked but HELD until the SITE worktree is clear of the hardening agent.",
+  "branch": "f/devs-ops",
+  "current_epic": "e08 (blocked)",
+  "current_note": "TICK 06:10. ALL SEVEN BUILD EPICS COMPLETE AND APPROVE. e06 and e07 both landed APPROVE with lows only, and I fixed all four rather than shipping them. The stack is five PRs across two repos, every one OPEN and unmerged, and BOTH mains are untouched at cerebro b8dfbe5 and site 12e7418. E07 DID THE THING THAT MATTERED MOST: the opt-out gate GREW with the new surfaces instead of staying blind to them. Before e07 the roll-call read feed.xml.body INCAPABLE because developers were not in the feed yet; after, feed, weekly and signal pages all report PRESENT in control and ABSENT in treatment, 1,036 signal pages scanned. Its reviewer re-ran everything independently including three feature-deletion sabotages that each turned the gate red, a 2,000-dev scale build at 8,953 pages in 35 seconds, and a full-tree grep accounting for all 123 simonw hits as signal citations of his public writing with ZERO occurrences of /cerebro/dev/simonw anywhere. THE FOUR LOWS I FIXED. e06: the snapshot write was unguarded despite cache.py stating about itself that it must never be the thing that takes a run down, and the reachable path is ordinary operations, an operator running cache-vacuum across the 07:00 stage gets database-is-locked on every write and the refresh died with a traceback before writing any corpus, paging for a crash when the truth was a degraded run. Guarded, COUNTED not swallowed, because a bare except-pass would rebuild the exact hole that let e03 print healthy:true through 273 rate-limit errors. Three tests, each proved load-bearing by removing the guard and watching them fail. Also token_check.py was outside the no-composite sweep on the argument that it holds no person-level data, which is precisely the exemption the sweep's own comment warns is where the next one hides. e07: a real login literal was compiled into server/chunks/223.js via an error message naming fixtures/devs/simonw.md, in the OPT-OUT build too, so it now cites the directory; and the gate's two whole-file sweeps used bare .includes(login) which reddens on a login that is a substring of another published login, fail-closed but a launch gate that can go red for the wrong person is one somebody eventually argues with, now bounded to the GitHub login class and unit-checked so samsmith no longer matches sam. Gate re-run after both: --login simonw EXIT=0 with all five treatment surfaces ABSENT, --login nobodyhere EXIT=1. THE PROGRAMME NOW STOPS AND THE REASON IS NOT A DEFECT. e08 is LAUNCH: merge the stack and publish /cerebro/devs. That publishes pages about 26 NAMED REAL PEOPLE whose verdicts are ALL agent-recorded, 0 owner-signed, and the ATC directive is explicit that nothing gets stamped reviewed_by owner until Stevie has actually looked. His standing 'do not wait for human' authority covers decisions I can take with codex or a recommended option; it does not cover deciding, on his behalf, to publish judgements about real people in his name. That is the one gate the charter, the ATC correction and the CI test I added all point at the same way. WHAT HE NEEDS TO READ: .agents/scratch/devs-24-cleared-for-owner-review.md, three addenda at the end. Weakest entries by my reckoning: santifer (7-month account, 68,683-star flagship, no age caveat recorded), steipete (cleared at 143.53 pushes per active day against diegosouzapw denied at 26.14, a 5.5x gap in the wrong direction), diegosouzapw (denial rests on magnitude alone and e02 measured that fork provenance cannot separate him from the cleared koala73), and qin-ctx (whose 20 PullRequestReviewEvents are the strongest single signal in the whole set). One clearing, lizhengfeng101, is already WITHDRAWN because it rested on a repo that is a fork of alibaba/open-code-review. ONE ITEM FOR e08 WHEN IT RUNS: the e07 reviewer did not re-run the Playwright browser lane, verifying those specs by reading and by asserting the same properties on the built bytes instead; e08's pre-merge ladder should run it once against a fixture-composed build with E2E_EXPECT_WEEKLY set.",
   "dashboard_slug": "cerebro-devs",
+  "e08_prerequisites": [
+    "owner reads the 26 verdicts and returns ratify/deny/second-look",
+    "run the Playwright lane once against a fixture-composed build (E2E_EXPECT_WEEKLY) — the e07 reviewer did not",
+    "merge order is bottom-up: 21, 22, 23, 24 then 71, 72, 73",
+    "re-prove F066 and F067 on production after the deploy"
+  ],
   "epics": {
-    "e01": "BUILT_PR_HELD",
-    "e02": "BUILT_PR_HELD",
-    "e03": "BUILT_PR_HELD",
-    "e04": "BUILT_PR_HELD",
-    "e05": "BUILT_HARDENING",
-    "e06": "BUILDING",
-    "e07": "READY_HELD_ON_WORKTREE",
+    "e01": "APPROVE_PR_HELD",
+    "e02": "APPROVE_PR_HELD",
+    "e03": "APPROVE_PR_HELD",
+    "e04": "APPROVE_PR_HELD",
+    "e05": "APPROVE_PR_HELD",
+    "e06": "APPROVE_PR_HELD",
+    "e07": "APPROVE_PR_HELD",
     "e08": "BLOCKED_ON_OWNER_REVIEW"
   },
   "human_gate": "blessed",
   "owner_review_gate": {
     "artifact": ".agents/scratch/devs-24-cleared-for-owner-review.md",
-    "blocks": "e08 launch, any published surface, any reviewed_by=owner stamp, merging site PR #71",
-    "does_not_block": "e06 e07 build work",
+    "denied_by_eyeball": "GCGH159 — green-squares generator no mechanical shape catches (dc03f2e)",
     "enforced_by": "tests/test_denylist.py::test_no_shipped_verdict_claims_the_owner_signed_it (44693bb)",
     "stamped_owner": 0,
-    "state": "OPEN_AWAITING_OWNER",
+    "state": "OPEN_AWAITING_OWNER — THE ONLY THING BLOCKING THE PROGRAMME",
     "verdicts_awaiting": 26,
     "weakest_entries_for_his_eye": [
-      "santifer — 7-month account, 68.7k-star flagship, no age caveat",
+      "santifer — 7-month account, 68,683-star flagship, no age caveat recorded",
       "steipete — cleared at 143.53 push/day vs diegosouzapw denied at 26.14",
-      "diegosouzapw — denial rests on magnitude alone",
-      "qin-ctx — PR-review activity is the strongest signal in his favour"
+      "diegosouzapw — denial rests on magnitude alone; fork provenance cannot separate him from cleared koala73",
+      "qin-ctx — 20 PullRequestReviewEvents, the hardest signal for automation to fake"
     ],
     "withdrawn": "lizhengfeng101 — clearing rested on a fork of alibaba/open-code-review (d78ab37)"
   },
-  "phase": "E06_WAVE",
-  "phase_since": "2026-08-27T04:20:00Z",
+  "phase": "BUILD_COMPLETE_AWAITING_OWNER",
+  "phase_since": "2026-08-27T06:10:00Z",
   "prs": {
-    "cerebro_21": "e01, OPEN, held",
-    "cerebro_22": "e02 + verdict corrections, OPEN, held",
-    "cerebro_23": "e03, OPEN, 3/3 CI green, held",
-    "site_71": "e04, OPEN, MUST NOT MERGE — merging deploys /cerebro/devs to production"
+    "cerebro_21": "e01 -> main, OPEN",
+    "cerebro_22": "e02 + verdict corrections -> f/devs-sanity-spike, OPEN",
+    "cerebro_23": "e03 -> f/devs-pool, OPEN",
+    "cerebro_24": "e06 -> f/devs-writer, OPEN",
+    "mains_untouched": "cerebro b8dfbe5, site 12e7418",
+    "site_71": "e04 -> main, OPEN, MERGING DEPLOYS TO PRODUCTION",
+    "site_72": "e05 -> f/cerebro-devs-core, OPEN",
+    "site_73": "e07 -> f/devs-filters-optout, OPEN"
   },
   "stop_counters": {
     "epic_validation_fails": {},
     "stage_errors": {}
   },
   "termination": {
-    "backlog_dry": true,
+    "backlog_dry": false,
     "budget_tokens": null,
     "deadline": null,
-    "spent_tokens_estimate": 7600000
+    "spent_tokens_estimate": 9800000
   }
 }
