@@ -9,17 +9,17 @@ is a real budget json, produced by a real warm `devs-refresh --dry-run` against 
 exactly this is `devs_schema_sample.json`. It is RE-MEASURED, never hand-edited, every
 time the producer's key set moves: `rest_failures` landing moved `rest_calls_used`
 10 -> 11 and `rest_cache_hits` 1,741 -> 1,740 (one cached entry had aged past its TTL),
-and F057's two history keys moved them again to 12 and 1,739 on a third real warm run.
-Adding a key by hand would make this file a claim about a run rather than a record of
-one.
+and F057's two history keys moved them again on a third. This is the FOURTH real warm
+run, taken when F064's four prune keys landed: 10 calls and 1,741 hits. Adding a key by
+hand would make this file a claim about a run rather than a record of one.
 
 What the recorded run cost, and why each number is the one to watch:
 
     clickhouse_scans        3   ONE query per window returns all four metrics. This is
                                 the number F056 was corrected to; a 4 means somebody
                                 re-derived a metric with a second scan.
-    rest_calls_used        12   against a 2,200 cap, warm. The e02 COLD figure is 1,744.
-    rest_cache_hits     1,739   the split is what makes "a second run is materially
+    rest_calls_used        10   against a 2,200 cap, warm. The e02 COLD figure is 1,744.
+    rest_cache_hits     1,741   the split is what makes "a second run is materially
                                 cheaper" measurable rather than asserted.
     rest_failures           0   REST calls that RAISED. The meter that separates a
                                 DEGRADED run from a small one — see the test below.
@@ -34,6 +34,12 @@ What the recorded run cost, and why each number is the one to watch:
                                 pool later collapses still pushed on the days it pushed.
     snapshot_store              the sqlite file that history went to. "" would mean the
                                 client had no cache and the run measured nothing.
+    responses_deleted       0   F064, and THE FIRST REAL MEASUREMENT OF THE POLICY: on a
+                                377 MB cache built over the last few days, nothing is yet
+                                past the 336 h retention, so the correct behaviour is to
+                                delete nothing. A non-zero here on this run would mean the
+                                cutoff was wrong, not that the cache was tidy.
+    cache_bytes   377,532,416   the file BEFORE the prune. The number F064 exists for.
 """
 from __future__ import annotations
 
@@ -111,6 +117,17 @@ def test_the_recorded_run_advanced_the_growth_clock_and_says_where_it_went():
     assert BUDGET["snapshots_written"] % len(devs_spike.WINDOWS) == 0
     assert BUDGET["snapshots_written"] >= 3 * BUDGET["repos_populated"]
     assert str(BUDGET["snapshot_store"]).endswith(".sqlite")
+
+
+def test_the_recorded_prune_deleted_nothing_because_nothing_was_old_enough():
+    """F064's first real measurement, and the shape that makes it meaningful. Every
+    response in the recorded 377 MB cache was written in the last few days, so a correct
+    prune deletes ZERO of them; a non-zero count on this run would mean the cutoff moved,
+    not that the cache was tidy. `cache_bytes` is the file the policy exists for."""
+    assert BUDGET["responses_deleted"] == 0
+    assert BUDGET["snapshots_deleted"] == 0
+    assert BUDGET["snapshots_downsampled"] == 0
+    assert BUDGET["cache_bytes"] > 100_000_000
 
 
 def test_the_fixture_key_set_is_exactly_the_producers_key_set():

@@ -61,6 +61,20 @@ def main() -> None:
                            help="let resolution replace curated values (default: fill blanks only)")
     cd_roster.add_argument("--limit", type=int, default=20, help="suggest: max candidates")
 
+    cs = sub.add_parser("cache-stats",
+                        help="what the gitintel cache holds: rows and bytes per table, "
+                             "the snapshot span, and the reclaimable free pages "
+                             "(read-only)")
+    cs.add_argument("--cache", default=None,
+                    help="path to the cache (default: settings.github.cache_path)")
+
+    cv = sub.add_parser("cache-vacuum",
+                        help="reclaim the pages the prune freed. OPERATOR-RUN and out of "
+                             "band: a 375 MB file rewrite never happens inside the 07:00 "
+                             "pipeline stage")
+    cv.add_argument("--cache", default=None,
+                    help="path to the cache (default: settings.github.cache_path)")
+
     serve = sub.add_parser("serve", help="serve local Cerebro UI")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=4317)
@@ -239,6 +253,23 @@ def main() -> None:
         result["notes_read"] = len(read.notes)
         result["notes_skipped"] = read.skipped
         print(json.dumps(result, indent=2))
+        return
+
+    if args.command in ("cache-stats", "cache-vacuum"):
+        # Handled BEFORE `from .orchestrator import run`, like every other devs-lane
+        # subcommand, so a cache inspection is structurally incapable of triggering a
+        # pipeline run. Both are local sqlite operations: no network, no vault, no token.
+        from .gitintel.cache import GitIntelCache
+
+        settings = load(dry_run_override=True, allow_example=True)
+        gh_cfg = getattr(settings, "github", {}) or {}
+        cache = GitIntelCache(args.cache or gh_cfg.get("cache_path"))
+        if args.command == "cache-stats":
+            print(json.dumps(cache.stats(), indent=2, sort_keys=True))
+            return
+        out = cache.vacuum()
+        freed = out["bytes_before"] - out["bytes_after"]
+        print(json.dumps({**out, "bytes_freed": freed}, indent=2, sort_keys=True))
         return
 
     if args.command == "devs-spike":

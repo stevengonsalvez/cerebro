@@ -649,7 +649,51 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
     paths = {"top": top_path, "queue": queue_path, "json": json_path,
              "census": census_path, "budget": budget_path,
              "sql": sql_paths, "hash": digest}
+
+    # --- F064: the cleanup, LAST, and never fatal ----------------------------
+    #
+    # AFTER the artifacts are on disk, inside a try/except that logs and continues: a
+    # cleanup failure must never lose a run's work. The budget json is then REWRITTEN
+    # with the prune's numbers, which is the one extra write this ordering costs and is
+    # cheaper than the alternative — pruning before the artifacts, where a locked or
+    # corrupt cache would take down a run that had already done everything it was for.
+    _prune_cache(client, budget, log=log)
+    try:
+        budget_path.write_text(
+            json.dumps(budget.to_dict(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8")
+    except OSError as exc:  # noqa: BLE001 — the run's real work is already written
+        log(f"WARNING: could not rewrite the budget artifact with the prune numbers: {exc}")
+
     return result, top, records, paths
+
+
+def _prune_cache(client, budget, *, log):
+    """F064's retention policy, run at the end of the stage. Never raises.
+
+    THE UNBOUNDED THING IS THE RESPONSE CACHE. Measured on this worktree: 3,410 cached
+    responses carrying 369.8 MB in a 375 MB file, and until F064 nothing had ever deleted
+    a row of it. Snapshots are ~60 bytes and ~7,700 rows a day.
+
+    `VACUUM` is deliberately NOT run here — see `cache.prune`. The freed pages are
+    reported and `cerebro cache-vacuum` reclaims them out of band.
+    """
+    store = getattr(client, "cache", None)
+    if store is None or not hasattr(store, "prune"):
+        return
+    try:
+        pruned = store.prune()
+    except Exception as exc:  # noqa: BLE001 — a cleanup must never lose a run's work
+        log(f"WARNING: cache prune failed ({exc}) — the run's artifacts are untouched")
+        return
+    budget.responses_deleted = int(pruned.get("responses_deleted") or 0)
+    budget.snapshots_deleted = int(pruned.get("snapshots_deleted") or 0)
+    budget.snapshots_downsampled = int(pruned.get("snapshots_downsampled") or 0)
+    budget.cache_bytes = int(pruned.get("bytes_before") or 0)
+    log(f"cache prune: {budget.responses_deleted} response(s) deleted, "
+        f"{budget.snapshots_downsampled} snapshot(s) downsampled, "
+        f"{budget.snapshots_deleted} deleted; cache {budget.cache_bytes} bytes, "
+        f"{pruned.get('freelist_pages', 0)} free page(s) reclaimable with cache-vacuum")
 
 
 def _now_utc():

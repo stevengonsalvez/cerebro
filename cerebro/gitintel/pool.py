@@ -342,6 +342,13 @@ class Budget:
     #: operator reading `snapshots_written: 0` needs to know whether the store was
     #: missing or the pool was empty.
     snapshot_store: str = ""
+    #: F064's cleanup, which runs LAST and never fatally. `cache_bytes` is the file size
+    #: BEFORE the prune, measured on the real file: on this worktree the response cache
+    #: reached 375 MB / 3,410 rows and nothing had ever deleted a row of it.
+    responses_deleted: int = 0
+    snapshots_deleted: int = 0
+    snapshots_downsampled: int = 0
+    cache_bytes: int = 0
     #: Which command produced this artifact. `devs-spike` is the F066 gate rehearsal;
     #: `devs-refresh` is the stage that actually writes a corpus.
     stage: str = ""

@@ -390,6 +390,55 @@ class GitIntelCache:
             f"DELETE FROM {table} WHERE rowid = ?", [(x,) for x in doomed])
         return len(doomed)
 
+    def stats(self) -> dict:
+        """What the cache holds, for `cerebro cache-stats`. READ-ONLY.
+
+        Row counts and stored bytes per table, the snapshot span, the file size and the
+        freelist — the four numbers an operator needs to decide whether to vacuum.
+        """
+        tables = ("github_responses", "repo_inspections", "profile_inspections",
+                  "search_runs", "repo_metric_snapshots", "developer_metric_snapshots",
+                  *SNAPSHOT_TABLES)
+        payload_col = {"github_responses": "response_json",
+                       "repo_inspections": "inspection_json",
+                       "profile_inspections": "inspection_json",
+                       "search_runs": "result_json"}
+        out = {"path": str(self.path), "file_bytes": self._file_bytes(),
+               "freelist_pages": self._freelist_pages(), "tables": {}}
+        for table in tables:
+            try:
+                rows = self.db.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+            except sqlite3.Error:
+                continue
+            entry = {"rows": int(rows), "payload_bytes": 0}
+            col = payload_col.get(table)
+            if col:
+                got = self.db.execute(
+                    f"SELECT coalesce(sum(length({col})), 0) FROM {table}").fetchone()[0]
+                entry["payload_bytes"] = int(got or 0)
+            out["tables"][table] = entry
+        span = self.db.execute(
+            "SELECT min(captured_at), max(captured_at), count(DISTINCT login), "
+            "count(DISTINCT captured_at) FROM push_window_snapshots").fetchone()
+        out["snapshots"] = {
+            "oldest": span[0], "newest": span[1],
+            "logins": int(span[2] or 0), "instants": int(span[3] or 0),
+            "history_days": _span_days(span[0], span[1]),
+        }
+        return out
+
+    def vacuum(self) -> dict:
+        """Reclaim the freed pages. OPERATOR-RUN, never inside the pipeline stage.
+
+        Returns before/after file bytes. On a 356 MB cache this rewrites the whole file,
+        which is exactly why the 07:00 stage does not do it.
+        """
+        before = self._file_bytes()
+        self.db.execute("VACUUM")
+        self.db.commit()
+        return {"bytes_before": before, "bytes_after": self._file_bytes(),
+                "freelist_pages": self._freelist_pages()}
+
     def _file_bytes(self) -> int:
         """The cache file's size on disk, or 0 for `:memory:`."""
         try:
@@ -406,6 +455,21 @@ class GitIntelCache:
 
     def close(self) -> None:
         self.db.close()
+
+
+def _span_days(oldest, newest) -> float:
+    """How many days of history the snapshot table actually holds. 0.0 when it holds none.
+
+    The number that separates "the growth reader has nothing to say yet" from "the growth
+    reader is broken": on 2026-08-27 the live install held 5.0 days of the CONDEMNED
+    metrics and this branch held none at all.
+    """
+    try:
+        a = dt.datetime.fromisoformat(oldest)
+        b = dt.datetime.fromisoformat(newest)
+    except (TypeError, ValueError):
+        return 0.0
+    return round((b - a).total_seconds() / 86400.0, 2)
 
 
 def _iso_utc(moment: dt.datetime) -> str:
