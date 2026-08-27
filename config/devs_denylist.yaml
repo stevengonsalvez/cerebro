@@ -35,6 +35,13 @@ denied:
     reviewed_by: e01-builder
     reviewed_on: 2026-08-26
 
+  - login: GCGH159
+    verdict: automation
+    shape: single_repo_daily_cadence
+    evidence: "90d live 2026-08-27: 489 pushes / 1 distinct repo (GCGH159/green) / 88 active days / 0 not-owned / concentration 1.0 / 5.56 pushes per active day; repo tree is auto-log.md + data.txt + stats.txt + logs/, 0 stars, no description, no language; commits templated 4-per-batch one second apart. Found by the e02 eyeball; NO mechanical shape fires on it."
+    reviewed_by: e02-eyeball
+    reviewed_on: 2026-08-27
+
 cleared:
   # Worked from the F066 flag queue on 2026-08-26. All 23 flagged accounts were
   # inspected by hand: profile, bio, follower count, and the actual basenames of the
