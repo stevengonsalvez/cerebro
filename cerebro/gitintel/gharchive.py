@@ -19,6 +19,7 @@ a correctness property here, not an optimisation, and it is asserted by test.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 import urllib.error
@@ -28,7 +29,15 @@ from datetime import datetime, timedelta, timezone
 
 log = logging.getLogger(__name__)
 
-ENDPOINT = "https://play.clickhouse.com/?user=play"
+#: The free endpoint, OVERRIDABLE BY ENV so an outage can be induced from a shell.
+#: `CEREBRO_GHARCHIVE_ENDPOINT` is a URL, not a credential — there is no token in this
+#: lane at all, the endpoint is anonymous by design — and it exists because the F058
+#: degradation path is otherwise only ever reachable by monkeypatch. Pointing it at an
+#: unroutable host is how the validation gate proves the real transport failure, and a
+#: path that has never been walked with real sockets is a path nobody has tested.
+#: `tests/test_public_boundary.py` allows this ONE name and still fails the build on any
+#: credential-shaped env read anywhere in the lane.
+ENDPOINT = os.environ.get("CEREBRO_GHARCHIVE_ENDPOINT") or "https://play.clickhouse.com/?user=play"
 WINDOWS = (7, 30, 90)
 
 #: 13 weeks ~= 91 days: the 90d scan's weekly histogram, F035's sparkline series.
@@ -95,6 +104,34 @@ class GHArchiveUnavailable(RuntimeError):
     Raised after QUOTA_BUDGET waited-out quota windows (~2h) or an exhausted
     transport ladder. The caller degrades loudly with a non-zero exit; it never
     produces a partial pool silently.
+    """
+
+
+class GHArchiveContractError(GHArchiveUnavailable):
+    """The endpoint ANSWERED and the answer no longer matches the query. Down != changed.
+
+    A SUBCLASS, deliberately: every existing `except GHArchiveUnavailable` keeps working,
+    and the handler that discriminates is one somebody has to add on purpose.
+
+    WHAT THIS COSTS TODAY, MEASURED 2026-08-27 BY DRIVING `_post_with_retries`:
+
+      column gone from the RESULT HEADER   `_parse_tsv` raises at the parse step, which
+                                           runs AFTER the ladder has already returned.
+                                           sleeps: NONE.
+      column gone from the TABLE           `Code: 47. DB::Exception: Unknown identifier`
+                                           matches `_is_error` but not `_is_quota`, so it
+                                           falls into the transport ladder:
+                                           sleeps [30, 60, 120] = 210 s.
+
+    Both then terminated as plain `GHArchiveUnavailable`, so the operator was told the
+    ENDPOINT was down when the QUERY was what broke, and went to read a status page
+    instead of the SQL. THE DEFECT IS THE MISDIAGNOSIS. The retry saving is 210 seconds —
+    NOT two hours. The ~2 h ladder is `_is_quota`-only (`QUOTA_BUDGET = 2` announced
+    windows) and a drift body never reaches it; no docstring, page text or commit message
+    in this lane may claim otherwise.
+
+    Drift is proven to happen: registry s1 measured the feed's PushEvent share moving
+    96.2% -> 68.5%. No amount of waiting fixes a query that no longer matches the table.
     """
 
 
@@ -255,7 +292,12 @@ def _parse_tsv(body: str, window: int) -> dict[str, WindowMetrics]:
             "not_owned_basenames", "not_owned_owners", "max_basename_group",
             "dominant_base", "dominant_repos", "weeks_map")}
     except ValueError:  # a column vanished -> the contract moved, not a transient
-        raise GHArchiveUnavailable(f"unexpected result header: {header!r}") from None
+        missing = [name for name in (
+            "actor_login", "pushes", "distinct_repos", "active_days", "repos_not_owned",
+            "not_owned_basenames", "not_owned_owners", "max_basename_group",
+            "dominant_base", "dominant_repos", "weeks_map") if name not in header]
+        raise GHArchiveContractError(
+            f"result header is missing {missing}: {header!r}") from None
 
     out: dict[str, WindowMetrics] = {}
     for line in rows[1:]:
@@ -320,6 +362,12 @@ def _post_with_retries(transport, sql: str, *, sleep, now) -> str:
         if not _is_error(body):
             return body
 
+        # DOWN AND CHANGED ARE DIFFERENT FAILURES. Checked BEFORE the transport ladder,
+        # so a drift body consumes no retry at all: today's `Code: 47` path sleeps
+        # [30, 60, 120] = 210 s before reporting the wrong diagnosis.
+        if _is_contract_error(body):
+            raise GHArchiveContractError(f"clickhouse contract error: {body[:300]}")
+
         if _is_quota(body):
             if quota_waits >= QUOTA_BUDGET:
                 raise GHArchiveUnavailable(
@@ -341,6 +389,25 @@ def _post_with_retries(transport, sql: str, *, sleep, now) -> str:
 def _is_error(body: str) -> bool:
     head = (body or "")[:400]
     return "DB::Exception" in head or head.strip().startswith("Code:")
+
+
+#: ClickHouse error codes that mean THE QUERY NO LONGER MATCHES THE TABLE. Narrow on
+#: purpose: an alarm that fires on every server-side error is an alarm that gets muted,
+#: and `Code: 184 ILLEGAL_AGGREGATION` (a query bug of ours) is not upstream drift.
+CONTRACT_ERROR_CODES = (47, 53, 60)  # UNKNOWN_IDENTIFIER, TYPE_MISMATCH, UNKNOWN_TABLE
+
+_CODE_RE = re.compile(r"Code:\s*(\d+)")
+
+
+def _is_contract_error(body: str) -> bool:
+    """True when the body says the query no longer fits the table. No retry can fix it."""
+    m = _CODE_RE.search((body or "")[:400])
+    if not m:
+        return False
+    try:
+        return int(m.group(1)) in CONTRACT_ERROR_CODES
+    except ValueError:
+        return False
 
 
 def _is_quota(body: str) -> bool:
