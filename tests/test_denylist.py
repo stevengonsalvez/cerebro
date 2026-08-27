@@ -39,6 +39,24 @@ def test_the_shipped_file_loads_with_the_two_day_one_denials(tmp_path):
     assert sorted(v.denied) == ["dicklesworthstone", "diegosouzapw"]
 
 
+def test_no_shipped_verdict_claims_the_owner_signed_it(tmp_path):
+    """NOTHING in this file may assert the owner's signature until the owner gives it.
+
+    Two entries shipped stamped `reviewed_by: owner` on 2026-08-26, written by the
+    building agent in the commit that created the file. The owner never saw them. A false
+    signature is worse than a missing one: `OWNER_REVIEWERS` exists so a run can say whose
+    eye, and `sanity_check` warns on every agent-recorded admission — two forged stamps
+    silenced that warning for the only verdicts strong enough to exclude a person.
+    """
+    v = denylist.load(SHIPPED)
+    forged = [e.login for d in (v.denied, v.cleared) for e in d.values()
+              if denylist.is_owner_signed(e)]
+    assert forged == [], (
+        f"{len(forged)} verdict(s) claim an owner signature that was never given: "
+        f"{forged}. An agent records `reviewed_by: <agent-name>`; only the owner's own "
+        f"countersign may use a name in OWNER_REVIEWERS.")
+
+
 def test_the_shipped_clearings_are_reviewed_and_carry_this_runs_numbers():
     """Every account worked off the F066 flag queue leaves a durable record. A verdict
     that lives only in a scratch file is not a verdict: nothing loads it, and the
