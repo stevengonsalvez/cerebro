@@ -949,7 +949,11 @@ def _render_census(census: dict, budget, roster_skipped, stamp: str) -> str:
         "|---|--:|--:|",
         f"| REST calls | {b['rest_calls_used']} | {b['rest_calls_cap']} |",
         f"| REST cache hits | {b['rest_cache_hits']} | — |",
-        f"| REST failures | {b['rest_failures']} | 0 |",
+        # SCOPED IN THE LABEL, because the two rows have different denominators and a
+        # reader comparing them otherwise sees broken arithmetic. `rest_calls_used`
+        # counts the POOL client; `rest_failures` counts both it and the repo lane's
+        # own longer-TTL client, so on a rate-limited run failures can exceed calls.
+        f"| REST failures (both clients) | {b['rest_failures']} | 0 |",
         f"| ClickHouse scans | {b['clickhouse_scans']} | 3 |",
         f"| fork provenance calls | {b['fork_calls_used']} | {b['fork_calls_cap']} |",
         "",
