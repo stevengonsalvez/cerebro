@@ -805,6 +805,11 @@ def _withheld_report(corpus_plan, stamp: str, healthy: bool) -> str:
         devs_sink.REASON_DENIED:
             "a recorded verdict in config/devs_denylist.yaml excludes this account. "
             "Reversing it is an edit to that file by a reviewer, never an edit here.",
+        devs_sink.REASON_BAD_LOGIN:
+            "the `login` on this record is not a GitHub login (alphanumerics and single "
+            "hyphens, 39 characters maximum), so no `Devs/<login>.md` filename can be "
+            "built from it without naming a file outside the corpus. The remedy is at "
+            "the lane that produced it, never here.",
         devs_sink.REASON_NOT_ADMITTED:
             "an admission floor failed. The per-floor audit lines are on the record in "
             "the run json.",

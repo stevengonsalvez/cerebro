@@ -566,3 +566,69 @@ def test_the_body_sentence_agrees_with_the_frontmatter_it_sits_under(tmp_path):
         w = fm["windows"]["90d"]
         assert numbers[:4] == [w["pushes"], w["distinct_repos"], w["active_days"], 90], \
             note.name
+
+
+# --- the seventh clause: the filename alphabet ---------------------------------
+#
+# `apply()` builds `Devs/{login}.md` by joining a login onto a directory, and
+# `Path("/v/Devs") / "../escaped.md"` names a file OUTSIDE the one directory this module
+# claims to own. No lane can produce such a login today — `vault_seed._GITHUB_URL_RE`
+# constrains owners to the same alphabet, the roster is an owner-edited file, and the
+# GitHub API cannot return a login containing `/`. It is guarded anyway because the thing
+# on the other side of that join is a PUBLIC repository, and because "no lane can produce
+# one" is a property of today's lanes rather than of this writer.
+
+HOSTILE = ["../escaped", "../../etc/passwd", "a/b", ".", "..", "", "sub/dir",
+           "trailing-", "-leading", "under_score", "a" * 40]
+
+
+def test_the_real_publish_set_is_entirely_inside_the_filename_alphabet():
+    """THE NEGATIVE CONTROL FOR THE CLAUSE, AND THE REASON IT WITHHOLDS RATHER THAN
+    RAISES. Measured over the whole committed 2,568-record pool artifact: exactly one
+    login fails the alphabet, `cd59edc5e941ba92783589b343d27a933_fnmap`, which is not a
+    GitHub login and which the gate already withheld for other reasons. A raise at
+    `plan()` would take the entire corpus write down for that one record."""
+    assert devs.valid_login(REC["login"]) is True
+    assert devs.valid_login(STALE_DENIED["login"]) is True
+    assert devs.valid_login("cd59edc5e941ba92783589b343d27a933_fnmap") is False
+
+
+@pytest.mark.parametrize("login", HOSTILE)
+def test_a_login_outside_the_alphabet_is_withheld_and_the_reason_names_it(login):
+    ok, reason = devs.publishable(rec(login=login), optout=NO_ONE, verdicts=VERDICTS)
+    assert ok is False and reason == devs.REASON_BAD_LOGIN
+
+
+def test_a_hostile_login_never_reaches_the_write_plan(tmp_path):
+    """End to end through the real planner and the real writer: nothing is written at
+    all, and in particular nothing is written outside `Devs/`."""
+    root = tmp_path / "vault"
+    (root / "Devs").mkdir(parents=True)
+    corpus_plan = devs.plan([rec(login="../escaped")], [],
+                            optout=NO_ONE, verdicts=VERDICTS)
+    assert corpus_plan.writes == []
+    assert [r for _, r in corpus_plan.withheld] == [devs.REASON_BAD_LOGIN]
+    devs.apply(corpus_plan, root)
+    assert list(root.glob("*.md")) == [], "a note escaped the corpus directory"
+    assert list((root / "Devs").glob("*.md")) == []
+
+
+def test_the_writer_itself_refuses_a_hostile_login_even_around_the_gate(tmp_path):
+    """THE BELT, same shape as the denied-login belt in `plan()`. A future caller that
+    hands `apply()` a plan it did not get from `plan()` must still not escape `Devs/`."""
+    root = tmp_path / "vault"
+    hostile = devs.CorpusPlan(writes=[rec(login="../escaped")])
+    with pytest.raises(ValueError, match="not a GitHub login"):
+        devs.apply(hostile, root)
+    assert list(root.glob("*.md")) == []
+    with pytest.raises(ValueError, match="not a GitHub login"):
+        devs.render(rec(login="../escaped"))
+
+
+def test_the_belt_is_what_stops_it_and_not_merely_the_absence_of_a_directory(tmp_path):
+    """Proves the previous test is not passing because nothing was written anywhere: the
+    SAME plan with a legal login does write, and writes inside `Devs/`."""
+    root = tmp_path / "vault"
+    devs.apply(devs.CorpusPlan(writes=[rec()]), root)
+    assert [p.name for p in (root / "Devs").glob("*.md")] == [f"{REC['login']}.md"]
+    assert list(root.glob("*.md")) == []

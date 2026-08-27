@@ -237,6 +237,7 @@ def render(record: dict, *, timestamp: bool = True) -> str:
     history stops meaning anything.
     """
     rec = dict(record)
+    _assert_login_shape(rec.get("login"))
     missing = [k for k in FRONTMATTER_KEYS if k not in rec]
     if missing:
         raise ValueError(
@@ -338,8 +339,50 @@ class _Window90:
 #: these and an operator has to be able to tell a removal request from a floor.
 REASON_OPTED_OUT = "opted out"
 REASON_DENIED = "denied verdict"
+REASON_BAD_LOGIN = "not a GitHub login"
 REASON_PROVENANCE = "provenance floor"
 REASON_NOT_ADMITTED = "not admitted"
+
+#: THE FILENAME ALPHABET, WHICH IS THE GITHUB LOGIN ALPHABET. Restated from
+#: `vault_seed._GITHUB_URL_RE`'s owner class rather than imported, because that regex is
+#: about parsing a URL and this one is about naming a file, and collapsing the two would
+#: make a future loosening of the parser silently loosen the writer.
+#:
+#: WHY A WRITER NEEDS THIS AT ALL. `apply()` builds `Devs/{login}.md` by joining the
+#: login onto a directory, and `Path("/v/Devs") / "../escaped.md"` resolves OUTSIDE the
+#: one directory this module claims to own. Demonstrated, not imagined: a record with
+#: login `../escaped` passed the write gate and wrote `escaped.md` at the vault ROOT.
+#: No real lane can produce one today — the seed parser constrains owners to this same
+#: alphabet, the roster is an owner-edited file, and the GitHub API cannot return a
+#: login containing `/` — so this is defence in depth. It is warranted anyway because
+#: the thing on the other side of that join is a PUBLIC repository, and because "no real
+#: lane can produce one" is a property of today's lanes rather than of this writer.
+#:
+#: GitHub's own rule: alphanumerics and single hyphens, no leading or trailing hyphen,
+#: 39 characters maximum. Verified against the whole 2,568-record pool, where exactly
+#: one login fails it — `cd59edc5e941ba92783589b343d27a933_fnmap`, which is not a
+#: GitHub login and which the gate already withholds for other reasons.
+_LOGIN_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?")
+
+
+def valid_login(login) -> bool:
+    """Is this a string a `Devs/<login>.md` filename can safely be built from?"""
+    return bool(_LOGIN_RE.fullmatch(str(login or "")))
+
+
+def _assert_login_shape(login) -> None:
+    """The BELT. Unreachable while the gate's third clause holds, and raising anyway.
+
+    Same shape as the denied-login belt in `plan()`: a clause withholds, and the writer
+    refuses outright, so a future caller that reaches `render()` or `apply()` around the
+    gate cannot escape `Devs/`.
+    """
+    if not valid_login(login):
+        raise ValueError(
+            f"devs record login {str(login)!r} is not a GitHub login. This module owns "
+            f"`{CORPUS_DIR}/*.md` and nothing else, and a login carrying path syntax "
+            f"names a file outside it. The write gate withholds these; reaching the "
+            f"writer with one is a defect.")
 
 
 def _field(record, name, default=None):
@@ -369,6 +412,14 @@ def publishable(record, *, optout=None, verdicts=None):
     denied = getattr(verdicts, "denied", {}) or {}
     if key in denied:
         return False, REASON_DENIED
+    # WITHHELD, NOT RAISED, AND THE ORDER IS WHY. Evaluated after the two consent clauses
+    # so a removal request is still characterised as a removal request, and BEFORE the
+    # floors so the report names the real problem. It withholds rather than raising
+    # because a raise here takes down the whole corpus write for one malformed record —
+    # and the pool holds one today (`cd59edc5e941ba92783589b343d27a933_fnmap`).
+    # `render()` raises; that is the belt behind this clause.
+    if not valid_login(_field(record, "login", "")):
+        return False, REASON_BAD_LOGIN
     if not (_field(record, "provenance") or []):
         return False, REASON_PROVENANCE
     automation = _field(record, "automation") or {}
@@ -384,7 +435,7 @@ def publishable(record, *, optout=None, verdicts=None):
 
 
 def publish_set(records, *, optout=None, verdicts=None):
-    """Every record that passes all six clauses, input order preserved.
+    """Every record that passes all seven clauses, input order preserved.
 
     Input order is preserved rather than re-sorted because the caller supplies the F063
     recurrence work order, and re-sorting here would silently spend a truncated repo
@@ -545,6 +596,9 @@ def apply(corpus_plan: CorpusPlan, root) -> dict:
 
     for record in corpus_plan.writes:
         login = str(_field(record, "login", ""))
+        # Before the join, not after it: `directory / "../escaped.md"` is already a path
+        # outside the corpus by the time anything looks at it.
+        _assert_login_shape(login)
         target = directory / f"{login}.md"
         text = render(_as_dict(record))
         if target.exists() and _same_facts(target.read_text(encoding="utf-8"), text):
