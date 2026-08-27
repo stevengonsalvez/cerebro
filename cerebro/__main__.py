@@ -365,7 +365,8 @@ def main() -> None:
                    and bool(records))
 
         corpus_plan, written = devs_sink.write_corpus(
-            records, settings, optout=consent, verdicts=verdicts, healthy=healthy)
+            records, settings, vault_path=vault, optout=consent, verdicts=verdicts,
+            healthy=healthy)
 
         report = out_dir / f"devs-withheld-{stamp}.md"
         report.write_text(_withheld_report(corpus_plan, stamp, healthy),

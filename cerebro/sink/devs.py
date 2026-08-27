@@ -564,14 +564,21 @@ def apply(corpus_plan: CorpusPlan, root) -> dict:
     return result
 
 
-def write_corpus(records, settings, *, optout=None, verdicts=None, healthy=True):
+def write_corpus(records, settings, *, vault_path=None, optout=None, verdicts=None,
+                 healthy=True):
     """Resolve the root the way the roundup does, plan, and apply. Returns the result.
 
     `settings.dry_run` sends the whole corpus to `<vault>/_scratch/Devs/`, which is the
     only mode this epic ever runs.
+
+    `vault_path` OVERRIDES `settings.vault_path`, and it is not a convenience. The
+    Signals corpus the pool is mined from is not in every checkout, so the CLI carries a
+    `--vault` flag; without this parameter that flag would move where the run READS and
+    leave where it WRITES pointing at the configured vault, which is a corpus written
+    somewhere nobody asked for and a reconciliation computed against the wrong disk.
     """
-    root = (Path(settings.vault_path) / "_scratch") if settings.dry_run \
-        else Path(settings.vault_path)
+    base = Path(vault_path if vault_path is not None else settings.vault_path)
+    root = (base / "_scratch") if settings.dry_run else base
     existing = existing_logins(root)
     corpus_plan = plan(records, existing, optout=optout, verdicts=verdicts,
                        healthy=healthy)

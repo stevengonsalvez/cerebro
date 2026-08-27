@@ -68,7 +68,12 @@ def verdicts_file(tmp_path, body="denied: []\ncleared: []\n") -> Path:
 def harness(tmp_path, monkeypatch, capsys):
     """Drives the REAL `main()` with a fake ClickHouse transport and a fake client."""
     vault = corpus(tmp_path, HUMANS)
-    settings = SimpleNamespace(vault_path=vault, dry_run=True, sources={},
+    # A DECOY, deliberately different from the `--vault` the CLI is given. If `--vault`
+    # moved only where the run READS, the corpus would land here and every "the corpus is
+    # under the vault we asked for" assertion below would be checking the wrong disk.
+    decoy = tmp_path / "configured-vault"
+    decoy.mkdir()
+    settings = SimpleNamespace(vault_path=decoy, dry_run=True, sources={},
                                github={"cache_path": ":memory:"})
     monkeypatch.setattr(config, "load", lambda **kw: settings)
     import cerebro.__main__ as main_mod
@@ -80,7 +85,7 @@ def harness(tmp_path, monkeypatch, capsys):
                         _fake_pool_metrics)
     monkeypatch.setattr(devs_spike.gharchive, "pool_metrics", _fake_pool_metrics)
     return SimpleNamespace(tmp_path=tmp_path, vault=vault, settings=settings,
-                           capsys=capsys)
+                           decoy=decoy, capsys=capsys)
 
 
 #: Bound BEFORE any monkeypatch so the fake cannot call itself. A `from ... import` inside
@@ -132,6 +137,9 @@ def test_a_dry_run_writes_the_corpus_under_scratch_and_nothing_else(harness):
     assert out["written"] == len(list(scratch.glob("*.md")))
     assert not (harness.vault / "Devs").exists(), \
         "a dry run must never touch the real corpus directory"
+    # The corpus lands under the --vault root, not under settings.vault_path.
+    assert Path(out["corpus_dir"]) == scratch
+    assert list(harness.decoy.rglob("*")) == []
 
 
 def test_the_withheld_report_and_the_budget_land_in_the_out_dir_not_the_vault(harness):

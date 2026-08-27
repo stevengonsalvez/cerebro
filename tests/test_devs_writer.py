@@ -435,3 +435,18 @@ def test_a_dataclass_record_writes_the_same_bytes_as_its_dict(tmp_path):
     devs.apply(devs.plan([as_dataclass], [], optout=NO_ONE, verdicts=VERDICTS), root)
     assert (root / "Devs" / "esengine.md").read_text(encoding="utf-8") \
         == devs.render(record)
+
+
+def test_the_vault_override_moves_where_the_corpus_is_WRITTEN_not_only_read(tmp_path):
+    """The CLI's `--vault` exists because the Signals corpus is not in every checkout.
+    If it moved only the READ, the corpus would land under the configured vault and the
+    reconciliation would be computed against the wrong disk entirely — deleting notes
+    that are not there and leaving the ones that are."""
+    configured = tmp_path / "configured"
+    elsewhere = tmp_path / "elsewhere"
+    configured.mkdir()
+    elsewhere.mkdir()
+    devs.write_corpus([rec(login="esengine")], settings_for(configured, dry_run=True),
+                      vault_path=elsewhere, optout=NO_ONE, verdicts=VERDICTS)
+    assert (elsewhere / "_scratch" / "Devs" / "esengine.md").is_file()
+    assert not (configured / "_scratch").exists()
