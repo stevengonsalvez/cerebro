@@ -423,6 +423,23 @@ def test_a_roster_dev_the_vault_never_cited_fails_the_provenance_floor(tmp_path)
     assert rec.login not in {r.login for r in top}
 
 
+def test_a_roster_only_dev_is_never_labelled_rest_verified(tmp_path):
+    """`rest_verified` is a claim that a real `GET /users/{login}` came back a person.
+    Nothing calls REST for a roster dev — the roster is a hand-written yaml file — so
+    labelling one verified would put a verification claim nobody earned into a record
+    about a named human. e04 renders this field; it must be able to tell the two apart."""
+    from cerebro.gitintel import pool
+    _, _, records, _ = _run(tmp_path, HUMANS)
+    roster_only = next(r for r in records if r.login == "bcherny")
+    assert roster_only.discovered_via_all == ["roster"]
+    assert roster_only.automation["prefilter"] == pool.PREFILTER_ROSTER
+    # ...and the vault lane still earns it, because `resolve_owner` ran `is_human` to
+    # produce the login at all.
+    both = next(r for r in records if r.login.lower() == "simonw")
+    assert sorted(both.discovered_via_all) == ["roster", "vault"]
+    assert both.automation["prefilter"] == pool.PREFILTER_VERIFIED
+
+
 def test_a_roster_dev_the_vault_did_cite_collapses_to_one_record(tmp_path):
     _, _, records, _ = _run(tmp_path, HUMANS)
     hits = [r for r in records if r.login.lower() == "simonw"]

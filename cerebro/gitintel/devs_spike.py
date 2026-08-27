@@ -370,11 +370,13 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
     census["prefilter_deferred"] = len(pre.deferred)
     census["prefilter_truncated"] = pre.truncated
 
+    # ONLY the paid step writes into this map, and only about candidates it actually
+    # considered. Everyone else gets their marker from `_prefilter_marker`, which reads
+    # the lane rather than assuming one — see the docstring there for why a default of
+    # `rest_verified` is a false claim about a real person.
     prefilter_state = {pool.slug(c.login): pool.PREFILTER_VERIFIED for c in pre.kept}
     for cand, reason in pre.deferred:
         prefilter_state[pool.slug(cand.login)] = reason
-    for c in fanout_known:
-        prefilter_state.setdefault(pool.slug(c.login), pool.PREFILTER_VERIFIED)
 
     # `FanoutCandidate` -> `pool.Cand`. The conversion happens HERE, after the paid
     # step, so the fan-out dataclass never has to carry a lane name and can stay the
@@ -468,8 +470,7 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
                 "cleared_by": cleared_by.reviewed_by if cleared_by else None,
                 "cleared_on": cleared_by.reviewed_on if cleared_by else None,
                 "fork_provenance": ev.to_dict() if ev else None,
-                "prefilter": prefilter_state.get(pool.slug(login),
-                                                 pool.PREFILTER_VERIFIED),
+                "prefilter": _prefilter_marker(cand, prefilter_state),
             },
             low_n=verdict.low_n,
             admitted=verdict.admitted,
@@ -551,6 +552,34 @@ class _OrderKey:
     @property
     def active_days_30d(self):
         return self.rec.windows["30d"]["active_days"]
+
+
+def _prefilter_marker(cand, prefilter_state: dict) -> str:
+    """Which humanness evidence, if any, actually exists for this person.
+
+    NOT A DEFAULT-TO-VERIFIED LOOKUP. `rest_verified` is a claim that a real
+    `GET /users/{login}` came back a real person, so it may only be written where a call
+    really happened:
+
+        fan-out, new login   -> the paid step ran; `prefilter_state` holds the truth,
+                                which is `rest_verified` OR one of the two deferrals
+        vault lane           -> `resolve_owner` already put every candidate through
+                                `is_human` to produce the login at all, so the call
+                                happened and `rest_verified` is earned
+        roster only          -> NO call was ever made. `curated_roster`.
+
+    The third case is why this is a function. A fan-out candidate can be "already
+    anchored" by the ROSTER rather than by the vault, and the roster is a hand-written
+    yaml file, not an API result; a plain `dict.get(login, PREFILTER_VERIFIED)` labelled
+    those accounts verified and put a verification claim into a record about a named
+    human that nothing had verified.
+    """
+    got = prefilter_state.get(pool.slug(cand.login))
+    if got is not None:
+        return got
+    if "vault" in cand.discovered_via_all:
+        return pool.PREFILTER_VERIFIED
+    return pool.PREFILTER_ROSTER
 
 
 def _window_dict(m) -> dict:

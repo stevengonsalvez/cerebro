@@ -139,8 +139,13 @@ def test_a_fork_sub_shape_is_a_flag_name_and_never_a_clearance():
 def test_the_prefilter_state_is_recorded_so_unchecked_never_reads_as_checked(rec):
     """`admitted: true` cannot express "nobody looked". A writer that cannot tell a
     REST-verified account from a deferred one would publish both with equal confidence."""
-    assert rec["automation"]["prefilter"] in {
-        "rest_verified", "deferred_below_activity_floor", "deferred_rest_budget"}
+    from cerebro.gitintel.pool import PREFILTER_STATES
+    assert rec["automation"]["prefilter"] in set(PREFILTER_STATES)
+    # The vocabulary itself is frozen: a producer that invents a fourth spelling of
+    # "verified" would slip past the membership check above.
+    assert set(PREFILTER_STATES) == {
+        "rest_verified", "deferred_below_activity_floor", "deferred_rest_budget",
+        "curated_roster"}
 
 
 def test_windows_has_exactly_the_three_frozen_keys():

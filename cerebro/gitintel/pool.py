@@ -229,6 +229,24 @@ PREFILTER_VERIFIED = "rest_verified"
 PREFILTER_DEFERRED = "deferred_below_activity_floor"
 PREFILTER_TRUNCATED = "deferred_rest_budget"
 
+#: The fourth marker, and the one `paid_prefilter` never writes. A candidate that never
+#: entered the paid path at all is NOT "checked and human", and the three markers above
+#: cannot say so: two of them mean "we deferred a call we intended to make", and
+#: `rest_verified` is a claim that a `GET /users/{login}` came back a person.
+#:
+#: A ROSTER-ONLY DEV IS THE CASE. `config/cracked_devs.yaml` is a hand-written list; being
+#: on it is a curation fact, not an API result. Defaulting those to `rest_verified` would
+#: put a verification claim in the record for an account nobody ever called, which is the
+#: exact confusion the marker was introduced to prevent — the schema note binds e04 to
+#: "must NOT render an unchecked account as a verified one", and this is what e04 renders
+#: instead. It is never an admission signal and never a suppression: roster devs are
+#: profiled with the low-n label like everyone else.
+PREFILTER_ROSTER = "curated_roster"
+
+#: The whole vocabulary, so a consumer can validate a record without re-listing it.
+PREFILTER_STATES = (PREFILTER_VERIFIED, PREFILTER_DEFERRED, PREFILTER_TRUNCATED,
+                    PREFILTER_ROSTER)
+
 
 @dataclass
 class Budget:
