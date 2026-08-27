@@ -450,3 +450,119 @@ def test_the_vault_override_moves_where_the_corpus_is_WRITTEN_not_only_read(tmp_
                       vault_path=elsewhere, optout=NO_ONE, verdicts=VERDICTS)
     assert (elsewhere / "_scratch" / "Devs" / "esengine.md").is_file()
     assert not (configured / "_scratch").exists()
+
+
+# --- every number in a written note, recomputed independently -------------------
+#
+# THE CHARTER'S RULE IS THAT A WRONG NUMBER ABOUT A NAMED PERSON IS WORSE THAN NO PAGE.
+# So this does not compare shapes and it does not compare the record against itself: it
+# re-derives every window metric, the weekly series and every automation shape metric
+# from the SAME parsed ClickHouse rows, through `gharchive`/`shape`/`facets` directly,
+# and asserts EXACT equality against what the note on disk actually says.
+
+def _cohort_run(tmp_path, logins):
+    from cerebro.gitintel import devs_spike
+
+    corpus = tmp_path / "vault" / "Signals"
+    corpus.mkdir(parents=True)
+    for i, login in enumerate(logins):
+        (corpus / f"n{i}.md").write_text(
+            f"---\nurl: https://github.com/{login}/proj\n"
+            f"captured: 2026-0{i % 9 + 1}-01T00:00:00+00:00\n---\nbody\n",
+            encoding="utf-8")
+    verdicts = tmp_path / "verdicts.yaml"
+    verdicts.write_text("denied: []\ncleared: []\n", encoding="utf-8")
+
+    class _Client:
+        def __init__(self):
+            self._calls = 0
+            self._cache_hits = 0
+
+        def get_user(self, login):
+            return {"login": login, "type": "User", "name": login}
+
+        def request(self, path, params=None):
+            return []
+
+    text = (FIXTURES / "gharchive_cohort_90d.tsv").read_text(encoding="utf-8")
+    _, _, records, _ = devs_spike.run(
+        tmp_path / "vault", tmp_path / "out", client=_Client(),
+        verdicts_path=str(verdicts), log=lambda *a: None,
+        transport=lambda sql: text)
+    return records, text
+
+
+def test_every_number_in_every_written_note_is_recomputed_and_matches(tmp_path):
+    """The recompute pass. Reads the notes on DISK, re-derives every number from the raw
+    rows, and compares values rather than shapes."""
+    import yaml
+
+    from cerebro.gitintel import facets as facets_mod, gharchive, shape
+
+    logins = ["simonw", "obra", "sindresorhus", "kentcdodds", "Rich-Harris",
+              "paulmillr"]
+    records, text = _cohort_run(tmp_path, logins)
+    root = tmp_path / "vault"
+    got = devs.plan(records, [], optout=NO_ONE, verdicts=denylist.EMPTY)
+    devs.apply(got, root)
+    notes = sorted((root / "Devs").glob("*.md"))
+    assert notes, "no notes were written; every assertion below would be vacuous"
+
+    # Independently re-parsed from the SAME rows, through the producer-side helpers
+    # rather than through the record.
+    truth = gharchive.pool_metrics(logins, windows=(7, 30, 90),
+                                   transport=lambda sql: text)
+    by_key = {k.lower(): v for k, v in truth.items()}
+
+    for note in notes:
+        body = note.read_text(encoding="utf-8")
+        fm = yaml.safe_load(body[4:body.index("\n---\n")])
+        m = by_key[fm["login"].lower()]
+        for window, days in (("7d", 7), ("30d", 30), ("90d", 90)):
+            w = fm["windows"][window]
+            src = m[days]
+            assert w["pushes"] == src.pushes, (note.name, window)
+            assert w["distinct_repos"] == src.distinct_repos, (note.name, window)
+            assert w["active_days"] == src.active_days, (note.name, window)
+            assert w["repos_not_owned"] == src.repos_not_owned, (note.name, window)
+            assert w["not_owned_basenames"] == src.not_owned_basenames, (note.name,)
+            assert w["not_owned_owners"] == src.not_owned_owners, (note.name,)
+            # The file must also agree with itself: a window cannot hold more active
+            # days than it has days, which is the site's own build-killing assertion.
+            assert w["active_days"] <= days, (note.name, window)
+            assert fm["facets"][window] == facets_mod.window_facets(src), note.name
+
+        m90 = m[90]
+        a = fm["automation"]
+        assert a["push_per_day"] == round(shape.push_per_active_day(m90), 4)
+        assert a["not_owned_ratio"] == round(shape.not_owned_ratio(m90), 4)
+        assert a["basename_concentration"] == round(
+            shape.basename_concentration(m90), 4)
+        assert a["repo_per_active_day"] == round(shape.repo_per_active_day(m90), 4)
+
+        assert fm["pushes_per_week"] == list(m90.pushes_per_week)
+        assert len(fm["pushes_per_week"]) == 13
+        assert sum(fm["pushes_per_week"]) <= fm["windows"]["90d"]["pushes"]
+
+
+def test_the_body_sentence_agrees_with_the_frontmatter_it_sits_under(tmp_path):
+    """The one place a human reads a number in prose. A body that disagreed with its own
+    frontmatter would be a wrong statement about a named person in the more readable of
+    the two places."""
+    import re
+
+    import yaml
+
+    records, _ = _cohort_run(tmp_path, ["simonw", "obra", "sindresorhus"])
+    root = tmp_path / "vault"
+    devs.apply(devs.plan(records, [], optout=NO_ONE, verdicts=denylist.EMPTY), root)
+    for note in sorted((root / "Devs").glob("*.md")):
+        text = note.read_text(encoding="utf-8")
+        fm = yaml.safe_load(text[4:text.index("\n---\n")])
+        body = text.split("\n---\n", 1)[1]
+        # `[1]` is the sentence: the body is heading, blank, sentence, blank, url.
+        sentence = body.split("\n\n")[1]
+        numbers = [int(x) for x in re.findall(r"\b(\d+)\b", sentence)]
+        w = fm["windows"]["90d"]
+        assert numbers[:4] == [w["pushes"], w["distinct_repos"], w["active_days"], 90], \
+            note.name
