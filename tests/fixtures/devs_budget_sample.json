@@ -12,9 +12,10 @@
   "repo_calls_used": 0,
   "repos_populated": 1316,
   "repos_unpopulated": 0,
-  "rest_cache_hits": 1741,
+  "rest_cache_hits": 1740,
   "rest_calls_cap": 2200,
-  "rest_calls_used": 10,
+  "rest_calls_used": 11,
+  "rest_failures": 0,
   "skipped_logins": 0,
   "stage": "devs-refresh",
   "truncated": false

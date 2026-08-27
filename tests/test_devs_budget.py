@@ -6,16 +6,22 @@ pointed at a live run's artifact FAILS on a fresh clone and in CI — or, worse,
 becomes a vacuous assertion that reports green. `tests/fixtures/devs_budget_sample.json`
 is a real budget json, produced by a real warm `devs-refresh --dry-run` against the
 1,036-note Signals corpus on 2026-08-27, committed unedited. The e01/e02 precedent for
-exactly this is `devs_schema_sample.json`.
+exactly this is `devs_schema_sample.json`. It was RE-MEASURED, never hand-edited, when
+`rest_failures` landed: the run below is a second real warm run, which is why
+`rest_calls_used` moved 10 -> 11 and `rest_cache_hits` 1,741 -> 1,740 (one cached entry
+had aged past its TTL). Adding the key by hand would have made this file a claim about a
+run rather than a record of one.
 
 What the recorded run cost, and why each number is the one to watch:
 
     clickhouse_scans        3   ONE query per window returns all four metrics. This is
                                 the number F056 was corrected to; a 4 means somebody
                                 re-derived a metric with a second scan.
-    rest_calls_used        10   against a 2,200 cap, warm. The e02 COLD figure is 1,744.
-    rest_cache_hits     1,741   the split is what makes "a second run is materially
+    rest_calls_used        11   against a 2,200 cap, warm. The e02 COLD figure is 1,744.
+    rest_cache_hits     1,740   the split is what makes "a second run is materially
                                 cheaper" measurable rather than asserted.
+    rest_failures           0   REST calls that RAISED. The meter that separates a
+                                DEGRADED run from a small one — see the test below.
     repo_calls_used         0   against a 500 cap, on a corpus already fully populated
     repos_populated     1,316   under a 168-hour TTL. THE STEADY STATE.
     fork_calls_used       140   against a 300 cap, on the 28 fork-shaped candidates.
@@ -76,6 +82,15 @@ def test_a_warm_run_is_materially_cheaper_than_a_cold_one():
     mean the counter is unwired and every number here is unmeasured."""
     assert BUDGET["rest_cache_hits"] > BUDGET["rest_calls_used"]
     assert BUDGET["rest_cache_hits"] > 0
+
+
+def test_the_recorded_run_had_zero_rest_failures_and_says_so_as_a_number():
+    """`0` IS THE MEASUREMENT THAT MAKES THE FLAG MEAN SOMETHING. A budget with no
+    failure meter cannot tell a run that resolved nobody apart from a run that found
+    nobody, and `sink/devs.py` deletes the difference as churn. This is the negative
+    control for `tests/test_devs_degraded.py`, which drives the same meter positive."""
+    assert BUDGET["rest_failures"] == 0
+    assert isinstance(BUDGET["rest_failures"], int)
 
 
 def test_the_fixture_key_set_is_exactly_the_producers_key_set():

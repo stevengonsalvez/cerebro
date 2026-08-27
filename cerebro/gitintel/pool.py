@@ -278,6 +278,18 @@ class Budget:
     rest_calls_used: int = 0
     rest_cache_hits: int = 0
     rest_calls_cap: int = 0
+    #: REST calls that RAISED — a 403 rate limit, a 5xx, a transport error. A delta off
+    #: the client's own `_errors`, for the same one-accountant reason as the two above.
+    #:
+    #: THIS IS THE METER THAT SAYS TODAY'S ABSENCES ARE UNTRUSTWORTHY. Every REST consumer
+    #: in this lane swallows its own exceptions so one bad account cannot sink the run;
+    #: the arithmetic consequence is that a token-less run resolves nobody, publishes a
+    #: fraction of the corpus, and sets no other flag here. `truncated` does not fire
+    #: (the budget was never exhausted — the calls were made and refused) and
+    #: `clickhouse_scans` is unaffected (the free lane needs no token). Without this
+    #: number the writer's churn rule reads a rate limit as "these people stopped
+    #: existing" and deletes them up to the cap.
+    rest_failures: int = 0
     clickhouse_scans: int = 0
     #: The paid pre-filter hit `rest_calls_cap` and stopped. `skipped_logins` counts who.
     truncated: bool = False

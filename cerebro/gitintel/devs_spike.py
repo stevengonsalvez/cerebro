@@ -305,11 +305,18 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
     if not lanes:
         raise ValueError(f"no lanes selected; choose from {LANES}")
 
-    # ONE ACCOUNTANT. Every REST number in the artifact is a delta off these two, so no
+    # ONE ACCOUNTANT. Every REST number in the artifact is a delta off these three, so no
     # lane can keep a private tally that disagrees with what actually left the process.
+    #
+    # `_errors` is read off BOTH clients because the repo lane runs on its own
+    # longer-TTL client, and a 403 there is exactly as much a reason to distrust an
+    # absence as a 403 on the pool client. `_error_clients` dedups by identity so the
+    # `repo_client or client` fallback cannot double-count one object.
     calls_at_start = getattr(client, "_calls", 0)
     hits_at_start = getattr(client, "_cache_hits", 0)
     counter_is_real = hasattr(client, "_calls") and hasattr(client, "_cache_hits")
+    _error_clients = list({id(c): c for c in (client, repo_client) if c is not None}.values())
+    errors_at_start = sum(getattr(c, "_errors", 0) for c in _error_clients)
 
     verdicts = denylist.load(verdicts_path)
     log(f"verdicts: {len(verdicts.denied)} denied, {len(verdicts.cleared)} cleared")
@@ -581,10 +588,18 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
 
     budget.rest_calls_used = getattr(client, "_calls", calls_at_start) - calls_at_start
     budget.rest_cache_hits = getattr(client, "_cache_hits", hits_at_start) - hits_at_start
+    budget.rest_failures = (
+        sum(getattr(c, "_errors", 0) for c in _error_clients) - errors_at_start)
     if not counter_is_real:
         log("WARNING: the client has no REST counter — every budget number is unmeasured")
     log(f"budget: {budget.rest_calls_used}/{budget.rest_calls_cap} REST calls, "
         f"{budget.rest_cache_hits} cache hits, {budget.clickhouse_scans} ClickHouse scans")
+    if budget.rest_failures:
+        # Loud, and phrased as what it MEANS rather than as a count: a run that could not
+        # resolve people has absences it cannot account for, and an unaccountable absence
+        # must never unpublish somebody.
+        log(f"WARNING: {budget.rest_failures} REST call(s) FAILED (rate limit, 5xx or "
+            f"transport). Today's absences are untrustworthy and this run is DEGRADED.")
 
     result = sanity_check(top, verdicts)
 
@@ -620,7 +635,7 @@ def _publish_set(records, consent, verdicts):
     """The records the writer will actually publish, in F063 recurrence work order.
 
     THE PREDICATE LIVES IN `sink/devs.py` AND IS IMPORTED, NEVER RESTATED. It is the
-    six-clause write gate, and a second copy of it here would be a second answer to
+    seven-clause write gate, and a second copy of it here would be a second answer to
     "is this person published", which is the sort of drift that ends with a page about
     somebody a reviewer excluded.
     """
@@ -934,10 +949,19 @@ def _render_census(census: dict, budget, roster_skipped, stamp: str) -> str:
         "|---|--:|--:|",
         f"| REST calls | {b['rest_calls_used']} | {b['rest_calls_cap']} |",
         f"| REST cache hits | {b['rest_cache_hits']} | — |",
+        f"| REST failures | {b['rest_failures']} | 0 |",
         f"| ClickHouse scans | {b['clickhouse_scans']} | 3 |",
         f"| fork provenance calls | {b['fork_calls_used']} | {b['fork_calls_cap']} |",
         "",
     ]
+    if b["rest_failures"]:
+        lines.append(f"- **{b['rest_failures']} REST CALL(S) FAILED**: a rate limit, a "
+                     f"5xx or a transport error. Every consumer in this lane swallows "
+                     f"its own exception so one bad account cannot sink the run, which "
+                     f"is why the failure count and not the pool size is what says this "
+                     f"run's absences are untrustworthy. Churn deletions are refused.")
+    else:
+        lines.append("- No REST call failed.")
     if b["truncated"]:
         lines.append(f"- **REST BUDGET TRUNCATED**: {b['skipped_logins']} candidate(s) "
                      f"were never humanness-checked. They are in the pool, labelled, and "
