@@ -52,6 +52,8 @@ MODULES = [
     #   growth.py     "rank by who is growing fastest" — the most tempting one in the
     #                 whole lane, because a delta looks like merit rather than a count.
     "cerebro/gitintel/growth.py",
+    #   portfolio.py  "rank by freshest" — the shape `_ships_score` already had.
+    "cerebro/gitintel/portfolio.py",
 ]
 
 VOLUME_NAMES = {"pushes", "followers", "stars", "score", "distinct_repos",
@@ -200,6 +202,8 @@ DEVS_LANE_DATACLASS_MODULES = [
     #   growth.py     "rank by who is growing fastest" — the most tempting one in the
     #                 whole lane, because a delta looks like merit rather than a count.
     "cerebro/gitintel/growth.py",
+    #   portfolio.py  "rank by freshest" — the shape `_ships_score` already had.
+    "cerebro/gitintel/portfolio.py",
 ]
 
 BANNED_FIELDS = {"contributions", "followers", "stars", "stargazers_count",

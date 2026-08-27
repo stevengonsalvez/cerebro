@@ -37,6 +37,7 @@ from . import (
     fork_provenance,
     gharchive,
     growth as growth_mod,
+    portfolio as portfolio_mod,
     optout as optout_mod,
     pool,
     repo_facts,
@@ -652,6 +653,21 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
     census["growth"] = growth_mod.census_line(growth_payload)
     log(census["growth"])
 
+    # --- F027: portfolio freshness, from repos[] the repo lane already fetched ---
+    #
+    # ZERO MARGINAL REST CALLS, and the counter delta below is what proves it rather than
+    # a claim in a docstring. Artifact only, for the same D2 reason as growth.
+    calls_before_freshness = getattr(client, "_calls", 0)
+    freshness_payload = portfolio_mod.report(records)
+    freshness_path = out / f"devs-freshness-{stamp}.json"
+    freshness_path.write_text(
+        json.dumps(freshness_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    census["freshness"] = portfolio_mod.census_line(freshness_payload)
+    log(census["freshness"])
+    if getattr(client, "_calls", calls_before_freshness) != calls_before_freshness:
+        log("WARNING: the freshness pass spent REST calls — it is supposed to read only "
+            "repos[] that the repo lane already fetched")
+
     budget_path = out / f"devs-budget-{stamp}.json"
     budget_path.write_text(
         json.dumps(budget.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -663,7 +679,7 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
 
     paths = {"top": top_path, "queue": queue_path, "json": json_path,
              "census": census_path, "budget": budget_path,
-             "growth": growth_path,
+             "growth": growth_path, "freshness": freshness_path,
              "sql": sql_paths, "hash": digest}
 
     # --- F064: the cleanup, LAST, and never fatal ----------------------------

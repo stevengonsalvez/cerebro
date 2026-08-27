@@ -48,6 +48,7 @@ DEVS_LANE_MODULES = [
     # a property worth pinning: a growth reader that started making REST calls would be
     # spending quota on a number nobody may display yet.
     "cerebro/gitintel/growth.py",
+    "cerebro/gitintel/portfolio.py",
 ]
 
 #: The allowlist, as regexes over a formatted path. Sourced from `fanout.PUBLIC_READ_PATHS`
