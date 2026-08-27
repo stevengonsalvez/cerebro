@@ -19,6 +19,46 @@ to that channel) — it lives only in the gitignored `config/settings.yaml`. Com
 files hold placeholders only. There is no API key to vault, so no secret-manager is required for v1;
 if a real secret is ever introduced, store it in the OS Keychain (or a secrets manager) — never the repo.
 
+## Standing note: the GitHub PAT the devs lane runs on (open)
+
+The devs discovery lane (`cerebro devs-refresh`) reads five public GitHub endpoints. The
+token it authenticates with — Bitwarden item `xyora`, keys `GITHUB_TOKEN_CRACKSCAN` and
+`GITHUB_TOKEN_XYORA` — is a **classic PAT carrying seventeen scopes**, measured
+2026-08-27 by `cerebro devs-token-check` (exit 5, `token sha256:b7de4f23`):
+
+```
+admin:enterprise, admin:gpg_key, admin:org, admin:org_hook, admin:public_key,
+admin:repo_hook, admin:ssh_signing_key, codespace, delete:packages, gist,
+notifications, project, repo, user, workflow, write:discussion, write:packages
+```
+
+Nothing in this repository needs any of them: every endpoint the lane calls answers
+unauthenticated, and the token buys rate limit alone (5,000/hour against 60). The scope
+set includes `user`, `admin:gpg_key` and `admin:ssh_signing_key`, i.e. near-total control
+of the account.
+
+The value was additionally **exposed once in a session transcript**, so it is treated as a
+COMPROMISED credential rather than as a hygiene item: the fix is rotation, not tightening.
+
+- Replacement procedure, paste-ready and ordered: [`docs/devs-token-rotation.md`](docs/devs-token-rotation.md).
+  Order is mint → Bitwarden → live `.env` → verify → revoke. Revoking first takes the
+  07:00 run down for a day.
+- Target state: a **fine-grained** token, resource owner `stevengonsalvez`, repository
+  access *Public Repositories (read-only)*, **no** account permissions, 90-day expiry.
+  Such a token returns no `x-oauth-scopes` header at all.
+- Enforced daily, not documented once: `scripts/run.sh` runs `cerebro devs-token-check`
+  before the refresh. Exit 5 = over-scoped or refused, exit 6 = no token reached the
+  process, 0 = allowed. Both failures page and neither blocks the run.
+- The value is never printed, logged or written: the check emits scope NAMES and a
+  `sha256(value)[:8]` fingerprint, asserted by a test that searches the real CLI's whole
+  output for a known value.
+- `tests/test_public_boundary.py` fails the build if any devs-lane module reads a
+  credential from the environment for itself, or names an endpoint off the public-read
+  allowlist.
+
+This note stays here until the rotation is done and `devs-token-check` exits 0 against the
+live install.
+
 ## Scanning (defense in depth)
 
 Two independent scanners run **both** locally (pre-commit) and in CI (every push/PR):
