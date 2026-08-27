@@ -26,7 +26,9 @@ exit. Same failure shape as the roundup's (commit ebe7c08), same remedy.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -37,6 +39,7 @@ from cerebro import config
 from cerebro.__main__ import main
 from cerebro.gitintel import devs_spike
 from cerebro.gitintel import gharchive as _gharchive
+from cerebro.gitintel.cache import GitIntelCache
 from cerebro.sink import devs as devs_sink
 
 FIXTURE = Path(__file__).parent / "fixtures" / "gharchive_cohort_90d.tsv"
@@ -56,12 +59,16 @@ class DegradableClient:
     client keeps this contract, so this fake cannot drift into testing itself.
     """
 
-    def __init__(self, logins, failing=()):
+    def __init__(self, logins, failing=(), cache=None):
         self.logins = {x.lower(): x for x in logins}
         self.failing = {x.lower() for x in failing}
         self._calls = 0
         self._cache_hits = 0
         self._errors = 0
+        # F057's history store. Present only where a cell needs `last_good_at` to be a
+        # real date read back out of a real sqlite file.
+        if cache is not None:
+            self.cache = cache
 
     def _maybe_fail(self, who: str):
         if (who or "").lower() in self.failing:
@@ -112,7 +119,7 @@ def stage(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(devs_spike.gharchive, "pool_metrics", _fake_pool_metrics)
 
     box = SimpleNamespace(tmp_path=tmp_path, vault=vault, settings=settings,
-                          capsys=capsys, client=None, pages=[])
+                          capsys=capsys, client=None, pages=[], monkeypatch=monkeypatch)
 
     def use(client):
         box.client = client
@@ -128,10 +135,70 @@ def stage(tmp_path, monkeypatch, capsys):
     return box
 
 
-def _files(stage) -> set[str]:
-    root = stage.vault / "_scratch" / "Devs" if stage.settings.dry_run \
+def _corpus_root(stage) -> Path:
+    return stage.vault / "_scratch" / "Devs" if stage.settings.dry_run \
         else stage.vault / "Devs"
+
+
+def _files(stage) -> set[str]:
+    root = _corpus_root(stage)
     return {p.stem for p in root.glob("*.md")} if root.is_dir() else set()
+
+
+def _hashes(stage) -> dict[str, str]:
+    """`{filename: sha256}` over the sandbox corpus. THE ONLY PLACE THIS CAN BE ASSERTED.
+
+    The harness writes to `tmp_path/vault/_scratch/Devs`, which is the only path a run
+    inside this suite can touch. A shell `find | shasum` over a repo-root `_scratch/`
+    hashes an empty set against an empty set and can never fail — the previous shape of
+    this gate, and exactly the class of hollow proof the charter's fourth lesson names.
+    """
+    root = _corpus_root(stage)
+    if not root.is_dir():
+        return {}
+    return {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted(root.glob("*.md"))}
+
+
+def _record_identity(label: str, before: dict, after: dict) -> None:
+    """Append both maps and their difference to the V7 evidence file, if one is asked for.
+
+    THE EVIDENCE IS WRITTEN BY THE ASSERTION, so an empty difference in the file is proof
+    the comparison ran rather than proof that nothing was looked at. An absent or empty
+    file is a FAILED gate.
+    """
+    target = os.environ.get("E06_IDENTITY_LOG")
+    if not target:
+        return
+    changed = sorted(set(before) ^ set(after)) + sorted(
+        k for k in set(before) & set(after) if before[k] != after[k])
+    path = Path(target)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(f"## {label}\n")
+        fh.write(f"hashed_before: {len(before)}\n")
+        fh.write(f"hashed_after: {len(after)}\n")
+        for name in sorted(before):
+            fh.write(f"  before {name} {before[name]}\n")
+        for name in sorted(after):
+            fh.write(f"  after  {name} {after[name]}\n")
+        fh.write(f"DIFF: {'none' if not changed else ', '.join(changed)}\n\n")
+
+
+def assert_corpus_identical(stage, before: dict, *, label: str,
+                            except_keys=frozenset()) -> dict:
+    """The byte-identity assertion, and the one-key-difference form the consent cell needs.
+
+    Named files in the message, never "the corpora differ": a failure has to say WHICH
+    note about WHICH named person moved.
+    """
+    after = _hashes(stage)
+    _record_identity(label, before, after)
+    expected = {k: v for k, v in before.items() if k not in except_keys}
+    moved = sorted(set(expected) ^ set(after)) + sorted(
+        k for k in set(expected) & set(after) if expected[k] != after[k])
+    assert not moved, f"{label}: a degraded run moved {moved}"
+    return after
 
 
 def run_cli(stage, *argv) -> dict:
@@ -249,3 +316,205 @@ def test_alerting_never_becomes_the_failure(stage, monkeypatch):
     stage.use(DegradableClient(HUMANS, failing=[x for x in HUMANS if x != SURVIVOR]))
     out = run_cli(stage)                  # must not raise
     assert out["healthy"] is False
+
+
+# --- F058: the induced outage. The corpus does not move ------------------------
+#
+# EVERY CELL BELOW INDUCES A REAL FAILURE THROUGH THE REAL `pool_metrics`, RETRY LADDER
+# INCLUDED. The charter's fourth measured lesson is that a degraded run looked healthy;
+# a meter that has never been watched going red is not a meter. The byte-identity
+# assertion lives HERE, inside the harness, over the `tmp_path` sandbox that is the only
+# corpus this suite can actually move.
+
+def _outage_metrics(exc, recorder):
+    """Real `pool_metrics`, real ladder, a transport that always raises."""
+    def boom(sql):
+        raise exc
+    def run(logins, windows=(7, 30, 90), transport=None, **kw):
+        return _REAL_POOL_METRICS(logins, windows=windows, transport=boom,
+                                  sleep=recorder.append)
+    return run
+
+
+def _drift_metrics(recorder):
+    """Real `pool_metrics` against a result header that lost a column."""
+    body = ("actor_login\tpushes\tdistinct_repos\tactive_days\trepos_not_owned\t"
+            "not_owned_basenames\tmax_basename_group\tweeks_map\n"
+            "simonw\t1\t1\t1\t0\t0\t1\t([0],[1])\n")
+    def run(logins, windows=(7, 30, 90), transport=None, **kw):
+        return _REAL_POOL_METRICS(logins, windows=windows, transport=lambda sql: body,
+                                  sleep=recorder.append)
+    return run
+
+
+def _induce(stage, metrics_fn):
+    stage.monkeypatch.setattr("cerebro.gitintel.gharchive.pool_metrics", metrics_fn)
+    stage.monkeypatch.setattr(devs_spike.gharchive, "pool_metrics", metrics_fn)
+
+
+def _healthy_corpus(stage, cache=None):
+    """Seed a real corpus through the real writer, and return its hash map."""
+    stage.use(DegradableClient(HUMANS, cache=cache))
+    out = run_cli(stage, *([] if not stage.settings.dry_run else ["--dry-run"]))
+    assert out["healthy"] is True and out["published"] > 1
+    return _hashes(stage)
+
+
+def test_an_unreachable_endpoint_leaves_the_corpus_byte_identical(stage, tmp_path):
+    """THE GATE. Not "the same files": the same BYTES, named file by file."""
+    cache = GitIntelCache(tmp_path / "gitintel.sqlite")
+    before = _healthy_corpus(stage, cache=cache)
+    assert len(before) > 1
+
+    slept: list[float] = []
+    _induce(stage, _outage_metrics(ConnectionError("connection refused"), slept))
+    stage.use(DegradableClient(HUMANS, cache=cache))
+    out = run_cli(stage, "--dry-run")
+
+    assert out["healthy"] is False
+    assert out["degraded"] == "unreachable"
+    assert out["written"] == 0 and out["deleted_churn"] == 0
+    assert_corpus_identical(stage, before, label="unreachable")
+    assert slept == list(gharchive_ladder()), \
+        "the transport ladder did not run, or a quota wait was used instead"
+
+
+def test_the_degraded_artifact_dates_itself_from_the_snapshot_table(stage, tmp_path):
+    """`last_good_at` is how an operator tells "ClickHouse died this morning" from "this
+    stage has been dead for nine days". Read back independently with sqlite3."""
+    import sqlite3
+
+    cache_path = tmp_path / "gitintel.sqlite"
+    cache = GitIntelCache(cache_path)
+    _healthy_corpus(stage, cache=cache)
+
+    _induce(stage, _outage_metrics(ConnectionError("down"), []))
+    stage.use(DegradableClient(HUMANS, cache=cache))
+    out = run_cli(stage, "--dry-run")
+
+    db = sqlite3.connect(str(cache_path))
+    newest = db.execute("SELECT max(captured_at) FROM push_window_snapshots").fetchone()[0]
+    db.close()
+    assert newest, "the healthy run recorded no history to degrade against"
+    assert out["last_good_at"] == newest
+
+    body = Path(out["degraded_report"]).read_text(encoding="utf-8")
+    assert newest in body
+    assert "No note was written and no note was deleted" in body
+    assert "FROZEN" in body
+
+
+def test_contract_drift_is_a_different_page_and_never_sleeps(stage, tmp_path):
+    """Down and changed reach the operator as different words. The drift path also
+    consumes no retry: today's ladder is [30, 60, 120] and no amount of waiting fixes a
+    query that no longer matches the table."""
+    cache = GitIntelCache(tmp_path / "gitintel.sqlite")
+    stage.settings.dry_run = False
+    before = _healthy_corpus(stage, cache=cache)
+    stage.pages.clear()
+
+    slept: list[float] = []
+    _induce(stage, _drift_metrics(slept))
+    stage.use(DegradableClient(HUMANS, cache=cache))
+    out = run_cli(stage)
+
+    assert out["degraded"] == "contract"
+    assert slept == [], "drift consumed a retry"
+    assert_corpus_identical(stage, before, label="contract-drift")
+    assert len(stage.pages) == 1
+    assert "CONTRACT DRIFT" in stage.pages[0]
+    assert "UNREACHABLE" not in stage.pages[0]
+
+
+def test_an_unreachable_endpoint_pages_once_with_the_other_text(stage, tmp_path):
+    cache = GitIntelCache(tmp_path / "gitintel.sqlite")
+    stage.settings.dry_run = False
+    _healthy_corpus(stage, cache=cache)
+    stage.pages.clear()
+
+    _induce(stage, _outage_metrics(ConnectionError("refused"), []))
+    stage.use(DegradableClient(HUMANS, cache=cache))
+    out = run_cli(stage)
+
+    assert out["degraded"] == "unreachable"
+    assert len(stage.pages) == 1
+    assert "UNREACHABLE" in stage.pages[0]
+    assert "FROZEN" in stage.pages[0]
+
+
+def test_a_degraded_dry_run_pages_nobody(stage):
+    _induce(stage, _outage_metrics(ConnectionError("refused"), []))
+    stage.use(DegradableClient(HUMANS))
+    out = run_cli(stage, "--dry-run")
+    assert out["healthy"] is False and stage.pages == []
+
+
+def test_a_consent_deletion_still_runs_on_a_degraded_day_and_nobody_else_moves(
+        stage, tmp_path):
+    """CONSENT NEVER WAITS FOR AN UPSTREAM. The sha256 map differs by EXACTLY the opted-out
+    key — asserted as one key, never as "the diff is non-empty", which a corpus-wide
+    deletion would also satisfy."""
+    cache = GitIntelCache(tmp_path / "gitintel.sqlite")
+    before = _healthy_corpus(stage, cache=cache)
+    gone = SURVIVOR
+    assert f"{gone}.md" in before
+
+    optout = stage.tmp_path / "consent-degraded.yaml"
+    optout.write_text(
+        f"logins:\n  - login: {gone}\n    requested_on: 2026-08-27\n", encoding="utf-8")
+
+    _induce(stage, _outage_metrics(ConnectionError("refused"), []))
+    stage.use(DegradableClient(HUMANS, cache=cache))
+    out = run_cli(stage, "--dry-run", "--optout", str(optout))
+
+    assert out["degraded"] == "unreachable"
+    assert out["deleted_consent"] == 1
+    assert out["deleted_churn"] == 0
+    after = assert_corpus_identical(stage, before, label="consent-on-a-degraded-day",
+                                    except_keys={f"{gone}.md"})
+    assert set(before) - set(after) == {f"{gone}.md"}, \
+        "exactly one note must have gone, and it must be the one that asked to"
+
+
+def test_the_dateline_every_reader_sees_stops_advancing_and_does_not_move(
+        stage, tmp_path):
+    """V8's mechanism, proven here rather than only in a shell grep: `generated_at` is
+    what the site renders as the profile dateline, and on a degraded day every note keeps
+    the value the last healthy run wrote."""
+    cache = GitIntelCache(tmp_path / "gitintel.sqlite")
+    _healthy_corpus(stage, cache=cache)
+    root = _corpus_root(stage)
+    before = {p.name: _generated_at(p) for p in sorted(root.glob("*.md"))}
+    assert before and all(before.values())
+
+    _induce(stage, _outage_metrics(ConnectionError("refused"), []))
+    stage.use(DegradableClient(HUMANS, cache=cache))
+    run_cli(stage, "--dry-run")
+
+    after = {p.name: _generated_at(p) for p in sorted(root.glob("*.md"))}
+    assert after == before, "a degraded run restamped the dateline readers see"
+    _record_identity("dateline", before, after)
+
+
+def test_an_unnamed_exception_still_fails_loudly(stage):
+    """The degradation path is for the TWO named failures. Anything else must keep
+    exiting non-zero into run.sh's warn_and_page, or a real bug becomes a quiet freeze."""
+    def boom(*a, **k):
+        raise ValueError("a bug, not an outage")
+
+    _induce(stage, boom)
+    stage.use(DegradableClient(HUMANS))
+    with pytest.raises(ValueError):
+        run_cli(stage, "--dry-run")
+
+
+def gharchive_ladder():
+    from cerebro.gitintel.gharchive import TRANSPORT_LADDER_S
+    return TRANSPORT_LADDER_S
+
+
+def _generated_at(path: Path) -> str:
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("generated_at:"):
+            return line.split(":", 1)[1].strip()
+    return ""
