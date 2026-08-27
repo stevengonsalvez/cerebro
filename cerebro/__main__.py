@@ -407,6 +407,7 @@ def main() -> None:
             "withheld_report": str(report),
         }
         print(json.dumps(summary, indent=2))
+        _page_if_degraded(summary, settings)
         return
 
     from .orchestrator import run
@@ -741,6 +742,43 @@ def _yaml_scalar_out(value: str) -> str:
     if s == "" or re.search(r'(^[\s\[\]{}#&*!|>%@`"\',])|(:\s)|(\s#)|(\s$)', s):
         return '"' + s.replace('"', '\\"') + '"'
     return s
+
+
+def _page_if_degraded(summary: dict, settings) -> None:
+    """A frozen corpus PAGES. Best-effort, never fatal, never in dry-run.
+
+    THE FAILURE THIS CLOSES IS SILENCE, NOT BREAKAGE. `sink/devs.py` promises the churn
+    cap "returns a loud reason the pipeline stage turns into a page", and it does return
+    one — into `refused_reason` inside a summary the stage prints on its way to exit 0.
+    `run.sh`'s `|| warn_and_page` only fires on a NON-ZERO exit, so a run that refuses its
+    deletions, or one that is permanently unhealthy, leaves the public corpus frozen with
+    the only trace in a gitignored log nobody reads. That is precisely the shape this repo
+    already fixed once for the roundup (commit ebe7c08): a soft failure that echoes into
+    an unread file stops publication in silence.
+
+    EXIT 0 IS KEPT DELIBERATELY. A degraded run still WROTE — it refused only the
+    deletions — so exiting non-zero would tell `run.sh` the stage failed and would tell an
+    operator to look for a crash that did not happen. The page carries the state instead.
+
+    NOT IN DRY-RUN. Every dev checkout and every test runs this stage dry, and an alerting
+    path that fires from a test run is one an operator mutes.
+    """
+    if getattr(settings, "dry_run", True):
+        return
+    reason = summary.get("refused_reason") or ""
+    if summary.get("healthy") and not reason:
+        return
+    try:
+        from .sink import notify
+        notify.push_failure(
+            f"devs refresh DEGRADED: healthy={summary.get('healthy')} "
+            f"refused={reason or 'none'} "
+            f"rest_failures={summary.get('rest_failures')} "
+            f"published={summary.get('published')} "
+            f"(churn deletions refused; corpus frozen)",
+            settings)
+    except Exception:  # noqa: BLE001 — alerting must never become the failure
+        pass
 
 
 def _withheld_report(corpus_plan, stamp: str, healthy: bool) -> str:
