@@ -289,3 +289,111 @@ class _Window90:
         self.pushes = pushes
         self.distinct_repos = distinct_repos
         self.active_days = active_days
+
+
+# --- the write gate ------------------------------------------------------------
+#
+# THE WRITE GATE IS THE PUBLISH GATE, AND IT HAS SIX CLAUSES, NOT FIVE.
+#
+# `cerebro-vault` is a PUBLIC repository. A record written into `Devs/` is published data
+# about a named human whether or not the site renders a page from it. So the writer does
+# not write records the site would withhold, and WITHHELD MEANS NOT WRITTEN: the flagged,
+# the excluded and the deferred stay in the operator's gitignored audit trail under
+# `logs/devs/`, never in the vault.
+#
+#     publishable(r) := slug(r.login) not in optout                 CONSENT     (F049)
+#                   AND slug(r.login) not in verdicts.denied        VERDICT     (F017)
+#                   AND len(r.provenance) >= 1                      FLOOR 1     (Q7)
+#                   AND r.automation.state == "clear"               TRI-STATE   (F037)
+#                   AND r.automation.prefilter not in PREFILTER_UNCHECKED
+#                   AND r.admitted
+#
+# WHY THE VERDICT CLAUSE IS NOT REDUNDANT WITH THE TRI-STATE CLAUSE. In a fresh run the
+# `excluded` state is reachable only from `verdicts.denied` and the verdicts file is
+# reloaded per run, so on the happy path the tri-state already covers it. But this
+# writer's inputs are RECORDS, and a record deserialised from a run json written BEFORE a
+# verdict landed carries the pre-verdict state. Measured, not hypothesised: `GCGH159` in
+# the 2026-08-27 run artifact is `admitted: true` / `state: "clear"` /
+# `prefilter: "rest_verified"` / provenance 1, and carries a `denied:` verdict recorded
+# after that run. Without this clause the same run DELETES him (a denied verdict is a
+# consent-class delete, which fires always) and RE-WRITES him from the same plan.
+#
+# It does not make a shape flag auto-exclude. It reads a RECORDED verdict, out of the
+# same file `admission` reads, and nothing else. A `flagged` record with no verdict is
+# withheld by the tri-state clause, unchanged.
+#
+# THE CLAUSE ORDER IS THE REPORT ORDER, AND IT IS DELIBERATE. Consent is evaluated FIRST
+# so a person who asked to be removed is never characterised in the withheld report by a
+# judgement about their account. The provenance floor is evaluated before `admitted` so
+# the report names the FLOOR a record failed rather than the flat fact that it failed
+# one: `t3dotgg` is `admitted: false` precisely BECAUSE of floor 1, and "not admitted"
+# would hide the one thing an operator needs to know about him.
+
+#: Reason strings, one per clause. Distinct on purpose: the withheld report groups by
+#: these and an operator has to be able to tell a removal request from a floor.
+REASON_OPTED_OUT = "opted out"
+REASON_DENIED = "denied verdict"
+REASON_PROVENANCE = "provenance floor"
+REASON_NOT_ADMITTED = "not admitted"
+
+
+def _field(record, name, default=None):
+    """Read a field off a `DevRecord` or off the same record deserialised from json."""
+    if isinstance(record, dict):
+        return record.get(name, default)
+    return getattr(record, name, default)
+
+
+def slug(login: str) -> str:
+    """The identity key. `pool.slug`, imported rather than restated."""
+    from ..gitintel.pool import slug as pool_slug
+    return pool_slug(login)
+
+
+def publishable(record, *, optout=None, verdicts=None):
+    """`(ok, reason)` for one record. `reason` is `""` when it is publishable.
+
+    Reads `pool.PREFILTER_UNCHECKED` and the loaded `denied` set rather than restating
+    either, so the vocabulary cannot drift from the producer's or from the site's.
+    """
+    from ..gitintel import pool
+
+    key = slug(str(_field(record, "login", "")))
+    if optout is not None and key in getattr(optout, "logins", frozenset()):
+        return False, REASON_OPTED_OUT
+    denied = getattr(verdicts, "denied", {}) or {}
+    if key in denied:
+        return False, REASON_DENIED
+    if not (_field(record, "provenance") or []):
+        return False, REASON_PROVENANCE
+    automation = _field(record, "automation") or {}
+    state = automation.get("state")
+    if state != "clear":
+        return False, f"automation: {state}"
+    prefilter = automation.get("prefilter")
+    if prefilter in pool.PREFILTER_UNCHECKED or prefilter not in pool.PREFILTER_STATES:
+        return False, f"prefilter: {prefilter}"
+    if not _field(record, "admitted"):
+        return False, REASON_NOT_ADMITTED
+    return True, ""
+
+
+def publish_set(records, *, optout=None, verdicts=None):
+    """Every record that passes all six clauses, input order preserved.
+
+    Input order is preserved rather than re-sorted because the caller supplies the F063
+    recurrence work order, and re-sorting here would silently spend a truncated repo
+    budget somewhere else.
+    """
+    return [r for r in records
+            if publishable(r, optout=optout, verdicts=verdicts)[0]]
+
+
+def withheld(records, *, optout=None, verdicts=None):
+    """`[(login, reason)]` for every record that did NOT pass, in input order."""
+    out = []
+    for rec in records:
+        ok, reason = publishable(rec, optout=optout, verdicts=verdicts)
+        if not ok:
+            out.append((str(_field(rec, "login", "")), reason))
+    return out
