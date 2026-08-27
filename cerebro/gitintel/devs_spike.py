@@ -167,11 +167,18 @@ def sanity_check(top, verdicts) -> SanityResult:
         # without having looked is exactly the failure the verification doctrine calls
         # worse than no page, so it fails the gate rather than merely appearing in the
         # budget report. The fix is to raise `--rest-budget` and re-run.
+        # FAIL-CLOSED, INCLUDING ON A MISSING MARKER. `prefilter` is a frozen field, so
+        # a record without one is a producer defect, and treating "absent" as "fine"
+        # would make the gate silently vacuous the day a new lane forgets to set it —
+        # which is exactly how a gate becomes decoration.
         pre = rec.automation.get("prefilter")
-        if pre is not None and pre != "rest_verified":
+        if pre != pool.PREFILTER_VERIFIED:
             failures.append(
-                f"{rec.login}: reached the top list as {pre!r} — no humanness check was "
-                f"ever made. Raise --rest-budget and re-run; do not publish this list.")
+                f"{rec.login}: reached the top list marked {pre!r}, not "
+                f"{pool.PREFILTER_VERIFIED!r} — no humanness check was ever made against "
+                f"this account, so publishing it as a person publishes something nobody "
+                f"looked at. If the marker is a deferral, raise --rest-budget and re-run; "
+                f"do not publish this list.")
 
         suffix = next((sfx for sfx in SUSPECT_LOGIN_SUFFIXES if low.endswith(sfx)), None)
         if suffix:

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from cerebro.gitintel import denylist, devs_spike
+from cerebro.gitintel import denylist, devs_spike, pool
 from cerebro.gitintel.devs_spike import DevRecord, sanity_check
 
 FIXTURE = Path(__file__).parent / "fixtures" / "gharchive_cohort_90d.tsv"
@@ -113,11 +113,22 @@ def test_provenance_reaches_every_row(tmp_path):
 
 # --- the predicate catches what it exists to catch ---------------------------
 
-def _rec(login, state="clear"):
+def _rec(login, state="clear", prefilter=pool.PREFILTER_VERIFIED):
+    """A record shaped like one `run()` emits. `prefilter` is explicit rather than
+    omitted: the field is frozen and always present in a real record, and leaving it out
+    of the fixture is what made the gate below untestable in the first place."""
+    automation = {"state": state}
+    if prefilter is not _NO_PREFILTER:
+        automation["prefilter"] = prefilter
     return DevRecord(login=login, name=None, discovered_via="vault", provenance=["h"],
                      windows={}, pushes_per_week=[0] * 13,
-                     automation={"state": state}, low_n=False, admitted=True,
+                     automation=automation, low_n=False, admitted=True,
                      reasons=[])
+
+
+#: Sentinel for "this record carries no prefilter marker at all" — a producer defect the
+#: gate must fail on rather than wave through.
+_NO_PREFILTER = object()
 
 
 def test_predicate_catches_a_bot_login():
@@ -139,6 +150,41 @@ def test_predicate_catches_a_denied_login(tmp_path):
 def test_predicate_catches_an_unresolved_flagged_account():
     r = sanity_check([_rec("someone", state="flagged")], denylist.EMPTY)
     assert not r.ok and "not clear" in r.failures[0]
+
+
+def test_predicate_catches_an_account_the_rest_budget_never_checked():
+    """THE GATE THAT MAKES A TRUNCATED BUDGET SAFE. A candidate dropped by the REST cap
+    can be highly active and entirely unchecked, so it reaches the top list on activity
+    alone. Publishing "this is a person" without having looked is the failure the
+    verification doctrine calls worse than no page."""
+    r = sanity_check([_rec("unchecked", prefilter=pool.PREFILTER_TRUNCATED)],
+                     denylist.EMPTY)
+    assert not r.ok
+    assert "unchecked" in r.failures[0]
+    assert "deferred_rest_budget" in r.failures[0]
+    assert "--rest-budget" in r.failures[0]
+
+
+@pytest.mark.parametrize("marker", [pool.PREFILTER_DEFERRED, pool.PREFILTER_ROSTER])
+def test_predicate_catches_every_non_verified_marker(marker):
+    """Not just the truncation one. Each of these means a different reason no humanness
+    call happened, and none of them means one did."""
+    r = sanity_check([_rec("unchecked", prefilter=marker)], denylist.EMPTY)
+    assert not r.ok and marker in r.failures[0]
+
+
+def test_predicate_catches_a_record_with_no_prefilter_marker_at_all():
+    """Fail-closed. `prefilter` is a frozen field; absence is a producer defect, and a
+    gate that waves absence through goes vacuous the day a new lane forgets to set it."""
+    r = sanity_check([_rec("nomarker", prefilter=_NO_PREFILTER)], denylist.EMPTY)
+    assert not r.ok and "nomarker" in r.failures[0] and "None" in r.failures[0]
+
+
+def test_a_rest_verified_account_passes_the_prefilter_gate():
+    """The companion assertion, so the gate is proven to discriminate rather than merely
+    to reject."""
+    r = sanity_check([_rec("checked", prefilter=pool.PREFILTER_VERIFIED)], denylist.EMPTY)
+    assert r.ok is True and r.failures == []
 
 
 def test_predicate_names_every_offender_not_just_the_first():
