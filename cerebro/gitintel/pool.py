@@ -247,6 +247,14 @@ PREFILTER_ROSTER = "curated_roster"
 PREFILTER_STATES = (PREFILTER_VERIFIED, PREFILTER_DEFERRED, PREFILTER_TRUNCATED,
                     PREFILTER_ROSTER)
 
+#: The two markers that mean A CALL WAS INTENDED AND NOT MADE, which is the condition the
+#: F066 gate exists to catch. `curated_roster` is deliberately NOT in here: no call was
+#: intended, because a human wrote the login into `config/cracked_devs.yaml` by hand. The
+#: distinction matters at the gate — a deferral is fixable by raising `--rest-budget`,
+#: and a curated entry is not fixable by anything, so failing on it would be an
+#: unclearable stop on the owner's own list.
+PREFILTER_UNCHECKED = (PREFILTER_DEFERRED, PREFILTER_TRUNCATED)
+
 
 @dataclass
 class Budget:

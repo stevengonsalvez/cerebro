@@ -171,14 +171,21 @@ def sanity_check(top, verdicts) -> SanityResult:
         # a record without one is a producer defect, and treating "absent" as "fine"
         # would make the gate silently vacuous the day a new lane forgets to set it —
         # which is exactly how a gate becomes decoration.
+        #
+        # `curated_roster` PASSES, and that is not a softening. The gate catches "a call
+        # was intended and never made"; a roster entry is a login a human typed into
+        # `config/cracked_devs.yaml`, so a human did look and no call was ever owed. It
+        # is also the only marker with no remedy — `--rest-budget` cannot buy a call the
+        # pipeline never planned — so failing on it would be an unclearable stop on the
+        # owner's own list. The marker still travels into the record, and the writer
+        # still must not render it as a verified account.
         pre = rec.automation.get("prefilter")
-        if pre != pool.PREFILTER_VERIFIED:
+        if pre in pool.PREFILTER_UNCHECKED or pre not in pool.PREFILTER_STATES:
             failures.append(
-                f"{rec.login}: reached the top list marked {pre!r}, not "
-                f"{pool.PREFILTER_VERIFIED!r} — no humanness check was ever made against "
-                f"this account, so publishing it as a person publishes something nobody "
-                f"looked at. If the marker is a deferral, raise --rest-budget and re-run; "
-                f"do not publish this list.")
+                f"{rec.login}: reached the top list marked {pre!r} — no humanness check "
+                f"was ever made against this account, so publishing it as a person "
+                f"publishes something nobody looked at. If the marker is a deferral, "
+                f"raise --rest-budget and re-run; do not publish this list.")
 
         suffix = next((sfx for sfx in SUSPECT_LOGIN_SUFFIXES if low.endswith(sfx)), None)
         if suffix:

@@ -165,10 +165,10 @@ def test_predicate_catches_an_account_the_rest_budget_never_checked():
     assert "--rest-budget" in r.failures[0]
 
 
-@pytest.mark.parametrize("marker", [pool.PREFILTER_DEFERRED, pool.PREFILTER_ROSTER])
-def test_predicate_catches_every_non_verified_marker(marker):
-    """Not just the truncation one. Each of these means a different reason no humanness
-    call happened, and none of them means one did."""
+@pytest.mark.parametrize("marker", pool.PREFILTER_UNCHECKED)
+def test_predicate_catches_every_marker_that_means_a_call_was_never_made(marker):
+    """Both deferrals, not just the truncation one. Each means a different reason the
+    intended humanness call never happened, and neither means one did."""
     r = sanity_check([_rec("unchecked", prefilter=marker)], denylist.EMPTY)
     assert not r.ok and marker in r.failures[0]
 
@@ -180,10 +180,28 @@ def test_predicate_catches_a_record_with_no_prefilter_marker_at_all():
     assert not r.ok and "nomarker" in r.failures[0] and "None" in r.failures[0]
 
 
+def test_predicate_catches_a_marker_outside_the_frozen_vocabulary():
+    """Same fail-closed reasoning one step further out: an unrecognised spelling is a
+    producer defect, and guessing that an unknown word means "verified" is the failure."""
+    r = sanity_check([_rec("invented", prefilter="looks_fine_to_me")], denylist.EMPTY)
+    assert not r.ok and "invented" in r.failures[0]
+
+
 def test_a_rest_verified_account_passes_the_prefilter_gate():
     """The companion assertion, so the gate is proven to discriminate rather than merely
     to reject."""
     r = sanity_check([_rec("checked", prefilter=pool.PREFILTER_VERIFIED)], denylist.EMPTY)
+    assert r.ok is True and r.failures == []
+
+
+def test_a_curated_roster_account_passes_the_prefilter_gate():
+    """NOT a softening. The gate catches "a call was intended and never made"; a roster
+    entry is a login a human typed into `config/cracked_devs.yaml`, so a human looked and
+    no call was ever owed. It is also the one marker with no remedy — `--rest-budget`
+    cannot buy a call the pipeline never planned — so failing it would be an unclearable
+    stop on the owner's own list. `bcherny` is the live case: fan-out AND roster, admitted
+    on 37 vault signals, and no `get_user` was ever spent on him."""
+    r = sanity_check([_rec("bcherny", prefilter=pool.PREFILTER_ROSTER)], denylist.EMPTY)
     assert r.ok is True and r.failures == []
 
 
