@@ -188,7 +188,7 @@ def _header(headers, name: str):
 
 
 def _probe(value):
-    """The real request. One GET, public metadata only, five-second timeout."""
+    """The real request. One GET, public metadata only, fifteen-second timeout."""
     import requests
 
     resp = requests.get(
