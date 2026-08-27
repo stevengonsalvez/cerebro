@@ -57,6 +57,10 @@ MODULES = [
     #                 in the lane is swept, and the exception is where the next one hides.
     "cerebro/gitintel/portfolio.py",
     "cerebro/gitintel/contract.py",
+    #   token_check.py  carries no person-level data at all, which is exactly the argument
+    #                   that would exempt it. EVERY new module in the lane is swept; the
+    #                   module nobody thought needed sweeping is where the next one hides.
+    "cerebro/gitintel/token_check.py",
 ]
 
 VOLUME_NAMES = {"pushes", "followers", "stars", "score", "distinct_repos",
@@ -210,6 +214,10 @@ DEVS_LANE_DATACLASS_MODULES = [
     #                 in the lane is swept, and the exception is where the next one hides.
     "cerebro/gitintel/portfolio.py",
     "cerebro/gitintel/contract.py",
+    #   token_check.py  carries no person-level data at all, which is exactly the argument
+    #                   that would exempt it. EVERY new module in the lane is swept; the
+    #                   module nobody thought needed sweeping is where the next one hides.
+    "cerebro/gitintel/token_check.py",
 ]
 
 BANNED_FIELDS = {"contributions", "followers", "stars", "stargazers_count",
