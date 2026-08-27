@@ -50,6 +50,28 @@ CREATE TABLE IF NOT EXISTS developer_metric_snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_developer_metric_snapshots_lookup
   ON developer_metric_snapshots(login, captured_at);
+CREATE TABLE IF NOT EXISTS active_day_snapshots (
+  login TEXT NOT NULL,
+  window_days INTEGER NOT NULL,
+  captured_at TEXT NOT NULL,
+  active_days INTEGER NOT NULL,
+  PRIMARY KEY(login, window_days, captured_at)
+);
+CREATE INDEX IF NOT EXISTS idx_active_day_snapshots_lookup
+  ON active_day_snapshots(login, window_days, captured_at);
+CREATE TABLE IF NOT EXISTS push_window_snapshots (
+  login TEXT NOT NULL,
+  window_days INTEGER NOT NULL,
+  captured_at TEXT NOT NULL,
+  pushes INTEGER NOT NULL,
+  distinct_repos INTEGER NOT NULL,
+  repos_not_owned INTEGER NOT NULL DEFAULT 0,
+  not_owned_basenames INTEGER NOT NULL DEFAULT 0,
+  not_owned_owners INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(login, window_days, captured_at)
+);
+CREATE INDEX IF NOT EXISTS idx_push_window_snapshots_lookup
+  ON push_window_snapshots(login, window_days, captured_at);
 """
 
 
@@ -164,8 +186,113 @@ class GitIntelCache:
             for row in rows
         ]
 
+    # --- F057: the window-metric snapshots the devs lane writes about ITSELF ------
+    #
+    # THERE IS NO `record=False` PARAMETER HERE, AND THAT ABSENCE IS THE FEATURE.
+    # `crackscore.py:39,44` passes `record=False` to the metric readers, so the scorer
+    # never wrote the history its own growth terms read, and could never self-heal: the
+    # follower and portfolio terms are structurally 0 without a snapshot >=7 days old,
+    # which put admission arithmetically out of reach against its own threshold. The way
+    # a pipeline ends up with no history is a flag whose default was wrong at one call
+    # site. A caller that must not persist opens a cache on `:memory:`.
+    #
+    # TWO TABLES, NOT ONE WIDE ONE, because they have different jobs and therefore
+    # different retention: every row of `active_day_snapshots` is an F024 growth input
+    # and nothing else, so the retention constant that protects the growth horizon has
+    # exactly one table to protect; `push_window_snapshots` is the last-known-good record
+    # the F058 degradation report dates itself from.
+
+    def record_window_metrics(self, login: str, window_days: int, metrics,
+                              captured_at: str | None = None) -> int:
+        """One login/window's push facts into both snapshot tables. Returns rows written.
+
+        `metrics` is duck-typed on `gharchive.WindowMetrics` rather than imported: this
+        module is infrastructure under the lane, and importing the lane back into it
+        would make the cache depend on the thing that caches through it.
+
+        `captured_at` is passed by the caller for the WHOLE run so one run produces one
+        instant across the whole pool. A per-login `_now_iso()` would put a 2,568-login
+        run's rows on either side of a second boundary and make "how many logins did this
+        run snapshot" unanswerable by `count(distinct captured_at)`.
+        """
+        if not login:
+            return 0
+        stamp = captured_at or _now_iso()
+        key = str(login).lower()
+        window = int(window_days)
+        self.db.execute(
+            "INSERT OR REPLACE INTO active_day_snapshots VALUES(?,?,?,?)",
+            (key, window, stamp, _as_int(getattr(metrics, "active_days", 0))),
+        )
+        self.db.execute(
+            "INSERT OR REPLACE INTO push_window_snapshots VALUES(?,?,?,?,?,?,?,?)",
+            (key, window, stamp,
+             _as_int(getattr(metrics, "pushes", 0)),
+             _as_int(getattr(metrics, "distinct_repos", 0)),
+             _as_int(getattr(metrics, "repos_not_owned", 0)),
+             _as_int(getattr(metrics, "not_owned_basenames", 0)),
+             _as_int(getattr(metrics, "not_owned_owners", 0))),
+        )
+        self.db.commit()
+        return 2
+
+    def active_day_snapshots(self, login: str, window_days: int) -> list[dict[str, Any]]:
+        """Every active-days row for one login/window, oldest first. F024's only input."""
+        rows = self.db.execute(
+            """
+            SELECT captured_at,active_days
+            FROM active_day_snapshots
+            WHERE login=? AND window_days=?
+            ORDER BY captured_at ASC
+            """,
+            (str(login).lower(), int(window_days)),
+        ).fetchall()
+        return [{"captured_at": r[0], "active_days": int(r[1])} for r in rows]
+
+    def push_window_snapshots(self, login: str, window_days: int) -> list[dict[str, Any]]:
+        """Every push-window row for one login/window, oldest first."""
+        rows = self.db.execute(
+            """
+            SELECT captured_at,pushes,distinct_repos,repos_not_owned,
+                   not_owned_basenames,not_owned_owners
+            FROM push_window_snapshots
+            WHERE login=? AND window_days=?
+            ORDER BY captured_at ASC
+            """,
+            (str(login).lower(), int(window_days)),
+        ).fetchall()
+        return [
+            {"captured_at": r[0], "pushes": int(r[1]), "distinct_repos": int(r[2]),
+             "repos_not_owned": int(r[3]), "not_owned_basenames": int(r[4]),
+             "not_owned_owners": int(r[5])}
+            for r in rows
+        ]
+
+    def last_snapshot_at(self) -> str | None:
+        """The newest `captured_at` in `push_window_snapshots`, or None when there is none.
+
+        THE OPERATOR'S AS-OF, and the reason F058's degraded page is worth reading: it is
+        how somebody at 07:05 tells "ClickHouse died this morning" from "this stage has
+        been dead for nine days". `None` means no run has ever recorded history, which is
+        a different and louder statement than an old date.
+        """
+        row = self.db.execute(
+            "SELECT max(captured_at) FROM push_window_snapshots").fetchone()
+        return row[0] if row and row[0] else None
+
     def close(self) -> None:
         self.db.close()
+
+
+def _as_int(value) -> int:
+    """Total by construction: a missing or malformed count is 0, never a raise.
+
+    A snapshot write happens inside the run's free lane, before admission. It must
+    never be the thing that takes a run down."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _now_iso() -> str:
