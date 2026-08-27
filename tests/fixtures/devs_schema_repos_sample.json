@@ -1,0 +1,207 @@
+{
+  "admitted": true,
+  "automation": {
+    "basename_concentration": 0.1429,
+    "cleared_by": null,
+    "cleared_on": null,
+    "fork_provenance": null,
+    "not_owned_ratio": 0.2857,
+    "prefilter": "rest_verified",
+    "push_per_day": 1.7391,
+    "repo_per_active_day": 0.3043,
+    "shape_evidence": [],
+    "shapes": [],
+    "state": "clear"
+  },
+  "discovered_via": "vault",
+  "discovered_via_all": [
+    "fanout",
+    "vault"
+  ],
+  "facets": {
+    "30d": {
+      "active_days": 4,
+      "distinct_repos": 3,
+      "not_owned_basenames": 0,
+      "not_owned_owners": 0,
+      "pushes": 5,
+      "pushes_per_repo": 1.6667,
+      "repos_not_owned": 0
+    },
+    "7d": {
+      "active_days": 0,
+      "distinct_repos": 0,
+      "not_owned_basenames": 0,
+      "not_owned_owners": 0,
+      "pushes": 0,
+      "pushes_per_repo": 0.0,
+      "repos_not_owned": 0
+    },
+    "90d": {
+      "active_days": 23,
+      "distinct_repos": 7,
+      "not_owned_basenames": 2,
+      "not_owned_owners": 2,
+      "pushes": 40,
+      "pushes_per_repo": 5.7143,
+      "repos_not_owned": 2
+    }
+  },
+  "generated_at": "2026-08-27T02:22:56.694618+00:00",
+  "login": "addyosmani",
+  "low_n": false,
+  "name": null,
+  "provenance": [
+    "dae9f02535f7c22f"
+  ],
+  "provenance_repos": [
+    "addyosmani/agent-skills"
+  ],
+  "pushes_per_week": [
+    0,
+    7,
+    6,
+    11,
+    2,
+    2,
+    7,
+    0,
+    1,
+    2,
+    2,
+    0,
+    0
+  ],
+  "reasons": [
+    "provenance: 1 vault signal(s) \u2014 pass",
+    "activity: 23 active days in 90d \u2014 pass",
+    "automation: clear \u2014 pass"
+  ],
+  "repos": [
+    {
+      "description": "Production-grade engineering skills for AI coding agents.",
+      "first_seen": "2026-08-18T06:00:12.943227+00:00",
+      "language": "JavaScript",
+      "last_push": "2026-08-21",
+      "name": "agent-skills",
+      "stars_fact": 90063,
+      "title": "agent-skills",
+      "topics": [
+        "agent-skills",
+        "antigravity",
+        "claude-code",
+        "codex",
+        "cursor",
+        "skills"
+      ]
+    },
+    {
+      "description": "A reference software factory for Claude Code and Codex",
+      "first_seen": null,
+      "language": "Shell",
+      "last_push": "2026-08-21",
+      "name": "factory",
+      "stars_fact": 144,
+      "title": "factory",
+      "topics": [
+        "agentic-engineering",
+        "claude-code",
+        "codex",
+        "software-factory"
+      ]
+    },
+    {
+      "description": "Agent Skills for optimizing web quality based on Lighthouse and Core Web Vitals.",
+      "first_seen": null,
+      "language": "Shell",
+      "last_push": "2026-08-24",
+      "name": "web-quality-skills",
+      "stars_fact": 2712,
+      "title": "web-quality-skills",
+      "topics": [
+        "accessibility",
+        "agent-skills",
+        "claude-skills",
+        "core-web-vitals",
+        "lighthouse",
+        "skills",
+        "testing",
+        "web-performance"
+      ]
+    },
+    {
+      "description": "Agentic SEO / Agentic Engine Optimization (AEO) tools",
+      "first_seen": null,
+      "language": "JavaScript",
+      "last_push": "2026-04-12",
+      "name": "agentic-seo",
+      "stars_fact": 301,
+      "title": "agentic-seo",
+      "topics": [
+        "agent-seo",
+        "agentic-seo",
+        "agents",
+        "seo",
+        "seo-optimization"
+      ]
+    },
+    {
+      "description": "Free image background removal - private, client-side and powered by Transformers.js",
+      "first_seen": null,
+      "language": "TypeScript",
+      "last_push": "2025-01-05",
+      "name": "bg-remove",
+      "stars_fact": 1014,
+      "title": "bg-remove",
+      "topics": [
+        "background-image",
+        "background-image-remover",
+        "background-remover",
+        "images"
+      ]
+    },
+    {
+      "description": "Video compression in the browser using FFMPEG.wasm",
+      "first_seen": null,
+      "language": "TypeScript",
+      "last_push": "2025-02-07",
+      "name": "video-compress",
+      "stars_fact": 227,
+      "title": "video-compress",
+      "topics": [
+        "ffmpeg",
+        "react",
+        "video",
+        "video-compression",
+        "web"
+      ]
+    }
+  ],
+  "repos_populated": true,
+  "windows": {
+    "30d": {
+      "active_days": 4,
+      "distinct_repos": 3,
+      "not_owned_basenames": 0,
+      "not_owned_owners": 0,
+      "pushes": 5,
+      "repos_not_owned": 0
+    },
+    "7d": {
+      "active_days": 0,
+      "distinct_repos": 0,
+      "not_owned_basenames": 0,
+      "not_owned_owners": 0,
+      "pushes": 0,
+      "repos_not_owned": 0
+    },
+    "90d": {
+      "active_days": 23,
+      "distinct_repos": 7,
+      "not_owned_basenames": 2,
+      "not_owned_owners": 2,
+      "pushes": 40,
+      "repos_not_owned": 2
+    }
+  }
+}
