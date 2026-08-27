@@ -6,25 +6,34 @@ pointed at a live run's artifact FAILS on a fresh clone and in CI — or, worse,
 becomes a vacuous assertion that reports green. `tests/fixtures/devs_budget_sample.json`
 is a real budget json, produced by a real warm `devs-refresh --dry-run` against the
 1,036-note Signals corpus on 2026-08-27, committed unedited. The e01/e02 precedent for
-exactly this is `devs_schema_sample.json`. It was RE-MEASURED, never hand-edited, when
-`rest_failures` landed: the run below is a second real warm run, which is why
-`rest_calls_used` moved 10 -> 11 and `rest_cache_hits` 1,741 -> 1,740 (one cached entry
-had aged past its TTL). Adding the key by hand would have made this file a claim about a
-run rather than a record of one.
+exactly this is `devs_schema_sample.json`. It is RE-MEASURED, never hand-edited, every
+time the producer's key set moves: `rest_failures` landing moved `rest_calls_used`
+10 -> 11 and `rest_cache_hits` 1,741 -> 1,740 (one cached entry had aged past its TTL),
+and F057's two history keys moved them again to 12 and 1,739 on a third real warm run.
+Adding a key by hand would make this file a claim about a run rather than a record of
+one.
 
 What the recorded run cost, and why each number is the one to watch:
 
     clickhouse_scans        3   ONE query per window returns all four metrics. This is
                                 the number F056 was corrected to; a 4 means somebody
                                 re-derived a metric with a second scan.
-    rest_calls_used        11   against a 2,200 cap, warm. The e02 COLD figure is 1,744.
-    rest_cache_hits     1,740   the split is what makes "a second run is materially
+    rest_calls_used        12   against a 2,200 cap, warm. The e02 COLD figure is 1,744.
+    rest_cache_hits     1,739   the split is what makes "a second run is materially
                                 cheaper" measurable rather than asserted.
     rest_failures           0   REST calls that RAISED. The meter that separates a
                                 DEGRADED run from a small one — see the test below.
     repo_calls_used         0   against a 500 cap, on a corpus already fully populated
     repos_populated     1,316   under a 168-hour TTL. THE STEADY STATE.
     fork_calls_used       140   against a 300 cap, on the 28 fork-shaped candidates.
+    snapshots_written   7,707   F057. 2,569 scanned logins x 3 windows, written from the
+                                FREE lane before admission — so it is the row count each
+                                snapshot table gained, and `sqlite3` agrees (see below).
+                                It exceeds `pool` because measurement happens BEFORE the
+                                identity dedup, which is the correct order: a login the
+                                pool later collapses still pushed on the days it pushed.
+    snapshot_store              the sqlite file that history went to. "" would mean the
+                                client had no cache and the run measured nothing.
 """
 from __future__ import annotations
 
@@ -91,6 +100,17 @@ def test_the_recorded_run_had_zero_rest_failures_and_says_so_as_a_number():
     control for `tests/test_devs_degraded.py`, which drives the same meter positive."""
     assert BUDGET["rest_failures"] == 0
     assert isinstance(BUDGET["rest_failures"], int)
+
+
+def test_the_recorded_run_advanced_the_growth_clock_and_says_where_it_went():
+    """F057. A run that records no history cannot ever produce a growth delta, and the
+    condemned scorer's `record=False` is exactly that failure shipped for six months.
+    `snapshots_written` is the row count EACH table gained, so it is checkable against
+    the store rather than against itself."""
+    assert BUDGET["snapshots_written"] > 0
+    assert BUDGET["snapshots_written"] % len(devs_spike.WINDOWS) == 0
+    assert BUDGET["snapshots_written"] >= 3 * BUDGET["repos_populated"]
+    assert str(BUDGET["snapshot_store"]).endswith(".sqlite")
 
 
 def test_the_fixture_key_set_is_exactly_the_producers_key_set():

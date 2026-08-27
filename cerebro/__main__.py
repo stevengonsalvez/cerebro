@@ -394,6 +394,9 @@ def main() -> None:
             # Beside `healthy` rather than only in the budget artifact, because this is
             # the number that explains a `false` an operator is reading at 07:05.
             "rest_failures": int(budget.get("rest_failures") or 0),
+            # F057. Beside `healthy` because it is the meter that says whether the >=7-day
+            # growth clock advanced today, and a 0 here on a real run means it did not.
+            "snapshots_written": int(budget.get("snapshots_written") or 0),
             "pool": len(records),
             "published": len(corpus_plan.writes),
             "withheld": len(corpus_plan.withheld),

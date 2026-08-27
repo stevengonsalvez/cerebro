@@ -300,7 +300,12 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     stamp = date.today().isoformat()
-    generated_at = datetime.now(timezone.utc).isoformat()
+    now = _now_utc()
+    generated_at = now.isoformat()
+    #: ONE INSTANT FOR THE WHOLE RUN. A per-login `now()` would put a 2,568-login run's
+    #: rows on either side of a second boundary and make "how many logins did this run
+    #: snapshot" unanswerable by `count(distinct captured_at)`.
+    captured_at = now.replace(microsecond=0).isoformat()
     lanes = tuple(x for x in LANES if x in set(lanes))
     if not lanes:
         raise ValueError(f"no lanes selected; choose from {LANES}")
@@ -420,6 +425,20 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
     log(f"gh archive: {len(metrics)} logins, {active} with 90d activity "
         f"({len(metrics) - active} zero-activity, which is a label case not a drop)")
 
+    # --- F057: THE RUN WRITES ITS OWN HISTORY, HERE, FROM THE FREE LANE -------
+    #
+    # MEASUREMENT IS NOT A REWARD FOR PUBLISHING. This sits immediately after the free
+    # scan and before the paid pre-filter, admission, the publish set and the write gate,
+    # so a run whose sanity gate fails, or one that refuses its churn deletions, still
+    # accrues the history F024 reads. The condemned scorer's defect was the opposite
+    # arrangement: `record=False` at `crackscore.py:39,44` meant the history was never
+    # written at all, so its growth terms were structurally 0 for ever.
+    #
+    # It runs on `devs-spike` too. A push count is a push count whichever command asked;
+    # the stage is recorded on the artifact, never on the row.
+    snapshots_written, snapshot_store = _record_history(
+        client, metrics, captured_at=captured_at, log=log)
+
     # --- the ONE paid step, on new fan-out logins only --------------------
     #
     # F063 work order: the seed repos the vault keeps returning to come first, so a run
@@ -474,6 +493,8 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
         prefilter_rejected=len(pre.rejected),
         repo_calls_cap=max(0, int(repo_budget)),
         optout_removed=len(removed_logins),
+        snapshots_written=snapshots_written,
+        snapshot_store=snapshot_store,
         stage=stage,
     )
     fork_bud = fork_provenance.ForkBudget(int(fork_budget))
@@ -629,6 +650,46 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
              "census": census_path, "budget": budget_path,
              "sql": sql_paths, "hash": digest}
     return result, top, records, paths
+
+
+def _now_utc():
+    """The run's wall clock, in ONE place.
+
+    A function rather than an inline `datetime.now()` so a test can simulate two runs a
+    simulated day apart and watch the snapshot history actually accrue — which is the
+    only way to prove the >=7-day growth clock ever starts.
+    """
+    return datetime.now(timezone.utc)
+
+
+def _record_history(client, metrics, *, captured_at, log):
+    """Write every (login, window) pair into the snapshot tables. Returns (pairs, store).
+
+    `pairs` is the number of (login, window) snapshots recorded, which is exactly the row
+    count each table gained, so `budget.snapshots_written` can be checked against a
+    `sqlite3` count rather than against itself.
+
+    AN UNMEASURED METER SAYS SO. A client with no `.cache` (a stub, a hand-rolled
+    double) records nothing; that is a legitimate configuration and a silent 0 is not.
+    e03 shipped `healthy: true` on a run with 273 rate-limit errors in its log precisely
+    because nothing announced what it had failed to measure.
+    """
+    store = getattr(client, "cache", None)
+    if store is None or not hasattr(store, "record_window_metrics"):
+        log("WARNING: the client has no cache — this run recorded no history, so the "
+            "growth reader gains nothing from it")
+        return 0, ""
+    pairs = 0
+    for login, by_window in metrics.items():
+        for w in WINDOWS:
+            m = by_window.get(w)
+            if m is None:
+                continue
+            if store.record_window_metrics(login, w, m, captured_at=captured_at):
+                pairs += 1
+    path = str(getattr(store, "path", "") or "")
+    log(f"snapshots: {pairs} window snapshot(s) recorded at {captured_at} -> {path}")
+    return pairs, path
 
 
 def _publish_set(records, consent, verdicts):

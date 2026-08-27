@@ -333,6 +333,15 @@ class Budget:
     #: gate whose effect is invisible in the artifact is indistinguishable from a gate
     #: nobody wired up.
     optout_removed: int = 0
+    #: F057. (login, window) snapshots this run wrote, which is exactly the number of
+    #: rows EACH snapshot table gained — so the meter is checkable against a `sqlite3`
+    #: count instead of against itself. A run with a cache-less client records 0 and
+    #: LOGS that it did; an unmeasured meter that stays quiet is the e03 failure.
+    snapshots_written: int = 0
+    #: Where that history went (the sqlite path), or "" when nothing was recorded. An
+    #: operator reading `snapshots_written: 0` needs to know whether the store was
+    #: missing or the pool was empty.
+    snapshot_store: str = ""
     #: Which command produced this artifact. `devs-spike` is the F066 gate rehearsal;
     #: `devs-refresh` is the stage that actually writes a corpus.
     stage: str = ""
