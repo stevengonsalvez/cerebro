@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import types
+from pathlib import Path
+
+import pytest
 
 from cerebro.gitintel import roster as roster_mod
 from cerebro.gitintel.cache import GitIntelCache
@@ -306,3 +309,119 @@ def test_fetch_over_a_seeded_vault_with_the_flag_off_emits_zero_signals(monkeypa
     assert fake.calls == 0                              # zero GitHub client calls
     assert called == []                                 # no roster write
     assert p.read_text(encoding="utf-8") == before
+
+
+# --- F049: the opt-out gate on the candidate list ----------------------------
+#
+# THE GATE IS HERE AND NOT DOWNSTREAM BECAUSE OF WHAT THIS FUNCTION EMITS. `fetch()`
+# returns a `crackscan/considered` Signal for every candidate it merely LOOKED AT, and
+# those Signals reach the vault through the existing pipeline. A gate on the roster
+# append, or on the Devs/ writer, would still publish the login inside Signals/.
+
+def _optout(tmp_path, *logins) -> str:
+    body = "logins: []\n" if not logins else "logins:\n" + "".join(
+        f'  - login: "{x}"\n' for x in logins)
+    p = tmp_path / "devs_optout.yaml"
+    p.write_text(body, encoding="utf-8")
+    return str(p)
+
+
+def _two_owner_fake():
+    return FakeClient(
+        users={
+            "acme": {"login": "acme", "type": "Organization"},
+            "keepme": _human("keepme", "Keep Me"),
+            "removeme": _human("removeme", "Remove Me"),
+        },
+        repos={"keepme": _repos("keepme"), "removeme": _repos("removeme")},
+        contributors={"acme/keep": [{"login": "keepme"}],
+                      "acme/drop": [{"login": "removeme"}]},
+        events={
+            "keepme": [_push("2026-06-%02dT00:00:00Z" % d, size=8) for d in range(1, 21)],
+            "removeme": [_push("2026-06-%02dT00:00:00Z" % d, size=8) for d in range(1, 21)],
+        },
+    )
+
+
+def _cfg(tmp_path, roster, optout_path, **extra):
+    cfg = {"seed_repos": ["acme/keep", "acme/drop"], "roster_path": str(roster),
+           "optout_path": optout_path, "score_threshold": 0.02, "now": NOW}
+    cfg.update(extra)
+    return cfg
+
+
+def test_an_opted_out_owner_reaches_no_signal_of_either_tag(monkeypatch, tmp_path):
+    roster = _write_roster(tmp_path)
+    out = _fetch(monkeypatch, _two_owner_fake(),
+                 _cfg(tmp_path, roster, _optout(tmp_path, "removeme")))
+    logins = {s.meta["login"] for s in out}
+    assert "removeme" not in logins
+    assert "keepme" in logins, "the gate must remove one person, not everybody"
+    flat = "\n".join(f"{s.title} {s.url} {s.clean_text} {s.entity_tags}" for s in out)
+    assert "removeme" not in flat
+
+
+def test_the_negative_control_proves_the_absence_is_the_gate(monkeypatch, tmp_path):
+    """With an EMPTY opt-out file the same login comes back in a Signal. Without this,
+    the assertion above would pass against a fetch() that returned nothing at all."""
+    roster = _write_roster(tmp_path)
+    out = _fetch(monkeypatch, _two_owner_fake(),
+                 _cfg(tmp_path, roster, _optout(tmp_path)))
+    assert {"keepme", "removeme"} <= {s.meta["login"] for s in out}
+
+
+def test_an_opted_out_owner_never_reaches_the_roster_file(monkeypatch, tmp_path):
+    """`roster_mod.append_devs` is a SIDE EFFECT inside fetch(). A login that reaches it
+    is written into config/cracked_devs.yaml and is seeded into every later run."""
+    roster = _write_roster(tmp_path)
+    _fetch(monkeypatch, _two_owner_fake(),
+           _cfg(tmp_path, roster, _optout(tmp_path, "removeme")))
+    text = roster.read_text(encoding="utf-8")
+    assert "removeme" not in text
+    assert "github: keepme" in text
+
+
+def test_the_gate_matches_regardless_of_the_casing_written_in_the_file(monkeypatch, tmp_path):
+    roster = _write_roster(tmp_path)
+    out = _fetch(monkeypatch, _two_owner_fake(),
+                 _cfg(tmp_path, roster, _optout(tmp_path, "@RemoveMe")))
+    assert "removeme" not in {s.meta["login"] for s in out}
+
+
+def test_a_malformed_optout_file_makes_fetch_raise_rather_than_publish(monkeypatch, tmp_path):
+    """FAIL CLOSED. Returning unfiltered candidates because the consent file could not
+    be parsed is the one failure this gate exists to prevent."""
+    roster = _write_roster(tmp_path)
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("logins:\n  - login: a\n   nope: [\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        _fetch(monkeypatch, _two_owner_fake(), _cfg(tmp_path, roster, str(bad)))
+
+
+def test_the_gate_is_read_before_any_github_call_is_made(monkeypatch, tmp_path):
+    """A raise from the consent loader must happen before the funnel spends anything.
+    A client that refuses every call proves nothing was spent."""
+    roster = _write_roster(tmp_path)
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("logins: not-a-list\n", encoding="utf-8")
+
+    class _Exploding:
+        cache = None
+        rate_limit: dict = {}
+
+        def __getattr__(self, name):
+            raise AssertionError(f"crackscan called {name} before reading consent")
+
+    with pytest.raises(ValueError):
+        _fetch(monkeypatch, _Exploding(), _cfg(tmp_path, roster, str(bad)))
+
+
+def test_the_vault_seed_lane_stays_off_in_the_shipped_config():
+    """e01's comment promised e03 would flip this. It is deliberately NOT flipped: the
+    lane feeds the condemned cheap_score/deep_score funnel and emits a considered Signal
+    per candidate into the live public vault."""
+    import yaml
+    cfg = yaml.safe_load(Path("config/sources.yaml").read_text(encoding="utf-8"))
+    assert cfg["crackscan"]["use_vault_seed_lane"] is False
+    text = Path("config/sources.yaml").read_text(encoding="utf-8")
+    assert "STAYS OFF" in text
