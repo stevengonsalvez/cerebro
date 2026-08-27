@@ -5,42 +5,43 @@
     "removes": "blocking on owner for decisions"
   },
   "beads_mode": "state-only",
-  "branch": "f/devs-pool",
-  "current_epic": "e03+e05",
-  "current_note": "TICK 03:05. e03 and e05 both through Plan, PlanReview and Revise; both branches cut; both at BUILD. Each plan drew 5 findings and every one was folded after being verified against the real artefacts. TWO HIGHS, BOTH THE SAME CLASS AND BOTH ABOUT THE LAUNCH-BLOCKING OPT-OUT GATE: e05's V9 cross-repo proof would have PASSED VACUOUSLY because the env var was wrong AND the site's own test suites override it, so the copied fixture corpus was never read at all; and the gate's control build could never have gone green because three of its five asserted surfaces are structurally incapable of carrying a dev login today, so the control half would fail while the treatment half passed for the wrong reason. Either defect alone would have shipped a launch requirement whose proof proves nothing, which is precisely the failure mode the charter's opt-out gate exists to prevent. A MEDIUM CAUGHT THE ACCOUNT I DENIED THIS SESSION: the e03 writer consulted verdicts for display but never for WRITES, so GCGH159 passed the plan's own publishable() predicate and would have been written into the corpus despite carrying a denied verdict. The fix adds a denied-verdict clause to publishable() and a test feeding GCGH159 through it. Another medium found F052's opt-out promise copy OVERCLAIMS: after a total devs opt-out the person is still named across briefing, stats, graph and signal pages, so the promise to 'remove what is live within one deploy cycle' was false as written; it is being scoped to the developer profile and index entry with the public-signal citations named explicitly. CODEX PEER REVIEW LANDED AND WAS ACTED ON. It found one clearing built on a false fact: lizhengfeng101 was cleared because 'all 8 same-basename repos are open-code-review, his own project', but GET /repos/lizhengfeng101/open-code-review returns fork: true, parent alibaba/open-code-review, 2 stars, and he has exactly one non-fork repo, a 2-star profile README. I reproduced it before acting and WITHDREW the clearing in d78ab37 rather than denying him: there is no evidence of automation and inventing one repeats the error in the opposite direction. The flag now stands unresolved and he publishes nowhere. Codex also caught MY error: I had told the owner qin-ctx was the newest account and caveated him on that basis, but santifer (2026-01-23) and lizhengfeng101 (2026-01-14) are both newer than qin-ctx (2025-09-26), and santifer carries a 68,683-star flagship on a seven-month-old account with no age caveat recorded at all. And it surfaced the clearest defect in the whole set: push rate is applied inconsistently, with steipete CLEARED at 143.53 pushes per active day against diegosouzapw DENIED at 26.14, a 5.5x gap in the wrong direction. steipete's clearing is defensible on identity, 52,732 followers and a 2009 account, but not on rate, which means rate cannot be what denied diegosouzapw either. All of it is written into addendum 3 of the owner-review artifact. 26 verdicts, 0 owner-signed.",
+  "branch": "f/devs-writer",
+  "current_epic": "e06",
+  "current_note": "TICK 04:20. e03 and e05 BOTH APPROVE. e03 is PR #23 with 17 build commits plus 6 fix commits, 28 files, +4,468/-32, all three CI checks green. e05 is 11 commits on f/devs-filters-optout. THE E03 REVIEW MADE THE BEST CATCH OF THE PROGRAMME SO FAR AND IT REPRODUCED IT LIVE: it re-ran devs-refresh with no token against a 1,036-note corpus copy, the log carried 273 lines of 'GitHub 403 API rate limit exceeded', and the run still printed healthy: true with the publish set collapsed from 1,316 to 31. simonw himself dropped to the provenance floor. Only the churn-refusal path saved the corpus, and a smaller degradation would have slipped under the cap and churn-deleted roughly 329 real people's published notes while every meter read healthy. Root cause: Budget.truncated is set only on budget exhaustion, never on 403s, and resolve failures were counted nowhere. Fixed by counting errors at the client rather than at each swallow, because the swallows are not all reachable (owner_resolve returns None on a failed contributors call, indistinguishable from 'no human found'), and a 404 is deliberately NOT counted because it is an answer, not a failure, and a predicate that cries wolf gets muted. Two more e03 fixes: a refused-churn run exited 0 so run.sh never paged, now _page_if_degraded; and the writer had a path-traversal, a login of '../escaped' wrote outside Devs/ at the vault root, now a seventh write-gate clause pinning the GitHub login alphabet. E05 APPROVE WITH THREE LOWS, TWO OF WHICH I AM FIXING ANYWAY BECAUSE THEY SIT ON THE OPT-OUT PROMISE, WHICH THE CHARTER CALLS A LAUNCH REQUIREMENT. First, the consent list is reached by a bundled import so it is inlined into a server chunk; optedOut is [] today so nothing leaks yet, but the moment a real person opts out THEIR LOGIN SHIPS IN THE DEPLOYED JAVASCRIPT in a public repo for ever, which inverts the whole point of asking to be removed. Second, the gate writes a synthetic consent entry into the REAL committed file and restores it only in finally, which never runs on SIGKILL, so a crash plus a careless commit fabricates an opt-out request for a real person. I verified the committed file is clean (optedOut: []) so this is latent, not live. A superstar-engineer agent is fixing both with proof required over the ENTIRE dist tree, not one chunk. The third low (a gate run without --keep deleting a previous --keep run's dist) is cosmetic and explicitly out of scope. E06 LAUNCHED, the last build epic before launch: snapshots so the history actually accumulates (the original crackscan set record=False and could never self-heal), lane resilience, enrichment, and token ops including the recommendation to replace the xyora token, which carries admin:enterprise, admin:org, repo, workflow and delete:packages despite being described as public-read-only. The reviewer is told to induce a REAL failure in every lane and prove each health signal goes red, because e03 just proved a meter will happily read healthy through 273 rate-limit errors. e07 is unblocked but HELD until the SITE worktree is clear of the hardening agent.",
   "dashboard_slug": "cerebro-devs",
   "epics": {
     "e01": "BUILT_PR_HELD",
     "e02": "BUILT_PR_HELD",
-    "e03": "BUILDING",
+    "e03": "BUILT_PR_HELD",
     "e04": "BUILT_PR_HELD",
-    "e05": "BUILDING",
-    "e06": "QUEUED",
-    "e07": "QUEUED",
+    "e05": "BUILT_HARDENING",
+    "e06": "BUILDING",
+    "e07": "READY_HELD_ON_WORKTREE",
     "e08": "BLOCKED_ON_OWNER_REVIEW"
   },
   "human_gate": "blessed",
   "owner_review_gate": {
     "artifact": ".agents/scratch/devs-24-cleared-for-owner-review.md",
     "blocks": "e08 launch, any published surface, any reviewed_by=owner stamp, merging site PR #71",
-    "does_not_block": "e03 e05 e06 e07 build work",
+    "does_not_block": "e06 e07 build work",
     "enforced_by": "tests/test_denylist.py::test_no_shipped_verdict_claims_the_owner_signed_it (44693bb)",
     "stamped_owner": 0,
     "state": "OPEN_AWAITING_OWNER",
     "verdicts_awaiting": 26,
     "weakest_entries_for_his_eye": [
-      "santifer — newest-but-one account, 68.7k-star flagship, no age caveat",
+      "santifer — 7-month account, 68.7k-star flagship, no age caveat",
       "steipete — cleared at 143.53 push/day vs diegosouzapw denied at 26.14",
       "diegosouzapw — denial rests on magnitude alone",
-      "qin-ctx — 11-month account, PR-review activity is the strongest signal in his favour"
+      "qin-ctx — PR-review activity is the strongest signal in his favour"
     ],
-    "withdrawn": "lizhengfeng101 — clearing rested on a repo that is a fork of alibaba/open-code-review (d78ab37)"
+    "withdrawn": "lizhengfeng101 — clearing rested on a fork of alibaba/open-code-review (d78ab37)"
   },
-  "phase": "E03_E05_WAVE",
-  "phase_since": "2026-08-27T02:35:00Z",
+  "phase": "E06_WAVE",
+  "phase_since": "2026-08-27T04:20:00Z",
   "prs": {
     "cerebro_21": "e01, OPEN, held",
     "cerebro_22": "e02 + verdict corrections, OPEN, held",
+    "cerebro_23": "e03, OPEN, 3/3 CI green, held",
     "site_71": "e04, OPEN, MUST NOT MERGE — merging deploys /cerebro/devs to production"
   },
   "stop_counters": {
@@ -51,6 +52,6 @@
     "backlog_dry": true,
     "budget_tokens": null,
     "deadline": null,
-    "spent_tokens_estimate": 5400000
+    "spent_tokens_estimate": 7600000
   }
 }
