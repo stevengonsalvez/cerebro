@@ -1,0 +1,107 @@
+{
+  "admitted": true,
+  "automation": {
+    "basename_concentration": 0.0286,
+    "cleared_by": null,
+    "cleared_on": null,
+    "fork_provenance": null,
+    "not_owned_ratio": 0.7429,
+    "prefilter": "rest_verified",
+    "push_per_day": 9.0568,
+    "repo_per_active_day": 0.3977,
+    "shape_evidence": [],
+    "shapes": [],
+    "state": "clear"
+  },
+  "discovered_via": "fanout",
+  "discovered_via_all": [
+    "fanout"
+  ],
+  "facets": {
+    "30d": {
+      "active_days": 28,
+      "distinct_repos": 18,
+      "not_owned_basenames": 12,
+      "not_owned_owners": 5,
+      "pushes": 164,
+      "pushes_per_repo": 9.1111,
+      "repos_not_owned": 12
+    },
+    "7d": {
+      "active_days": 5,
+      "distinct_repos": 12,
+      "not_owned_basenames": 7,
+      "not_owned_owners": 3,
+      "pushes": 17,
+      "pushes_per_repo": 1.4167,
+      "repos_not_owned": 7
+    },
+    "90d": {
+      "active_days": 88,
+      "distinct_repos": 35,
+      "not_owned_basenames": 26,
+      "not_owned_owners": 5,
+      "pushes": 797,
+      "pushes_per_repo": 22.7714,
+      "repos_not_owned": 26
+    }
+  },
+  "generated_at": "2026-08-26T23:51:37.433387+00:00",
+  "login": "mathiasbynens",
+  "low_n": false,
+  "name": null,
+  "provenance": [
+    "379642deb53f3714"
+  ],
+  "provenance_repos": [
+    "ChromeDevTools/chrome-devtools-mcp"
+  ],
+  "pushes_per_week": [
+    78,
+    63,
+    82,
+    79,
+    88,
+    69,
+    47,
+    85,
+    57,
+    43,
+    45,
+    44,
+    17
+  ],
+  "reasons": [
+    "provenance: 1 vault signal(s) \u2014 pass",
+    "activity: 88 active days in 90d \u2014 pass",
+    "automation: clear \u2014 pass"
+  ],
+  "repos": [],
+  "repos_populated": false,
+  "windows": {
+    "30d": {
+      "active_days": 28,
+      "distinct_repos": 18,
+      "not_owned_basenames": 12,
+      "not_owned_owners": 5,
+      "pushes": 164,
+      "repos_not_owned": 12
+    },
+    "7d": {
+      "active_days": 5,
+      "distinct_repos": 12,
+      "not_owned_basenames": 7,
+      "not_owned_owners": 3,
+      "pushes": 17,
+      "repos_not_owned": 7
+    },
+    "90d": {
+      "active_days": 88,
+      "distinct_repos": 35,
+      "not_owned_basenames": 26,
+      "not_owned_owners": 5,
+      "pushes": 797,
+      "repos_not_owned": 26
+    }
+  }
+}

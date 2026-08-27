@@ -1,79 +1,128 @@
 {
   "admitted": true,
   "automation": {
-    "basename_concentration": 0.0556,
-    "cleared_by": null,
-    "cleared_on": null,
-    "not_owned_ratio": 0.2407,
-    "push_per_day": 4.6818,
-    "repo_per_active_day": 0.8182,
-    "shape_evidence": [],
-    "shapes": [],
+    "basename_concentration": 0.7273,
+    "cleared_by": "e01-builder",
+    "cleared_on": "2026-08-26",
+    "fork_provenance": {
+      "checked": 5,
+      "no_upstream": 0,
+      "own_upstream": 5,
+      "sampled": [
+        "AtmoOmen/DeepSeek-Reasonix",
+        "CnsMaple/DeepSeek-Reasonix",
+        "GTC2080/DeepSeek-Reasonix",
+        "HUQIANTAO/DeepSeek-Reasonix",
+        "i1j/DeepSeek-Reasonix"
+      ],
+      "third_party": 0,
+      "truncated": false,
+      "unresolved": 0,
+      "upstreams": [
+        "esengine/DeepSeek-Reasonix"
+      ]
+    },
+    "not_owned_ratio": 0.6364,
+    "prefilter": "rest_verified",
+    "push_per_day": 9.9277,
+    "repo_per_active_day": 0.1325,
+    "shape_evidence": [
+      "basename concentration 0.7273 (8 of 11 repos share one basename), 7 not owned across 1 basenames \u2014 5 of 5 sampled repos resolved; 5 fork an upstream this account owns; upstreams: esengine/DeepSeek-Reasonix"
+    ],
+    "shapes": [
+      "fork_farm_own_upstream"
+    ],
     "state": "clear"
   },
   "discovered_via": "vault",
-  "generated_at": "2026-08-26T21:48:59.436444+00:00",
-  "login": "simonw",
+  "discovered_via_all": [
+    "vault"
+  ],
+  "facets": {
+    "30d": {
+      "active_days": 24,
+      "distinct_repos": 3,
+      "not_owned_basenames": 0,
+      "not_owned_owners": 0,
+      "pushes": 114,
+      "pushes_per_repo": 38.0,
+      "repos_not_owned": 0
+    },
+    "7d": {
+      "active_days": 5,
+      "distinct_repos": 2,
+      "not_owned_basenames": 0,
+      "not_owned_owners": 0,
+      "pushes": 8,
+      "pushes_per_repo": 4.0,
+      "repos_not_owned": 0
+    },
+    "90d": {
+      "active_days": 83,
+      "distinct_repos": 11,
+      "not_owned_basenames": 1,
+      "not_owned_owners": 7,
+      "pushes": 824,
+      "pushes_per_repo": 74.9091,
+      "repos_not_owned": 7
+    }
+  },
+  "generated_at": "2026-08-26T23:51:37.433387+00:00",
+  "login": "esengine",
   "low_n": false,
   "name": null,
   "provenance": [
-    "0726bc457d4dcf89",
-    "1be978947e68d1f2",
-    "481b19745d66d642",
-    "4d3291c25d56323b",
-    "97c4e9cb8b163ddb",
-    "98a2deac3e2f9725",
-    "b949a65ff91f9791",
-    "c7515e0fa4368a55",
-    "d3abe74726b22711",
-    "d4d674821fc308ad",
-    "d61fc285c7155696",
-    "e76a6eae5d38637b",
-    "e7c647c4d0689526"
+    "b5590ec052a4f771"
+  ],
+  "provenance_repos": [
+    "esengine/DeepSeek-Reasonix"
   ],
   "pushes_per_week": [
-    22,
-    22,
-    47,
-    53,
-    13,
-    62,
-    26,
-    5,
-    17,
-    17,
-    12,
-    11,
-    2
+    186,
+    122,
+    94,
+    70,
+    78,
+    65,
+    37,
+    37,
+    25,
+    16,
+    58,
+    28,
+    8
   ],
   "reasons": [
-    "provenance: 13 vault signal(s) \u2014 pass",
-    "activity: 66 active days in 90d \u2014 pass",
+    "provenance: 1 vault signal(s) \u2014 pass",
+    "activity: 83 active days in 90d \u2014 pass",
     "automation: clear \u2014 pass"
   ],
   "repos": [],
   "repos_populated": false,
   "windows": {
     "30d": {
-      "active_days": 16,
-      "distinct_repos": 21,
-      "not_owned_basenames": 4,
-      "pushes": 46,
-      "repos_not_owned": 4
+      "active_days": 24,
+      "distinct_repos": 3,
+      "not_owned_basenames": 0,
+      "not_owned_owners": 0,
+      "pushes": 114,
+      "repos_not_owned": 0
     },
     "7d": {
-      "active_days": 2,
+      "active_days": 5,
       "distinct_repos": 2,
       "not_owned_basenames": 0,
-      "pushes": 2,
+      "not_owned_owners": 0,
+      "pushes": 8,
       "repos_not_owned": 0
     },
     "90d": {
-      "active_days": 66,
-      "distinct_repos": 54,
-      "not_owned_basenames": 12,
-      "pushes": 309,
-      "repos_not_owned": 13
+      "active_days": 83,
+      "distinct_repos": 11,
+      "not_owned_basenames": 1,
+      "not_owned_owners": 7,
+      "pushes": 824,
+      "repos_not_owned": 7
     }
   }
 }
