@@ -77,6 +77,12 @@ def main() -> None:
                          "so the failure path is testable without pretending the endpoint "
                          "is down")
 
+    sub.add_parser(
+        "devs-token-check",
+        help="F059: fail when the GitHub token carries any scope beyond public read. "
+             "Exit 0 allowed, 5 over-scoped or refused, 6 no token in the environment. "
+             "Prints scope NAMES and a sha256 fingerprint, never the value")
+
     cs = sub.add_parser("cache-stats",
                         help="what the gitintel cache holds: rows and bytes per table, "
                              "the snapshot span, and the reclaimable free pages "
@@ -270,6 +276,27 @@ def main() -> None:
         result["notes_skipped"] = read.skipped
         print(json.dumps(result, indent=2))
         return
+
+    if args.command == "devs-token-check":
+        # Handled BEFORE `from .orchestrator import run`, like every other devs-lane
+        # subcommand. One GET of public metadata; no vault, no pool, no pipeline.
+        import sys
+
+        from .gitintel import token_check as _token_check
+        from .gitintel.github_client import resolve_token
+
+        settings = load(allow_example=True)
+        # Resolved through the ONE audited path, exactly like every other consumer, so
+        # this module never reads os.environ for itself and there is one thing to audit.
+        report = _token_check.check(
+            resolve_token((settings.sources or {}).get("crackscan", {}), settings))
+        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+        print(_token_check.summary_line(report))
+        if report.ok:
+            return
+        _page_contract(f"gh token CHECK FAILED: {report.reason} "
+                       f"(sha256:{report.fingerprint or 'absent'})", settings)
+        sys.exit(report.exit_code)
 
     if args.command == "devs-contract":
         # Handled BEFORE `from .orchestrator import run`, like every other devs-lane
