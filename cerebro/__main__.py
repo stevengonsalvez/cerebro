@@ -61,6 +61,16 @@ def main() -> None:
                            help="let resolution replace curated values (default: fill blanks only)")
     cd_roster.add_argument("--limit", type=int, default=20, help="suggest: max candidates")
 
+    dc = sub.add_parser(
+        "devs-contract",
+        help="F069: assert the four github_events columns the pool query reads, the "
+             "PushEvent enum member and feed liveness. Exit 0 green, 3 contract drift, "
+             "4 endpoint unreachable")
+    dc.add_argument("--offline", default=None,
+                    help="read a DESCRIBE fixture from this path instead of the network, "
+                         "so the failure path is testable without pretending the endpoint "
+                         "is down")
+
     cs = sub.add_parser("cache-stats",
                         help="what the gitintel cache holds: rows and bytes per table, "
                              "the snapshot span, and the reclaimable free pages "
@@ -254,6 +264,52 @@ def main() -> None:
         result["notes_skipped"] = read.skipped
         print(json.dumps(result, indent=2))
         return
+
+    if args.command == "devs-contract":
+        # Handled BEFORE `from .orchestrator import run`, like every other devs-lane
+        # subcommand, so a preflight check is structurally incapable of triggering a
+        # pipeline run.
+        #
+        # THREE EXIT CODES BECAUSE THERE ARE THREE ANSWERS. 0 the contract holds; 3 the
+        # endpoint answered and the answer no longer matches the query; 4 the endpoint
+        # could not be reached. Today both failures reach an operator as UNREACHABLE,
+        # which sends them to read a status page about a service that is answering.
+        #
+        # It NEVER gates `devs-refresh` (see scripts/run.sh): the refresh has its own
+        # degradation path, and a preflight that blocked the run would turn an advisory
+        # into a self-inflicted outage on the morning ClickHouse merely hiccups.
+        import sys
+
+        from .gitintel import contract as _contract
+        from .gitintel import gharchive as _gharchive
+
+        # No `dry_run_override`: this stage writes nothing anywhere, so "dry run" here
+        # means only "is this a dev checkout", which is exactly the question the paging
+        # decision asks. The live install's settings.yaml carries dry_run: false.
+        settings = load(allow_example=True)
+        try:
+            if args.offline:
+                report = _contract.run_check(
+                    offline_describe=Path(args.offline).read_text(encoding="utf-8"))
+            else:
+                report = _contract.run_check()
+        except _gharchive.GHArchiveContractError as exc:
+            print(json.dumps({"ok": False, "failure": "contract",
+                              "error": str(exc)[:500]}, indent=2))
+            _page_contract(f"gh archive CONTRACT DRIFT: {str(exc)[:200]}", settings)
+            sys.exit(3)
+        except _gharchive.GHArchiveUnavailable as exc:
+            print(json.dumps({"ok": False, "failure": "unreachable",
+                              "error": str(exc)[:500]}, indent=2))
+            _page_contract(f"gh archive UNREACHABLE: {str(exc)[:200]}", settings)
+            sys.exit(4)
+
+        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+        if report.ok:
+            return
+        moved = ", ".join(f"{d.subject} ({d.detail})" for d in report.drift)
+        _page_contract(f"gh archive CONTRACT DRIFT: {moved[:200]}", settings)
+        sys.exit(3)
 
     if args.command in ("cache-stats", "cache-vacuum"):
         # Handled BEFORE `from .orchestrator import run`, like every other devs-lane
@@ -776,6 +832,21 @@ def _yaml_scalar_out(value: str) -> str:
     if s == "" or re.search(r'(^[\s\[\]{}#&*!|>%@`"\',])|(:\s)|(\s#)|(\s$)', s):
         return '"' + s.replace('"', '\\"') + '"'
     return s
+
+
+def _page_contract(message: str, settings) -> None:
+    """F069's page. Best-effort, never fatal, never from a dev checkout.
+
+    The two texts (`CONTRACT DRIFT` / `UNREACHABLE`) are the entire operational payload of
+    D4's type split: they are what sends an operator to the query or to the status page.
+    """
+    if getattr(settings, "dry_run", True):
+        return
+    try:
+        from .sink import notify
+        notify.push_failure(message, settings)
+    except Exception:  # noqa: BLE001 — alerting must never become the failure
+        pass
 
 
 def _page_if_degraded(summary: dict, settings) -> None:
