@@ -53,7 +53,10 @@ MODULES = [
     #                 whole lane, because a delta looks like merit rather than a count.
     "cerebro/gitintel/growth.py",
     #   portfolio.py  "rank by freshest" — the shape `_ships_score` already had.
+    #   contract.py   no such line is tempting here; it is swept because EVERY new module
+    #                 in the lane is swept, and the exception is where the next one hides.
     "cerebro/gitintel/portfolio.py",
+    "cerebro/gitintel/contract.py",
 ]
 
 VOLUME_NAMES = {"pushes", "followers", "stars", "score", "distinct_repos",
@@ -203,7 +206,10 @@ DEVS_LANE_DATACLASS_MODULES = [
     #                 whole lane, because a delta looks like merit rather than a count.
     "cerebro/gitintel/growth.py",
     #   portfolio.py  "rank by freshest" — the shape `_ships_score` already had.
+    #   contract.py   no such line is tempting here; it is swept because EVERY new module
+    #                 in the lane is swept, and the exception is where the next one hides.
     "cerebro/gitintel/portfolio.py",
+    "cerebro/gitintel/contract.py",
 ]
 
 BANNED_FIELDS = {"contributions", "followers", "stars", "stargazers_count",

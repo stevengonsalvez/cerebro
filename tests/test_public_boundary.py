@@ -49,6 +49,11 @@ DEVS_LANE_MODULES = [
     # spending quota on a number nobody may display yet.
     "cerebro/gitintel/growth.py",
     "cerebro/gitintel/portfolio.py",
+    # `contract.py` posts SQL to the anonymous ClickHouse endpoint and `token_check.py` is
+    # the one module that holds a credential on purpose. Both are swept for exactly that
+    # reason: the module nobody thought needed guarding is where the next widening lands.
+    "cerebro/gitintel/contract.py",
+    "cerebro/gitintel/token_check.py",
 ]
 
 #: The allowlist, as regexes over a formatted path. Sourced from `fanout.PUBLIC_READ_PATHS`
@@ -237,16 +242,25 @@ def test_no_lane_module_logs_prints_or_formats_the_token(path):
                 assert not bad, f"{path}: interpolates {bad} into a string"
 
 
-def test_the_allowlist_is_exactly_the_four_paths_the_lane_needs():
+def test_the_allowlist_is_exactly_the_five_paths_the_lane_needs():
     """Small on purpose. Every entry is one call site: owner resolution / humanness
-    pre-filter, the e03 repo lane, fork provenance, contributor fan-out. Growing it is a
-    deliberate edit that shows in the diff beside the call that needed it."""
+    pre-filter, the e03 repo lane, fork provenance, contributor fan-out, and e06's token
+    check. Growing it is a deliberate edit that shows in the diff beside the call that
+    needed it.
+
+    `/rate_limit` is registered here rather than left unlisted because it IS a call this
+    lane makes with the credential. It is the only endpoint whose purpose is metadata, it
+    does not consume the limit it reports, and it is the one place the token's scopes are
+    legible — which is what F059's guard reads."""
     assert PUBLIC_READ_PATHS == (
         "/users/{login}",
         "/users/{login}/repos",
         "/repos/{owner}/{repo}",
         "/repos/{owner}/{repo}/contributors",
+        "/rate_limit",
     )
+    from cerebro.gitintel.token_check import RATE_LIMIT_PATH
+    assert RATE_LIMIT_PATH in PUBLIC_READ_PATHS
 
 
 def test_the_allowlist_actually_rejects_something():

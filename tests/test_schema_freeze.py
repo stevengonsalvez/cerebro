@@ -330,3 +330,100 @@ def test_the_fixture_is_public_data_only(rec):
     flat = json.dumps(rec).lower()
     for banned in ("token", "email", "@", "ghp_", "github_pat_"):
         assert banned not in flat
+
+
+# --- e06/D2: the freeze, asserted against a note the WRITER actually produced ------
+#
+# WHY THIS ADDITION IS REQUIRED AND WHY IT IS THE OPPOSITE OF WEAKENING THE FREEZE.
+# Everything above this line reads a committed JSON *fixture*, and the top-level check at
+# `test_every_top_level_frozen_field_is_present` is `frozen <= set(REC)` — a SUBSET. It
+# passes silently when a field is ADDED, which is exactly the direction e06 must not move
+# in: e07 is building against this schema in parallel and the site's loader THROWS on a
+# producer field that is on neither its ADMITTED nor its CONSUMED list. Nothing anywhere
+# in this suite read a note the writer had actually produced.
+#
+# So this asserts the frontmatter key set of a REAL WRITTEN NOTE by EXACT EQUALITY,
+# against a constant transcribed from e03's output. Adding `growth` or `freshness` to the
+# record — the two enrichments e06 computes — fails here, in this repository, instead of
+# reddening a build in another one.
+
+#: The 16 frontmatter keys e03 writes, transcribed from a produced note. NOT imported from
+#: `sink/devs.FRONTMATTER_KEYS`: a constant compared against itself asserts nothing, and
+#: the whole point is to catch an edit to that tuple.
+WRITTEN_FRONTMATTER_KEYS = {
+    "login", "name", "discovered_via", "discovered_via_all", "provenance_repos",
+    "admitted", "low_n", "repos_populated", "generated_at", "provenance",
+    "pushes_per_week", "windows", "automation", "facets", "reasons", "repos",
+}
+
+
+def _write_one_note(tmp_path, record):
+    """Through the REAL writer, into a tmp vault. Returns the note's text."""
+    from cerebro.sink import devs as devs_sink
+
+    root = tmp_path / "vault"
+    corpus_plan = devs_sink.plan([record], [], optout=None, verdicts=None)
+    assert corpus_plan.writes, "the fixture record is not publishable; the test would be vacuous"
+    devs_sink.apply(corpus_plan, root)
+    note = root / devs_sink.CORPUS_DIR / f"{record['login']}.md"
+    assert note.is_file(), "the writer produced no note"
+    return note.read_text(encoding="utf-8")
+
+
+def _frontmatter_keys(text: str) -> set:
+    import re
+
+    assert text.startswith("---\n"), "no frontmatter"
+    body = text.split("---\n", 2)[1]
+    return {m.group(1) for m in re.finditer(r"^([A-Za-z_][A-Za-z0-9_]*):", body,
+                                            flags=re.MULTILINE)}
+
+
+def test_a_written_notes_frontmatter_key_set_is_exactly_the_frozen_one(tmp_path):
+    """EXACT EQUALITY, over a note on disk. A new producer field lands here."""
+    keys = _frontmatter_keys(_write_one_note(tmp_path, dict(REPOS_REC)))
+    assert keys == WRITTEN_FRONTMATTER_KEYS, {
+        "added": sorted(keys - WRITTEN_FRONTMATTER_KEYS),
+        "missing": sorted(WRITTEN_FRONTMATTER_KEYS - keys),
+    }
+
+
+def test_the_written_key_set_matches_the_serializers_own_tuple(tmp_path):
+    """The two must agree, and they are compared rather than shared: if a field is added
+    to `FRONTMATTER_KEYS` this fails, which is the point."""
+    from cerebro.sink.devs import FRONTMATTER_KEYS
+
+    assert set(FRONTMATTER_KEYS) == WRITTEN_FRONTMATTER_KEYS
+
+
+def test_the_writer_refuses_an_e06_enrichment_field_outright(tmp_path):
+    """D2 AS A MECHANISM RATHER THAN A PARAGRAPH. `growth` and `freshness` are computed by
+    this epic and land in `logs/devs/` artifacts. Putting either on the record is a
+    build-killing throw in the site's loader; here it is a `ValueError` before a byte is
+    written."""
+    from cerebro.sink import devs as devs_sink
+
+    for field_name in ("growth", "freshness"):
+        record = dict(REPOS_REC)
+        record[field_name] = {"delta": None}
+        with pytest.raises(ValueError) as exc:
+            devs_sink.render(record)
+        assert field_name in str(exc.value)
+        assert "coordination event" in str(exc.value)
+
+
+def test_the_negative_control_a_removed_field_is_also_caught(tmp_path):
+    """A key-set assertion that only catches additions is half a gate."""
+    from cerebro.sink import devs as devs_sink
+
+    record = dict(REPOS_REC)
+    record.pop("facets")
+    with pytest.raises(ValueError):
+        devs_sink.render(record)
+
+
+def test_e06s_enrichments_are_absent_from_every_committed_fixture():
+    """The other direction: no fixture may quietly acquire the fields either, or the
+    assertion above would be asserting against a moved target."""
+    for fixture in (REC, FANOUT_REC, REPOS_REC):
+        assert "growth" not in fixture and "freshness" not in fixture

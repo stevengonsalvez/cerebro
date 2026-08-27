@@ -54,6 +54,11 @@ PUBLIC_READ_PATHS = (
     "/users/{login}/repos",
     "/repos/{owner}/{repo}",
     "/repos/{owner}/{repo}/contributors",
+    # e06/F059. The token check's probe: the only endpoint whose PURPOSE is metadata, it
+    # does not consume the core limit it reports, and it is where `x-oauth-scopes` is
+    # legible. Registered here because it is a call this lane makes with the credential,
+    # and an unlisted call site is an unaudited one.
+    "/rate_limit",
 )
 
 #: One page. Not a quality signal, not a ranking, not a sample size chosen for
