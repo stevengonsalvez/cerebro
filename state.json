@@ -7,7 +7,7 @@
   "beads_mode": "state-only",
   "branch": "f/devs-pool",
   "current_epic": "e03+e05",
-  "current_note": "TICK 02:35. e02 and e04 both COMPLETE, both REVISE with findings fixed, both PRs OPEN and deliberately unmerged. e02 is PR #22 with 13 signed commits and 24 files, pool 167 -> 2,568 people, all three CI checks green. e04 is PR #71 with 31 signed commits, Vercel preview green and publish still pending. e04 IS THE ONE THAT MUST NOT MERGE: merging it to site main would deploy /cerebro/devs to production, which is publishing, and the owner has read none of the verdicts. THE REVIEWS EARNED THEIR KEEP TWICE. e02's reviewer proved test theatre by mutation, replacing the new F066 gate condition with `if False:` and watching all 656 tests still pass, because every sanity_check test built records with no prefilter key so the branch was never reached. The fixer made it load-bearing. e04's reviewer caught a HIGH: the site whitelist and schema fixture were frozen at the e01 shape while the actual record had gained six additive fields at e02 exit. THE BIGGEST RESULT OF THE WAVE IS THE EYEBALL, AND IT VINDICATES CHARTER CRITERION 4. The e02 eyeball on the expanded pool found GCGH159 sitting at ROW 2, the second-most consistent account among 2,568 people: 489 of 489 pushes onto one repo GCGH159/green across 88 of 90 days, tree of auto-log.md + data.txt + stats.txt, zero stars, no description, commits templated four to a batch one second apart. A contribution-graph greening account. EVERY mechanical signal passes it: push_per_active_day 5.56 is under the 15 line, not_owned_ratio 0.0 makes fork_farm unfirable, distinct_repos 1 makes mass_self_repo unfirable, and it is a real type: User so the humanness pre-filter clears it honestly. The eyeball recorded the done-condition as NOT MET rather than rounding up, and correctly refused to write its own verdict. I recorded it in dc03f2e as reviewed_by: e02-eyeball, NOT owner, because its own paste-ready block said owner and that would have been a third forged signature. I DELIBERATELY SHIPPED NO NEW SHAPE RULE FOR IT: the charter records t3dotgg at 1 repo and 24 of 30 active days as a REAL engineer, so any predicate wide enough to catch 88-of-90-on-one-repo sits directly on top of him, and the honest separators (auto-generated tree, templated subjects, zero stars) are repo CONTENT not activity shape. Same lesson e02 already measured on fork provenance. I also shipped 44693bb, a test that FAILS THE BUILD if any verdict claims reviewed_by owner/stevie/stevengonsalvez. The ATC directive is now mechanically enforced rather than a convention, which is what let the original two forged stamps survive unnoticed. State: 27 verdicts, 0 owner-signed. A MISTAKE I MADE AND CAUGHT: my first insertion of the GCGH159 entry used t.index('cleared:') which matched the word inside a comment, corrupting the YAML and failing 5 tests. Reverted via git checkout, redone against the real section key at line 38, 665 passing. NEXT WAVE LAUNCHED: e03 (devs writer plus the SOURCE half of the opt-out) stacked on f/devs-pool, in parallel with e05 (facet filters, site opt-out, and THE OPT-OUT GATE which the charter names a launch requirement) stacked on f/cerebro-devs-core. The reviewers are told to attack the opt-out first and find a surface it misses. CODEX peer review of the verdicts still running.",
+  "current_note": "TICK 03:05. e03 and e05 both through Plan, PlanReview and Revise; both branches cut; both at BUILD. Each plan drew 5 findings and every one was folded after being verified against the real artefacts. TWO HIGHS, BOTH THE SAME CLASS AND BOTH ABOUT THE LAUNCH-BLOCKING OPT-OUT GATE: e05's V9 cross-repo proof would have PASSED VACUOUSLY because the env var was wrong AND the site's own test suites override it, so the copied fixture corpus was never read at all; and the gate's control build could never have gone green because three of its five asserted surfaces are structurally incapable of carrying a dev login today, so the control half would fail while the treatment half passed for the wrong reason. Either defect alone would have shipped a launch requirement whose proof proves nothing, which is precisely the failure mode the charter's opt-out gate exists to prevent. A MEDIUM CAUGHT THE ACCOUNT I DENIED THIS SESSION: the e03 writer consulted verdicts for display but never for WRITES, so GCGH159 passed the plan's own publishable() predicate and would have been written into the corpus despite carrying a denied verdict. The fix adds a denied-verdict clause to publishable() and a test feeding GCGH159 through it. Another medium found F052's opt-out promise copy OVERCLAIMS: after a total devs opt-out the person is still named across briefing, stats, graph and signal pages, so the promise to 'remove what is live within one deploy cycle' was false as written; it is being scoped to the developer profile and index entry with the public-signal citations named explicitly. CODEX PEER REVIEW LANDED AND WAS ACTED ON. It found one clearing built on a false fact: lizhengfeng101 was cleared because 'all 8 same-basename repos are open-code-review, his own project', but GET /repos/lizhengfeng101/open-code-review returns fork: true, parent alibaba/open-code-review, 2 stars, and he has exactly one non-fork repo, a 2-star profile README. I reproduced it before acting and WITHDREW the clearing in d78ab37 rather than denying him: there is no evidence of automation and inventing one repeats the error in the opposite direction. The flag now stands unresolved and he publishes nowhere. Codex also caught MY error: I had told the owner qin-ctx was the newest account and caveated him on that basis, but santifer (2026-01-23) and lizhengfeng101 (2026-01-14) are both newer than qin-ctx (2025-09-26), and santifer carries a 68,683-star flagship on a seven-month-old account with no age caveat recorded at all. And it surfaced the clearest defect in the whole set: push rate is applied inconsistently, with steipete CLEARED at 143.53 pushes per active day against diegosouzapw DENIED at 26.14, a 5.5x gap in the wrong direction. steipete's clearing is defensible on identity, 52,732 followers and a 2009 account, but not on rate, which means rate cannot be what denied diegosouzapw either. All of it is written into addendum 3 of the owner-review artifact. 26 verdicts, 0 owner-signed.",
   "dashboard_slug": "cerebro-devs",
   "epics": {
     "e01": "BUILT_PR_HELD",
@@ -21,20 +21,26 @@
   },
   "human_gate": "blessed",
   "owner_review_gate": {
-    "also_awaiting": ".agents/scratch/devs-eyeball-2026-08-27.md — agent eyeball on the 2,568-pool top-20, 19/20 real, GCGH159 denied",
     "artifact": ".agents/scratch/devs-24-cleared-for-owner-review.md",
-    "blocks": "e08 launch, any published surface, any reviewed_by=owner stamp, merging e04/PR#71",
+    "blocks": "e08 launch, any published surface, any reviewed_by=owner stamp, merging site PR #71",
     "does_not_block": "e03 e05 e06 e07 build work",
     "enforced_by": "tests/test_denylist.py::test_no_shipped_verdict_claims_the_owner_signed_it (44693bb)",
     "stamped_owner": 0,
     "state": "OPEN_AWAITING_OWNER",
-    "verdicts_awaiting": 27
+    "verdicts_awaiting": 26,
+    "weakest_entries_for_his_eye": [
+      "santifer — newest-but-one account, 68.7k-star flagship, no age caveat",
+      "steipete — cleared at 143.53 push/day vs diegosouzapw denied at 26.14",
+      "diegosouzapw — denial rests on magnitude alone",
+      "qin-ctx — 11-month account, PR-review activity is the strongest signal in his favour"
+    ],
+    "withdrawn": "lizhengfeng101 — clearing rested on a repo that is a fork of alibaba/open-code-review (d78ab37)"
   },
   "phase": "E03_E05_WAVE",
   "phase_since": "2026-08-27T02:35:00Z",
   "prs": {
     "cerebro_21": "e01, OPEN, held",
-    "cerebro_22": "e02, OPEN, held, 3/3 CI green",
+    "cerebro_22": "e02 + verdict corrections, OPEN, held",
     "site_71": "e04, OPEN, MUST NOT MERGE — merging deploys /cerebro/devs to production"
   },
   "stop_counters": {
@@ -45,6 +51,6 @@
     "backlog_dry": true,
     "budget_tokens": null,
     "deadline": null,
-    "spent_tokens_estimate": 4750000
+    "spent_tokens_estimate": 5400000
   }
 }
