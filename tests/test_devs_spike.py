@@ -339,12 +339,26 @@ def test_the_spike_never_imports_the_condemned_scorer():
 
 
 def test_the_spike_never_writes_a_roster_or_the_cracked_devs_file():
-    """Checked against the CODE with the module docstring stripped: the prose is allowed
-    to say what the module refuses to write."""
+    """READING the roster is F008's lane; WRITING it is what stays forbidden.
+
+    e01 banned the string `cracked_devs` outright because e01 had no roster lane at all.
+    e02 does: `pool.roster_lane()` reads the file, and the lane census NAMES it, because
+    adding a missing `github:` handle is an owner edit to that path and the artifact has
+    to say where. So the ban narrows to write-shaped names and to the direct import,
+    which is the property that actually matters — the spike must not be able to mutate
+    the curated roster as a side effect of scanning."""
     code = SRC.replace(ast.get_docstring(ast.parse(SRC)) or "", "")
-    for banned in ("append_devs", "cracked_devs", "load_roster"):
-        assert banned not in code
-    assert "roster" not in _imported_modules()
+    for banned in ("append_devs", "write_roster", "save_roster", "load_roster",
+                   "to_yaml", "safe_dump", "yaml.dump"):
+        assert banned not in code, f"{banned} is a write path into the curated roster"
+    assert "roster" not in _imported_modules(), \
+        "the roster is reached through pool.roster_lane(), never imported directly"
+    # And nothing anywhere in the spike opens a file for writing outside `out`.
+    for node in ast.walk(ast.parse(SRC)):
+        if isinstance(node, ast.Call):
+            fn = node.func
+            name = fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", "")
+            assert name != "open", "the spike writes only through Path.write_text under out/"
 
 
 def test_the_run_writes_nothing_outside_the_out_dir(tmp_path):
@@ -382,10 +396,84 @@ def test_zero_activity_logins_are_labelled_never_dropped(tmp_path):
 
 
 def test_the_run_json_is_deterministic_and_parses(tmp_path):
-    _, _, _, paths = _run(tmp_path, HUMANS)
+    """The record count is the DEDUPED pool, not the corpus. With all three lanes the
+    roster contributes its handle-carrying devs and `simonw` collapses onto the vault
+    entry — one person, one record, which is the whole point of F015."""
+    from cerebro.gitintel import pool
+    _, _, records, paths = _run(tmp_path, HUMANS)
     data = json.loads(paths["json"].read_text(encoding="utf-8"))
-    assert len(data) == len(HUMANS)
+    roster, _skipped = pool.roster_lane()
+    expected = {pool.slug(x) for x in HUMANS} | {pool.slug(c.login) for c in roster}
+    assert len(data) == len(expected) == len(records)
+    assert {pool.slug(d["login"]) for d in data} == expected
     assert all("automation" in d and "windows" in d for d in data)
+
+
+def test_a_roster_dev_the_vault_never_cited_fails_the_provenance_floor(tmp_path):
+    """F008's "always profiled" is a rule about SUPPRESSION, not a licence to publish a
+    page about somebody with no answer to "why is this person here". The floor is not
+    exempted for anyone; the failure is recorded and handed to the writer as a visible
+    decision."""
+    _, top, records, _ = _run(tmp_path, HUMANS)
+    rec = next(r for r in records if r.login == "bcherny")
+    assert rec.discovered_via == "roster"
+    assert rec.provenance == []
+    assert rec.admitted is False
+    assert any("provenance" in r and "FAIL" in r for r in rec.reasons)
+    assert rec.login not in {r.login for r in top}
+
+
+def test_a_roster_dev_the_vault_did_cite_collapses_to_one_record(tmp_path):
+    _, _, records, _ = _run(tmp_path, HUMANS)
+    hits = [r for r in records if r.login.lower() == "simonw"]
+    assert len(hits) == 1, "one person, one profile"
+    assert hits[0].discovered_via == "vault", "vault beats roster on precedence"
+    assert sorted(hits[0].discovered_via_all) == ["roster", "vault"]
+    assert hits[0].name == "Simon Willison", "the roster supplies the curated name"
+    assert hits[0].admitted is True
+
+
+def test_the_lane_census_names_every_roster_dev_emitted_or_skipped(tmp_path):
+    """"Never suppressed" has to be auditable by reading an artifact."""
+    _, _, _, paths = _run(tmp_path, HUMANS)
+    text = paths["census"].read_text(encoding="utf-8")
+    for name in ("Pieter Levels", "Skirano", "Sentient Agency"):
+        assert name in text, f"{name} produced no pool entry and must be named"
+    assert "no github handle" in text
+    for login in ("bcherny", "mattpocock", "t3dotgg", "simonw"):
+        assert login in text
+
+
+def test_the_budget_artifact_records_every_meter(tmp_path):
+    _, _, _, paths = _run(tmp_path, HUMANS)
+    b = json.loads(paths["budget"].read_text(encoding="utf-8"))
+    assert b["clickhouse_scans"] == 3
+    for key in ("rest_calls_used", "rest_cache_hits", "rest_calls_cap", "truncated",
+                "skipped_logins", "fork_calls_used", "fork_calls_cap",
+                "fork_budget_exhausted", "fork_unevidenced"):
+        assert key in b
+    assert b["fork_calls_used"] <= b["fork_calls_cap"]
+
+
+def test_selecting_only_the_vault_lane_reproduces_the_e01_pool(tmp_path):
+    """The lanes are additive and independently switchable, so an e01-equivalent run is
+    still reachable and still measurable — which is what makes "the pool grew" a claim
+    about the fan-out lane rather than about the whole rewrite."""
+    vault = _corpus(tmp_path, HUMANS)
+    _, _, records, _ = devs_spike.run(
+        vault, tmp_path / "out", client=FakeClient(HUMANS),
+        verdicts_path=_verdicts(tmp_path), log=lambda *a: None,
+        transport=_transport(), lanes=("vault",))
+    assert sorted(r.login.lower() for r in records) == sorted(x.lower() for x in HUMANS)
+    assert all(r.discovered_via == "vault" for r in records)
+
+
+def test_an_unknown_lane_is_rejected_rather_than_silently_ignored(tmp_path):
+    vault = _corpus(tmp_path, HUMANS)
+    with pytest.raises(ValueError):
+        devs_spike.run(vault, tmp_path / "out", client=FakeClient(HUMANS),
+                       verdicts_path=_verdicts(tmp_path), log=lambda *a: None,
+                       transport=_transport(), lanes=("nonsense",))
 
 
 def test_limit_caps_the_top_list(tmp_path):

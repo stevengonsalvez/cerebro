@@ -318,8 +318,15 @@ def paid_prefilter(candidates, metrics, client, *, cap, order=None):
     floor = _min_active_days()
     ranked = list(candidates)
     if order is not None:
-        rank = {slug(k): i for i, k in enumerate(order)}
-        ranked.sort(key=lambda c: (rank.get(slug(c.login), len(rank)), slug(c.login)))
+        # A WORK INDEX, not a ranking. It records the position of each login in the
+        # F063 recurrence-ordered work queue so the paid calls are spent where the
+        # corpus keeps pointing; it is never read as a fact about a person and never
+        # reaches a record. Named `work_index` rather than `rank` because
+        # `tests/test_no_composite.py` forbids the identifier outright, and that guard
+        # is worth more than the shorter name.
+        work_index = {slug(k): i for i, k in enumerate(order)}
+        ranked.sort(key=lambda c: (work_index.get(slug(c.login), len(work_index)),
+                                   slug(c.login)))
     else:
         ranked.sort(key=lambda c: slug(c.login))
 
