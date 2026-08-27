@@ -36,7 +36,9 @@ from . import (
     fanout,
     fork_provenance,
     gharchive,
+    optout as optout_mod,
     pool,
+    repo_facts,
     shape,
     vault_seed,
 )
@@ -270,7 +272,9 @@ def _vault_lane(seeds, client, log=print):
 def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
         limit=TOP_N, log=print, transport=None, lanes=LANES,
         fanout_repos=DEFAULT_FANOUT_REPOS, rest_budget=DEFAULT_REST_BUDGET,
-        fork_budget=DEFAULT_FORK_BUDGET):
+        fork_budget=DEFAULT_FORK_BUDGET, optout_path=optout_mod.DEFAULT_PATH,
+        repo_budget=repo_facts.DEFAULT_REPO_BUDGET, repo_client=None,
+        stage="devs-spike"):
     """The whole dry-run pipeline. Returns (SanityResult, top, all_records, paths).
 
     THE ORDER OF THE STAGES IS THE BUDGET. Free work first, paid work last, and the paid
@@ -310,6 +314,12 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
     verdicts = denylist.load(verdicts_path)
     log(f"verdicts: {len(verdicts.denied)} denied, {len(verdicts.cleared)} cleared")
 
+    # F049, CONSENT. Loaded FIRST and fail-closed: a malformed file raises out of here
+    # before a single query is rendered or a single call is spent. The gate itself is
+    # applied below, after the lanes and before `scan_logins`.
+    consent = optout_mod.load(optout_path)
+    log(f"opt-out: {len(consent)} login(s) have asked not to be here")
+
     seeds = vault_seed.seed_repos(vault_path)
     owners = {s.owner.lower() for s in seeds}
     log(f"seed lane: {len(seeds)} owner/repo pairs across {len(owners)} distinct owners")
@@ -338,6 +348,41 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
             seeds, client, limit=fanout_repos, log=log)
     census["fanout_repos_read"] = fanout_repos_read
     census["fanout_raw_candidates"] = len(fanout_raw)
+
+    # --- F049: the consent gate, applied HERE and not one line later ------
+    #
+    # This is the placement that makes "never in the query bytes" TRUE. Everything below
+    # reads these three lists: `scan_logins` becomes the `.sql` files written to disk and
+    # the ClickHouse IN-list, `paid_prefilter` spends a REST call per new fan-out login,
+    # and `pool.assemble` becomes the run json. Gating after any of them would leave an
+    # opted-out login in an artifact, in a query, or in somebody's rate-limit log.
+    #
+    # THE ONE THING THIS GATE CANNOT UNDO, STATED RATHER THAN GLOSSED. The vault lane
+    # discovers a login BY resolving a repo: `GET /repos/{owner}/{repo}` is what turns
+    # `obra/proj` into `obra`, so for a vault-lane candidate that single repo-scoped call
+    # is already spent by the time there is a login to match against the consent file.
+    # It is a call about a REPOSITORY, it retains nothing about the person, and the
+    # alternative — dropping every seed repo whose owner opted out — would silently
+    # shrink the provenance of everybody ELSE who contributes to that repo, which is a
+    # worse outcome than one public metadata read. From this line on, no person-scoped
+    # endpoint (`/users/{login}`, `/users/{login}/repos`) is ever called for them.
+    #
+    # The count is recorded rather than logged, because a gate whose effect is invisible
+    # in the artifact is indistinguishable from a gate nobody wired up.
+    removed_logins: set[str] = set()
+    if consent:
+        vault_cands, gone_v = optout_mod.partition(
+            vault_cands, lambda c: c.login, optout=consent)
+        roster_cands, gone_r = optout_mod.partition(
+            roster_cands, lambda c: c.login, optout=consent)
+        fanout_raw, gone_f = optout_mod.partition(
+            fanout_raw, lambda c: c.login, optout=consent)
+        removed_logins = {pool.slug(c.login) for c in gone_v + gone_r + gone_f}
+        if removed_logins:
+            log(f"opt-out: removed {len(removed_logins)} login(s) from the pool before "
+                f"any query was rendered")
+    census["optout_listed"] = len(consent)
+    census["optout_removed"] = len(removed_logins)
 
     # Fan-out candidates the vault or roster lane ALREADY anchored need no humanness
     # call: they were resolved by `resolve_owner`, or they are curated. Only genuinely
@@ -420,6 +465,9 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
         fork_calls_cap=int(fork_budget),
         prefilter_deferred=len(pre.deferred),
         prefilter_rejected=len(pre.rejected),
+        repo_calls_cap=max(0, int(repo_budget)),
+        optout_removed=len(removed_logins),
+        stage=stage,
     )
     fork_bud = fork_provenance.ForkBudget(int(fork_budget))
 
@@ -498,6 +546,39 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
     log(f"admission: {len(admitted)} of {len(records)} admitted, "
         f"top {len(top)} by consistency")
 
+    # --- F033/F037: repos[], on the PUBLISH SET only, under a hard ceiling -----
+    #
+    # WHY THE PUBLISH SET AND NOT THE POOL. One call per dev is the whole lane, so the
+    # cost is exactly the size of the set it runs over. The pool is 2,568 people and the
+    # publish set is about half that; spending a call on somebody the writer is going to
+    # withhold buys a repo card nobody will ever see, at the price of a call the run
+    # needed for somebody who publishes.
+    #
+    # WHY THE ORDER IS F063 RECURRENCE. A truncated budget has to truncate SOMEWHERE, and
+    # the corpus itself says where: the devs the vault keeps citing come first. It orders
+    # WORK. It never enters a record and it is not read as a fact about a person.
+    publish = _publish_set(records, consent, verdicts)
+    repo_bud = repo_facts.RepoBudget(int(repo_budget))
+    populated = 0
+    if publish:
+        first_seen_by_repo = {s.key: s.first_seen for s in seeds if s.first_seen}
+        for cand_rec in publish:
+            facts, ok = repo_facts.facts_for(
+                cand_rec.login, repo_client or client,
+                first_seen_by_repo=first_seen_by_repo, budget=repo_bud)
+            cand_rec.repos = [f.to_dict() for f in facts]
+            cand_rec.repos_populated = bool(ok)
+            populated += 1 if ok else 0
+    budget.repo_calls_used = repo_bud.used
+    budget.repo_budget_exhausted = repo_bud.exhausted and bool(publish)
+    budget.repos_populated = populated
+    budget.repos_unpopulated = len(publish) - populated
+    log(f"repo lane: {populated} of {len(publish)} publishable devs carry repos[] "
+        f"({repo_bud.used}/{repo_bud.cap} calls"
+        + (", BUDGET EXHAUSTED" if budget.repo_budget_exhausted else "") + ")")
+    census["publish_set"] = len(publish)
+    census["repos_populated"] = populated
+
     budget.rest_calls_used = getattr(client, "_calls", calls_at_start) - calls_at_start
     budget.rest_cache_hits = getattr(client, "_cache_hits", hits_at_start) - hits_at_start
     if not counter_is_real:
@@ -533,6 +614,21 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
              "census": census_path, "budget": budget_path,
              "sql": sql_paths, "hash": digest}
     return result, top, records, paths
+
+
+def _publish_set(records, consent, verdicts):
+    """The records the writer will actually publish, in F063 recurrence work order.
+
+    THE PREDICATE LIVES IN `sink/devs.py` AND IS IMPORTED, NEVER RESTATED. It is the
+    six-clause write gate, and a second copy of it here would be a second answer to
+    "is this person published", which is the sort of drift that ends with a page about
+    somebody a reviewer excluded.
+    """
+    from ..sink.devs import publish_set
+
+    work_order = sorted(records, key=lambda r: (-len(r.provenance),
+                                                pool.slug(r.login)))
+    return publish_set(work_order, optout=consent, verdicts=verdicts)
 
 
 def _metric_key(metrics: dict, login: str) -> str:

@@ -560,3 +560,166 @@ def test_an_unknown_lane_is_rejected_rather_than_silently_ignored(tmp_path):
 def test_limit_caps_the_top_list(tmp_path):
     _, top, _, _ = _run(tmp_path, HUMANS, limit=3)
     assert len(top) == 3
+
+
+# --- e03: the consent gate, applied before anything is queried ----------------
+
+def _optout(tmp_path, *logins) -> str:
+    body = "logins: []\n" if not logins else "logins:\n" + "".join(
+        f'  - login: "{x}"\n' for x in logins)
+    p = tmp_path / "devs_optout.yaml"
+    p.write_text(body, encoding="utf-8")
+    return str(p)
+
+
+class _SqlRecordingClient(FakeClient):
+    """FakeClient that also serves a repo page, so the e03 repo lane has something to do."""
+
+    def __init__(self, logins, repos_by_login=None):
+        super().__init__(logins)
+        self.repos_by_login = repos_by_login or {}
+        self.paths: list[str] = []
+
+    def request(self, path, params=None):
+        self.paths.append(path)
+        if path.endswith("/repos"):
+            login = path.split("/")[2]
+            return self.repos_by_login.get(login, [])
+        return []
+
+
+def _run_with(tmp_path, logins, **kw):
+    vault = _corpus(tmp_path, logins)
+    kw.setdefault("client", _SqlRecordingClient(logins))
+    return devs_spike.run(
+        vault, tmp_path / "out", verdicts_path=_verdicts(tmp_path),
+        log=lambda *a: None, transport=_transport(), **kw)
+
+
+def test_an_opted_out_login_never_reaches_the_query_bytes_or_the_run_json(tmp_path):
+    """THE PLACEMENT IS THE POINT. Gating one line later would leave the login inside the
+    rendered `.sql`, inside the ClickHouse IN-list, and inside the run json."""
+    _, _, records, paths = _run_with(
+        tmp_path, HUMANS, optout_path=_optout(tmp_path, "obra"))
+    assert "obra" not in {r.login.lower() for r in records}
+    for sql in paths["sql"]:
+        assert "obra" not in sql.read_text(encoding="utf-8")
+    assert "obra" not in paths["json"].read_text(encoding="utf-8").lower()
+
+
+def test_the_negative_control_shows_the_same_login_everywhere_without_the_file(tmp_path):
+    _, _, records, paths = _run_with(
+        tmp_path, HUMANS, optout_path=_optout(tmp_path))
+    assert "obra" in {r.login.lower() for r in records}
+    assert any("obra" in p.read_text(encoding="utf-8") for p in paths["sql"])
+
+
+def test_an_opted_out_login_never_costs_a_person_scoped_rest_call(tmp_path):
+    """The honest form of "never costs a call", and the difference is worth stating.
+
+    The vault lane discovers a login BY resolving a repo, so `GET /repos/obra/proj` is
+    already spent by the time there is a login to match. That call is about a
+    REPOSITORY. What must never happen is a PERSON-scoped call — the humanness check or
+    the repo lane — and that is what this asserts. Dropping the seed repo instead would
+    shrink the provenance of everybody else who contributes to it."""
+    client = _SqlRecordingClient(HUMANS)
+    _run_with(tmp_path, HUMANS, client=client,
+              optout_path=_optout(tmp_path, "obra"))
+    person_scoped = [p for p in client.paths if p.startswith("/users/")]
+    assert not any("obra" in p.lower() for p in person_scoped)
+    # The negative control: person-scoped calls DO happen for everybody else, so the
+    # assertion above is about the gate rather than about a lane that never ran.
+    assert any("/users/simonw" in p for p in person_scoped)
+
+
+def test_the_census_counts_what_the_consent_gate_removed(tmp_path):
+    """A gate whose effect is invisible in the artifact is indistinguishable from a gate
+    nobody wired up."""
+    _, _, _, paths = _run_with(tmp_path, HUMANS,
+                               optout_path=_optout(tmp_path, "obra"))
+    b = json.loads(paths["budget"].read_text(encoding="utf-8"))
+    assert b["optout_removed"] == 1
+
+
+def test_a_malformed_consent_file_stops_the_run_before_any_query(tmp_path):
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("logins: nope\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        _run_with(tmp_path, HUMANS, optout_path=str(bad))
+    assert not (tmp_path / "out").glob("*.sql") or not list(
+        (tmp_path / "out").glob("*.sql"))
+
+
+# --- e03: the repo lane -------------------------------------------------------
+
+def _repo_row(login, name, stars=0):
+    return {"name": name, "full_name": f"{login}/{name}",
+            "owner": {"login": login}, "fork": False, "archived": False,
+            "stargazers_count": stars, "description": None, "language": "Python",
+            "topics": [], "pushed_at": "2026-08-20T00:00:00Z"}
+
+
+def test_the_repo_lane_populates_the_publish_set_and_records_the_meters(tmp_path):
+    client = _SqlRecordingClient(
+        HUMANS, {"simonw": [_repo_row("simonw", "llm", 3000)]})
+    _, _, records, paths = _run_with(tmp_path, HUMANS, client=client)
+    by_login = {r.login: r for r in records}
+    assert by_login["simonw"].repos_populated is True
+    assert [r["name"] for r in by_login["simonw"].repos] == ["llm"]
+    assert by_login["simonw"].repos[0]["stars_fact"] == 3000
+    b = json.loads(paths["budget"].read_text(encoding="utf-8"))
+    assert b["repo_calls_used"] == b["repos_populated"] > 0
+    assert b["repo_calls_used"] <= b["repo_calls_cap"]
+    assert b["repo_budget_exhausted"] is False and b["repos_unpopulated"] == 0
+
+
+def test_a_zero_repo_budget_leaves_every_record_unpopulated_and_says_so(tmp_path):
+    """`repos_populated: false` with `repos: []` is "nobody looked", and e04 renders no
+    repo card for it. That branch is exactly why the marker exists."""
+    client = _SqlRecordingClient(HUMANS)
+    _, _, records, paths = _run_with(tmp_path, HUMANS, client=client, repo_budget=0)
+    assert all(r.repos_populated is False and r.repos == [] for r in records)
+    assert not any(p.endswith("/repos") for p in client.paths)
+    b = json.loads(paths["budget"].read_text(encoding="utf-8"))
+    assert b["repo_budget_exhausted"] is True and b["repos_unpopulated"] > 0
+
+
+def test_the_repo_lane_only_spends_calls_on_the_publish_set(tmp_path):
+    """A withheld dev buys a repo card nobody sees, at the price of a call the run needed
+    for somebody who publishes."""
+    client = _SqlRecordingClient(HUMANS)
+    _, _, records, paths = _run_with(tmp_path, HUMANS, client=client)
+    called = {p.split("/")[2].lower() for p in client.paths if p.endswith("/repos")}
+    b = json.loads(paths["budget"].read_text(encoding="utf-8"))
+    assert len(called) == b["publish_set"] if "publish_set" in b else True
+    assert b["repo_calls_used"] == len(called)
+    for rec in records:
+        if not rec.repos_populated:
+            assert rec.login.lower() not in called
+
+
+def test_an_opted_out_dev_never_reaches_the_repo_lane_either(tmp_path):
+    client = _SqlRecordingClient(HUMANS)
+    _run_with(tmp_path, HUMANS, client=client, optout_path=_optout(tmp_path, "simonw"))
+    assert "/users/simonw/repos" not in client.paths
+
+
+def test_the_repo_lane_uses_the_second_client_when_one_is_given(tmp_path):
+    """The long-TTL client. Repo metadata does not change hourly and a 24h TTL would
+    re-buy the whole corpus every morning."""
+    main = _SqlRecordingClient(HUMANS)
+    repo_client = _SqlRecordingClient(HUMANS, {"simonw": [_repo_row("simonw", "llm")]})
+    _run_with(tmp_path, HUMANS, client=main, repo_client=repo_client)
+    assert any(p.endswith("/repos") for p in repo_client.paths)
+    assert not any(p.endswith("/repos") for p in main.paths)
+
+
+def test_the_run_json_still_round_trips_with_a_populated_repo_list(tmp_path):
+    client = _SqlRecordingClient(
+        HUMANS, {"simonw": [_repo_row("simonw", "llm", 3000)]})
+    _, _, _, paths = _run_with(tmp_path, HUMANS, client=client)
+    loaded = json.loads(paths["json"].read_text(encoding="utf-8"))
+    simonw = next(r for r in loaded if r["login"] == "simonw")
+    assert sorted(simonw["repos"][0]) == sorted(
+        ["name", "title", "description", "language", "topics", "stars_fact",
+         "first_seen", "last_push"])

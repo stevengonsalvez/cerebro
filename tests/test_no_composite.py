@@ -41,6 +41,12 @@ MODULES = [
     "cerebro/gitintel/pool.py",
     "cerebro/gitintel/fork_provenance.py",
     "cerebro/gitintel/facets.py",
+    # e03's three. The sweep is EXTENDED, NEVER WEAKENED. `repo_facts.py` is where a
+    # "keep the most-starred repos" line would arrive and look entirely reasonable, and
+    # `sink/devs.py` is the last thing between a record and a public repository.
+    "cerebro/gitintel/optout.py",
+    "cerebro/gitintel/repo_facts.py",
+    "cerebro/sink/devs.py",
 ]
 
 VOLUME_NAMES = {"pushes", "followers", "stars", "score", "distinct_repos",
@@ -181,6 +187,9 @@ DEVS_LANE_DATACLASS_MODULES = [
     "cerebro/gitintel/fork_provenance.py",
     "cerebro/gitintel/facets.py",
     "cerebro/gitintel/devs_spike.py",
+    "cerebro/gitintel/optout.py",
+    "cerebro/gitintel/repo_facts.py",
+    "cerebro/sink/devs.py",
 ]
 
 BANNED_FIELDS = {"contributions", "followers", "stars", "stargazers_count",

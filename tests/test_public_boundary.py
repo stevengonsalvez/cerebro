@@ -38,6 +38,12 @@ DEVS_LANE_MODULES = [
     "cerebro/gitintel/denylist.py",
     "cerebro/gitintel/owner_resolve.py",
     "cerebro/gitintel/gharchive.py",
+    # e03's three. EXTENDED, NEVER NARROWED. `repo_facts.py` is the one that matters
+    # here: it is the epic that adds a REST path, and `/users/{login}/repos` had to enter
+    # `fanout.PUBLIC_READ_PATHS` in the same diff as the call that needed it.
+    "cerebro/gitintel/optout.py",
+    "cerebro/gitintel/repo_facts.py",
+    "cerebro/sink/devs.py",
 ]
 
 #: The allowlist, as regexes over a formatted path. Sourced from `fanout.PUBLIC_READ_PATHS`
