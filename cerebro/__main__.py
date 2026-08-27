@@ -424,12 +424,33 @@ def main() -> None:
         if unknown:
             raise SystemExit(f"unknown lane(s) {unknown}; choose from {devs_spike.LANES}")
 
-        result, top, records, paths = devs_spike.run(
-            vault, out_dir, client=client, verdicts_path=verdicts_path,
-            optout_path=optout_path, limit=args.limit, lanes=lanes,
-            fanout_repos=args.fanout_repos, rest_budget=args.rest_budget,
-            fork_budget=args.fork_budget, repo_budget=args.repo_budget,
-            repo_client=repo_client, stage="devs-refresh")
+        # F058. THE FREE LANE IS A SINGLE POINT OF FAILURE AND THE ANSWER IS TO FREEZE,
+        # NOT TO REPLAY. `play.clickhouse.com` is free, community-run and has no SLA;
+        # when it cannot answer, this stage writes NOTHING and deletes NOTHING, and every
+        # published profile keeps the `generated_at` of the run that produced it — which
+        # the site already renders as the profile's dateline. Republishing five-day-old
+        # push counts under today's timestamp would be a false statement about a named
+        # human, and the only field that could carry the staleness is one the site's
+        # loader would throw on.
+        from .gitintel import gharchive as _gharchive
+
+        try:
+            result, top, records, paths = devs_spike.run(
+                vault, out_dir, client=client, verdicts_path=verdicts_path,
+                optout_path=optout_path, limit=args.limit, lanes=lanes,
+                fanout_repos=args.fanout_repos, rest_budget=args.rest_budget,
+                fork_budget=args.fork_budget, repo_budget=args.repo_budget,
+                repo_client=repo_client, stage="devs-refresh")
+        except _gharchive.GHArchiveContractError as exc:
+            _degraded_exit("contract", exc, settings=settings, vault=vault,
+                           out_dir=out_dir, stamp=stamp, consent=consent,
+                           verdicts=verdicts, client=client)
+            return
+        except _gharchive.GHArchiveUnavailable as exc:
+            _degraded_exit("unreachable", exc, settings=settings, vault=vault,
+                           out_dir=out_dir, stamp=stamp, consent=consent,
+                           verdicts=verdicts, client=client)
+            return
 
         for w in result.warnings:
             print(f"WARNING: {w}")
@@ -832,6 +853,139 @@ def _yaml_scalar_out(value: str) -> str:
     if s == "" or re.search(r'(^[\s\[\]{}#&*!|>%@`"\',])|(:\s)|(\s#)|(\s$)', s):
         return '"' + s.replace('"', '\\"') + '"'
     return s
+
+
+#: F058's two page texts, and the two words an operator reads at 07:05. They are the
+#: whole operational payload of the down/changed split: one sends somebody to the query,
+#: the other to a status page.
+DEGRADED_TEXT = {
+    "contract": "gh archive CONTRACT DRIFT",
+    "unreachable": "gh archive UNREACHABLE",
+}
+
+
+def _degraded_exit(failure_class: str, exc, *, settings, vault, out_dir, stamp,
+                   consent, verdicts, client) -> None:
+    """The free lane could not answer. Freeze the corpus, say so, exit 0.
+
+    FIVE THINGS HAPPEN AND ONE DELIBERATELY DOES NOT.
+
+    1. `write_corpus` is NOT called, so no note is written, updated or deleted as churn.
+       The corpus on disk IS the last snapshot, and each note's `generated_at` is the
+       visible as-of date the site already renders (`app/cerebro/dev/[login]/page.tsx`
+       sets `date={asOf(dev)}`). It stops advancing exactly when the numbers stop being
+       re-derived, which is the honest behaviour and needs no new field.
+    2. CONSENT DELETIONS STILL RUN. `config/devs_optout.yaml` promises removal "even on
+       an unhealthy run and uncapped", and a person who asked to be removed does not wait
+       for somebody else's database. Only the delete half executes: `plan()` with no
+       records produces an empty publish set, no churn, and the consent deletions
+       computed from what is on disk.
+    3. An artifact names the failure class, the truncated exception, `last_good_at` from
+       the snapshot table, and the corpus size found on disk. `last_good_at` is how an
+       operator tells "ClickHouse died this morning" from "this stage has been dead for
+       nine days" — a distinction that is invisible in the corpus itself.
+    4. It pages ONCE, with the class's own text, and never from a dry run.
+    5. EXIT 0. The stage did not crash; it declined to act. Telling `run.sh` otherwise
+       sends an operator hunting a traceback that does not exist, and the page already
+       carries the state. Any exception that is not one of the two named types still
+       propagates and still exits non-zero.
+    """
+    from .sink import devs as devs_sink
+
+    base = Path(vault)
+    root = (base / "_scratch") if settings.dry_run else base
+    existing = devs_sink.existing_logins(root)
+
+    deleted_consent: list[str] = []
+    if consent:
+        corpus_plan = devs_sink.plan([], existing, optout=consent, verdicts=verdicts,
+                                     healthy=False)
+        # Belt: `plan([])` cannot produce writes or churn, and this stage must never
+        # write on a degraded run even if that ever changed.
+        assert not corpus_plan.writes and not corpus_plan.deletes_churn
+        deleted_consent = list(devs_sink.apply(corpus_plan, root)["deleted"])
+
+    cache = getattr(client, "cache", None)
+    last_good_at = None
+    if cache is not None and hasattr(cache, "last_snapshot_at"):
+        try:
+            last_good_at = cache.last_snapshot_at()
+        except Exception:  # noqa: BLE001 — a broken cache must not mask the outage
+            last_good_at = None
+
+    text = DEGRADED_TEXT.get(failure_class, "gh archive DEGRADED")
+    report = Path(out_dir) / f"devs-degraded-{stamp}.md"
+    report.write_text(
+        _degraded_report(failure_class, exc, last_good_at, len(existing),
+                         deleted_consent, stamp, text),
+        encoding="utf-8")
+
+    summary = {
+        "stage": "devs-refresh",
+        "dry_run": bool(settings.dry_run),
+        "healthy": False,
+        "degraded": failure_class,
+        "last_good_at": last_good_at,
+        "corpus_on_disk": len(existing),
+        "written": 0,
+        "unchanged": 0,
+        "published": 0,
+        "withheld": 0,
+        "deleted_consent": len(deleted_consent),
+        "deleted_churn": 0,
+        "refused_reason": failure_class,
+        "error": str(exc)[:300],
+        "degraded_report": str(report),
+    }
+    print(json.dumps(summary, indent=2))
+
+    if not getattr(settings, "dry_run", True):
+        try:
+            from .sink import notify
+            notify.push_failure(
+                f"{text}: {str(exc)[:160]} — corpus FROZEN at {len(existing)} notes, "
+                f"last good {last_good_at or 'never'}; "
+                f"{len(deleted_consent)} consent deletion(s) still applied", settings)
+        except Exception:  # noqa: BLE001 — alerting must never become the failure
+            pass
+
+
+def _degraded_report(failure_class, exc, last_good_at, corpus_size, deleted_consent,
+                     stamp, text) -> str:
+    """The operator's page, on disk. Names what happened and what did NOT happen."""
+    lines = [
+        f"# devs refresh DEGRADED — {stamp}",
+        "",
+        f"- failure class: **{failure_class}** ({text})",
+        f"- error: `{str(exc)[:300]}`",
+        f"- last good snapshot: `{last_good_at or 'never — no run has recorded history'}`",
+        f"- corpus found on disk: {corpus_size} note(s)",
+        f"- consent deletions applied: {len(deleted_consent)}"
+        + (f" ({', '.join(deleted_consent)})" if deleted_consent else ""),
+        "",
+        "No note was written and no note was deleted; every published profile still "
+        "carries the `generated_at` of the run that produced it.",
+        "",
+        "The corpus is FROZEN, not replayed. Serving today's date over five-day-old "
+        "counts would be a false statement about a named person; the profile dateline "
+        "the site already renders stops advancing instead, which is the honest form of "
+        "the same fact.",
+        "",
+    ]
+    if failure_class == "contract":
+        lines += [
+            "CONTRACT DRIFT means the endpoint ANSWERED and the answer no longer matches "
+            "the query. No amount of waiting fixes it. Run `cerebro devs-contract` and "
+            "read the column it names.",
+            "",
+        ]
+    else:
+        lines += [
+            "UNREACHABLE means the endpoint could not be reached inside the retry "
+            "budget. Nothing here needs a code change; the next scheduled run retries.",
+            "",
+        ]
+    return "\n".join(lines)
 
 
 def _page_contract(message: str, settings) -> None:
