@@ -155,11 +155,13 @@ def test_no_lane_module_logs_prints_or_formats_the_token(path):
                 assert not bad, f"{path}: interpolates {bad} into a string"
 
 
-def test_the_allowlist_is_exactly_the_three_paths_the_lane_needs():
-    """Small on purpose. Every entry is one call site: owner resolution, fork provenance,
-    contributor fan-out. Growing it is a deliberate edit that shows in the diff."""
+def test_the_allowlist_is_exactly_the_four_paths_the_lane_needs():
+    """Small on purpose. Every entry is one call site: owner resolution / humanness
+    pre-filter, the e03 repo lane, fork provenance, contributor fan-out. Growing it is a
+    deliberate edit that shows in the diff beside the call that needed it."""
     assert PUBLIC_READ_PATHS == (
         "/users/{login}",
+        "/users/{login}/repos",
         "/repos/{owner}/{repo}",
         "/repos/{owner}/{repo}/contributors",
     )
@@ -171,7 +173,7 @@ def test_the_allowlist_actually_rejects_something():
     for bad in ("/user/repos", "/orgs/anthropic/members", "/repos/a/b/collaborators",
                 "/admin/users", "/repos/a/b/actions/secrets", "/notifications"):
         assert not _matches_allowlist(bad), f"{bad} should not be on the allowlist"
-    for good in ("/users/simonw", "/repos/simonw/llm",
+    for good in ("/users/simonw", "/users/simonw/repos", "/repos/simonw/llm",
                  "/repos/simonw/llm/contributors"):
         assert _matches_allowlist(good)
 
