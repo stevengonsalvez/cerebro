@@ -248,3 +248,21 @@ def test_no_output_implies_a_human_picked_anybody(harness):
     text = harness.capsys.readouterr().out.lower()
     for banned in ("hand-picked", "handpicked", "human-reviewed", "cracked", "elite"):
         assert banned not in text
+
+
+def test_the_module_entrypoint_can_actually_run_the_stage(tmp_path):
+    """REGRESSION GUARD, AND IT COST A REAL RUN TO FIND. Every other test in this file
+    imports `main` from a fully-loaded module, so a helper defined BELOW the
+    `if __name__ == "__main__"` guard resolves fine here and raises `NameError` the
+    moment `python -m cerebro` executes the module top to bottom. Asserted structurally:
+    nothing may be defined after the guard."""
+    import ast
+    src = Path("cerebro/__main__.py").read_text(encoding="utf-8")
+    body = ast.parse(src).body
+    guard_at = next(
+        i for i, node in enumerate(body)
+        if isinstance(node, ast.If) and ast.unparse(node.test).startswith("__name__"))
+    after = [type(n).__name__ for n in body[guard_at + 1:]]
+    assert after == [], (
+        f"{after} are defined after the __main__ guard and are therefore undefined "
+        f"while main() runs under `python -m cerebro`")

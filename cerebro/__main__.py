@@ -724,10 +724,6 @@ def _yaml_scalar_out(value: str) -> str:
     return s
 
 
-if __name__ == "__main__":
-    main()
-
-
 def _withheld_report(corpus_plan, stamp: str, healthy: bool) -> str:
     """THE AUDIT TRAIL FOR EVERYBODY THE WRITE GATE HELD BACK.
 
@@ -794,3 +790,7 @@ def _withheld_report(corpus_plan, stamp: str, healthy: bool) -> str:
         lines.append("_(nothing was withheld)_")
         lines.append("")
     return "\n".join(lines)
+
+
+if __name__ == "__main__":
+    main()
