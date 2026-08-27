@@ -227,3 +227,80 @@ def test_the_recorded_numbers_are_the_ones_the_free_scan_returned(tmp_path):
 def test_the_budget_declares_the_history_meter(field):
     from cerebro.gitintel.pool import Budget
     assert field in Budget().to_dict()
+
+
+class LockedCache(GitIntelCache):
+    """A cache whose snapshot table is unavailable, the way a concurrent VACUUM leaves it.
+
+    `cerebro cache-vacuum` takes a long exclusive lock over a 384MB file. An operator who
+    runs it across the 07:00 stage gets exactly this: every `record_window_metrics` raises
+    `sqlite3.OperationalError: database is locked`.
+    """
+
+    def record_window_metrics(self, login, window_days, metrics, *, captured_at=None):
+        raise sqlite3.OperationalError("database is locked")
+
+
+class HalfLockedCache(GitIntelCache):
+    """Fails every write after the first, so `pairs` has to be a count and not a total."""
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self._seen = 0
+
+    def record_window_metrics(self, login, window_days, metrics, *, captured_at=None):
+        self._seen += 1
+        if self._seen > 1:
+            raise sqlite3.OperationalError("database is locked")
+        return super().record_window_metrics(login, window_days, metrics,
+                                             captured_at=captured_at)
+
+
+def test_a_locked_snapshot_store_degrades_the_run_instead_of_killing_it(tmp_path):
+    """`cache.py` claims the snapshot write "must never be the thing that takes a run down".
+
+    Nothing enforced that claim until now. The write is not one of the two GHArchive
+    exception types `__main__` catches, so a locked database raised straight out through
+    `_record_history` and killed the whole refresh with a traceback BEFORE any corpus was
+    written. The corpus was never at risk — `run.sh` contained it — but the operator was
+    paged for a crash when the truth was a degraded run, and a wrong diagnosis at 07:00 is
+    its own kind of damage.
+    """
+    client = CachedClient(HUMANS, LockedCache(str(tmp_path / "locked.sqlite3")))
+    (result, _top, records, _paths), logged = _run(tmp_path, client)
+    assert result.ok, "a locked snapshot store must not fail the run"
+    assert records, "the corpus is written even when no history could be recorded"
+
+
+def test_the_locked_store_announces_the_failure_rather_than_reporting_a_clean_zero(tmp_path):
+    """COUNTED, NOT SWALLOWED — the e03 lesson applied one layer down.
+
+    A bare `except: pass` here would rebuild the exact hole that let e03 print
+    `healthy: true` through 273 rate-limit errors: a meter reading zero because nothing
+    was measured, indistinguishable from a meter reading zero because nothing was wrong.
+    """
+    import json
+
+    client = CachedClient(HUMANS, LockedCache(str(tmp_path / "locked.sqlite3")))
+    (_r, _t, _rec, paths), logged = _run(tmp_path, client)
+    budget = json.loads(paths["budget"].read_text(encoding="utf-8"))
+    assert budget["snapshots_written"] == 0, "no row landed, so the meter must say 0"
+    assert any("snapshot write failed" in line for line in logged), logged
+    assert any("snapshot write(s) failed this run" in line for line in logged), logged
+
+
+def test_the_written_count_counts_rows_that_landed_not_writes_attempted(tmp_path):
+    """`budget.snapshots_written` stays checkable against a live sqlite3 count.
+
+    With one write succeeding and the rest raising, a total-based counter would report the
+    attempted number and the budget would once again be checked against itself.
+    """
+    import json
+
+    cache = HalfLockedCache(str(tmp_path / "half.sqlite3"))
+    client = CachedClient(HUMANS, cache)
+    (_r, _t, _rec, paths), _log = _run(tmp_path, client)
+    budget = json.loads(paths["budget"].read_text(encoding="utf-8"))
+    rows = cache.db.execute("SELECT COUNT(*) FROM active_day_snapshots").fetchone()[0]
+    assert budget["snapshots_written"] == 1
+    assert rows == 1, "exactly the one write that was allowed through"

@@ -777,15 +777,39 @@ def _record_history(client, metrics, *, captured_at, log):
             "growth reader gains nothing from it")
         return 0, ""
     pairs = 0
+    failed = 0
     for login, by_window in metrics.items():
         for w in WINDOWS:
             m = by_window.get(w)
             if m is None:
                 continue
-            if store.record_window_metrics(login, w, m, captured_at=captured_at):
-                pairs += 1
+            # THE SNAPSHOT WRITE MUST NEVER BE THE THING THAT TAKES A RUN DOWN — cache.py
+            # says so about itself, and until now nothing enforced it. An operator running
+            # `cerebro cache-vacuum` (a long exclusive VACUUM over a 384MB file) across the
+            # 07:00 stage raises sqlite3.OperationalError "database is locked" here, and
+            # __main__ catches only the two GHArchive types, so the whole refresh died with
+            # a traceback BEFORE writing any corpus. The corpus was never at risk — run.sh
+            # contained it — but the operator was paged for a crash when the truth was a
+            # degraded run, and a wrong diagnosis at 07:00 is its own kind of damage.
+            #
+            # Counted, not swallowed. e03 shipped `healthy: true` through 273 rate-limit
+            # errors because nothing announced what it had failed to measure; a bare
+            # `except: pass` here would rebuild that exact hole one layer down. `pairs`
+            # still counts only rows that really landed, so `budget.snapshots_written`
+            # stays checkable against a live `sqlite3` count.
+            try:
+                if store.record_window_metrics(login, w, m, captured_at=captured_at):
+                    pairs += 1
+            except Exception as exc:  # noqa: BLE001 — see above; a snapshot never fails a run
+                failed += 1
+                if failed == 1:
+                    log(f"WARNING: snapshot write failed for {login}/{w}d ({exc}) — "
+                        f"the run continues and the corpus is untouched")
     path = str(getattr(store, "path", "") or "")
     log(f"snapshots: {pairs} window snapshot(s) recorded at {captured_at} -> {path}")
+    if failed:
+        log(f"WARNING: {failed} snapshot write(s) failed this run — growth readings will "
+            f"be thinner than the pool size implies until a later run records them")
     return pairs, path
 
 
