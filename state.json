@@ -1,8 +1,13 @@
 {
+  "authority_update_2026_08_27": {
+    "does_not_remove": "the ATC bar on stamping reviewed_by=owner; e08 launch still needs his eye",
+    "granted": "do not wait for human; use codex or take the recommended option",
+    "removes": "blocking on owner for decisions"
+  },
   "beads_mode": "state-only",
-  "branch": "f/devs-sanity-spike",
+  "branch": "f/devs-pool",
   "current_epic": "e02+e04",
-  "current_note": "TICK 00:23. Wave at BUILD. Plan -> PlanReview -> Revise all completed for both epics; both plan reviews returned REVISE and both revisers folded the findings after verifying them against the shipped code, not against the planner's claims. e02 drew 4 findings, the two mediums being that V1 and T01 leaned on a REST-call counter client._calls that does not exist anywhere in shipped e01, and that T05/V3 roster arithmetic contradicted the real roster because only 4 of 7 roster devs carry a github handle. e04 drew 7, the medium being that V2's deep-import gate could not produce its stated observable truth since the grep already matches on a correct tree. TWO FINDINGS WORTH THE OWNER'S ATTENTION BECAUSE THEY TOUCH THE GATE: e04's reviewer independently caught that the automation-transparency copy template 'was reviewed by {clearedBy}' brushes against the no-human-curation constraint, which is precisely the hazard the ATC correction existed to prevent, and it caught it without being told about the correction. Separately both reviewers found genuine validation theatre, e02's V1 'contributions leaked: False' check being vacuous because tot is a set of login strings so the hasattr sweep can never fire. GATE STILL INTACT AND VERIFIED THIS TICK: git status on config/devs_denylist.yaml reports 0 changes, the file still carries exactly 2 reviewed_by=owner entries which are the pre-existing denied pair, and e01 PR #21 is OPEN/MERGEABLE and deliberately unmerged. Nothing this wave may publish, merge or deploy. DRIVER CORRECTION FROM LAST TICK STANDS RECORDED: my claim that guyb1 and qin-ctx had empty evidence was wrong, no entry in the set is empty, and the corroboration I gathered for both is appended to the owner-review artifact with the correction leading it.",
+  "current_note": "TICK 00:55. OWNER GRANTED A STANDING AUTHORITY CHANGE: 'do not wait for human, use /codex:rescue to answer your questions or go to recommended options'. Read narrowly and deliberately: it removes the BLOCKING behaviour, it does NOT license stamping anything reviewed_by=owner. The ATC directive still stands, so e08 launch and every published surface remain gated on his eye, while all build work proceeds and I stop putting decisions to him. TWO MATERIAL FINDINGS THIS TICK, BOTH MINE TO OWN. FIRST, I had been reporting for several ticks that the 2 denied verdicts were 'pre-existing owner-reviewed and legitimate'. That was WRONG. Both reviewed_by=owner stamps were written by the e01 builder agent in commit 3a6ff95, the same commit that created the file; the git author line reads as Stevie only because agents commit under his identity. He never saw either entry. The true count was always 26 unratified, not 24, and two of them asserted an authority never exercised, which is exactly what the ATC correction forbade, already sitting in the repo. He chose the recommended fix and I applied it in a2928b1 (signed, G): both downgraded to reviewed_by=e01-builder. Now 26 verdicts, 0 owner-signed. Behaviour unchanged and 664 tests pass, because is_owner_signed is consulted only for cleared entries reaching the top list and a denied login never reaches it. The stamps mattered anyway: OWNER_REVIEWERS exists to record whose eye, sanity_check warns every run about admissions resting on agent-recorded verdicts, and two false signatures kept that warning quiet about the only two verdicts strong enough to exclude a person. SECOND, e02's builder went looking for the signal that separates a maintainer working across forks of their own project from a fork farm and MEASURED THAT IT DOES NOT EXIST, then pinned the equality with a permanent test instead of claiming a win. koala73 (cleared: human) and diegosouzapw (denied: automation) both return own_upstream 5 / third_party 0, both upstreams non-fork repos they own at 84,349 and 56,211 stars. The verdicts differ on magnitude alone, 130 repos at 26.14 pushes per active day against 24 at 11.85. Owner chose to move diegosouzapw into the awaiting-your-eye pool rather than keep or extend the denial. I ALSO GOT ONE WRONG THIS TICK AND CAUGHT IT: I called is_owner_signed dead code, but it is called at devs_spike.py:204 inside sanity_check; my grep pattern missed the call site. No fix was needed there. CODEX PEER REVIEW LAUNCHED per the new authority: an independent different-family reviewer is adversarially re-judging all 26 verdicts, forbidden from editing the file or stamping anything, asked for wrong verdicts, underdetermined verdicts, inconsistent pairs beyond koala73/diegosouzapw, a ranked top-5 for the owner, and whether the file is structurally sound as a publish gate at all. WAVE: e02 has 8 signed commits and 17 files on f/devs-pool and the suite is now 664 passing, up from 427. e04 is early at 1 commit on f/cerebro-devs-core with work in progress. Neither may publish, merge or deploy.",
   "dashboard_slug": "cerebro-devs",
   "epics": {
     "e01": "BUILT_PR_HELD",
@@ -18,11 +23,11 @@
   "owner_review_gate": {
     "artifact": ".agents/scratch/devs-24-cleared-for-owner-review.md",
     "blocks": "e08 launch, any published surface, any reviewed_by=owner stamp",
+    "correction": "a2928b1 downgraded 2 false owner stamps to e01-builder; count was never 24",
     "does_not_block": "e02 e03 e04 e05 e06 e07 build work",
-    "stamped_owner": 2,
+    "stamped_owner": 0,
     "state": "OPEN_AWAITING_OWNER",
-    "verdicts_awaiting": 24,
-    "verified_this_tick": "0 denylist changes, 2 owner stamps, PR21 OPEN/MERGEABLE held"
+    "verdicts_awaiting": 26
   },
   "phase": "E02_E04_WAVE",
   "phase_since": "2026-08-26T23:56:00Z",
@@ -34,6 +39,6 @@
     "backlog_dry": true,
     "budget_tokens": null,
     "deadline": null,
-    "spent_tokens_estimate": 1791385
+    "spent_tokens_estimate": 2450000
   }
 }
