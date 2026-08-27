@@ -359,8 +359,23 @@ def main() -> None:
         # A truncated REST budget means accounts nobody checked; a missing ClickHouse scan
         # means windows nobody measured. Either one makes today's absences untrustworthy,
         # and an untrustworthy absence must not unpublish a real person.
+        #
+        # `rest_failures` IS THE TERM FOR A DEGRADED LANE RATHER THAN A SMALL ONE, and it
+        # is not covered by any other term here. Measured, not hypothesised: re-running
+        # this stage with no token against the 1,036-note corpus logged 273 `resolve
+        # failed ... GitHub 403 ... API rate limit exceeded` lines, published 31 of 1,316,
+        # and set NOTHING else in this conjunction — `truncated` stays false because the
+        # budget was never exhausted (the calls were made and refused), the ClickHouse
+        # lane needs no token, and `records` was non-empty. Only the churn cap stood
+        # between that run and deleting real people, and a smaller degradation slips
+        # under the cap.
+        #
+        # ANY failure, not a threshold. The consequence of a false positive is that
+        # today's churn deletions wait for tomorrow; the consequence of a false negative
+        # is deleting a note about a named human because GitHub was busy.
         healthy = (result.ok
                    and not budget.get("truncated")
+                   and not budget.get("rest_failures")
                    and budget.get("clickhouse_scans") == len(devs_spike.WINDOWS)
                    and bool(records))
 
@@ -376,6 +391,9 @@ def main() -> None:
             "stage": "devs-refresh",
             "dry_run": bool(settings.dry_run),
             "healthy": healthy,
+            # Beside `healthy` rather than only in the budget artifact, because this is
+            # the number that explains a `false` an operator is reading at 07:05.
+            "rest_failures": int(budget.get("rest_failures") or 0),
             "pool": len(records),
             "published": len(corpus_plan.writes),
             "withheld": len(corpus_plan.withheld),
