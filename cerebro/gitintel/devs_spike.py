@@ -36,6 +36,7 @@ from . import (
     fanout,
     fork_provenance,
     gharchive,
+    growth as growth_mod,
     optout as optout_mod,
     pool,
     repo_facts,
@@ -637,6 +638,20 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
     census_path.write_text(
         _render_census(census, budget, roster_skipped, stamp), encoding="utf-8")
 
+    # --- F024: growth, from the history this run just extended -----------------
+    #
+    # Written as an ARTIFACT and nowhere else. It reaches no `Devs/*.md` field in this
+    # epic: on the day this lands there are 0 days of history, so the record would carry
+    # `null` about ~1,300 named humans, and the site's loader throws on a field that is
+    # on neither its ADMITTED nor its CONSUMED list.
+    growth_payload = growth_mod.report(
+        _history_store(client), [r.login for r in records])
+    growth_path = out / f"devs-growth-{stamp}.json"
+    growth_path.write_text(
+        json.dumps(growth_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    census["growth"] = growth_mod.census_line(growth_payload)
+    log(census["growth"])
+
     budget_path = out / f"devs-budget-{stamp}.json"
     budget_path.write_text(
         json.dumps(budget.to_dict(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -648,6 +663,7 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
 
     paths = {"top": top_path, "queue": queue_path, "json": json_path,
              "census": census_path, "budget": budget_path,
+             "growth": growth_path,
              "sql": sql_paths, "hash": digest}
 
     # --- F064: the cleanup, LAST, and never fatal ----------------------------
@@ -666,6 +682,26 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
         log(f"WARNING: could not rewrite the budget artifact with the prune numbers: {exc}")
 
     return result, top, records, paths
+
+
+class _NoHistory:
+    """The store a cache-less client gets: every history is empty, nothing raises.
+
+    A null object rather than a branch at the call site, so "this client records no
+    history" and "this login has no history yet" produce the SAME honest artifact —
+    `delta: null` with a reason — instead of one of them producing a missing key.
+    """
+
+    @staticmethod
+    def active_day_snapshots(login, window_days):
+        return []
+
+
+def _history_store(client):
+    store = getattr(client, "cache", None)
+    if store is None or not hasattr(store, "active_day_snapshots"):
+        return _NoHistory()
+    return store
 
 
 def _prune_cache(client, budget, *, log):
@@ -1060,6 +1096,8 @@ def _render_census(census: dict, budget, roster_skipped, stamp: str) -> str:
         # own longer-TTL client, so on a rate-limited run failures can exceed calls.
         f"| REST failures (both clients) | {b['rest_failures']} | 0 |",
         f"| ClickHouse scans | {b['clickhouse_scans']} | 3 |",
+        f"| history snapshots written | {b['snapshots_written']} | — |",
+        f"| response cache rows deleted | {b['responses_deleted']} | — |",
         f"| fork provenance calls | {b['fork_calls_used']} | {b['fork_calls_cap']} |",
         "",
     ]
@@ -1071,6 +1109,8 @@ def _render_census(census: dict, budget, roster_skipped, stamp: str) -> str:
                      f"run's absences are untrustworthy. Churn deletions are refused.")
     else:
         lines.append("- No REST call failed.")
+    if census.get("growth"):
+        lines.append(f"- {census['growth']}")
     if b["truncated"]:
         lines.append(f"- **REST BUDGET TRUNCATED**: {b['skipped_logins']} candidate(s) "
                      f"were never humanness-checked. They are in the pool, labelled, and "

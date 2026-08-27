@@ -44,6 +44,10 @@ DEVS_LANE_MODULES = [
     "cerebro/gitintel/optout.py",
     "cerebro/gitintel/repo_facts.py",
     "cerebro/sink/devs.py",
+    # e06. EXTENDED, NEVER NARROWED. `growth.py` reaches no endpoint at all, and that is
+    # a property worth pinning: a growth reader that started making REST calls would be
+    # spending quota on a number nobody may display yet.
+    "cerebro/gitintel/growth.py",
 ]
 
 #: The allowlist, as regexes over a formatted path. Sourced from `fanout.PUBLIC_READ_PATHS`

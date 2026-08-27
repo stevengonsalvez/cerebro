@@ -47,6 +47,11 @@ MODULES = [
     "cerebro/gitintel/optout.py",
     "cerebro/gitintel/repo_facts.py",
     "cerebro/sink/devs.py",
+    # e06. THE SWEEP IS EXTENDED, NEVER WEAKENED, and each of these is a place a ranking
+    # line would arrive and look entirely reasonable:
+    #   growth.py     "rank by who is growing fastest" — the most tempting one in the
+    #                 whole lane, because a delta looks like merit rather than a count.
+    "cerebro/gitintel/growth.py",
 ]
 
 VOLUME_NAMES = {"pushes", "followers", "stars", "score", "distinct_repos",
@@ -190,6 +195,11 @@ DEVS_LANE_DATACLASS_MODULES = [
     "cerebro/gitintel/optout.py",
     "cerebro/gitintel/repo_facts.py",
     "cerebro/sink/devs.py",
+    # e06. THE SWEEP IS EXTENDED, NEVER WEAKENED, and each of these is a place a ranking
+    # line would arrive and look entirely reasonable:
+    #   growth.py     "rank by who is growing fastest" — the most tempting one in the
+    #                 whole lane, because a delta looks like merit rather than a count.
+    "cerebro/gitintel/growth.py",
 ]
 
 BANNED_FIELDS = {"contributions", "followers", "stars", "stargazers_count",
