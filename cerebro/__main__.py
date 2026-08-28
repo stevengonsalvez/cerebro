@@ -293,6 +293,10 @@ def main() -> None:
         print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
         print(_token_check.summary_line(report))
         if report.ok:
+            # Green, including the accepted over-scope. It is not paged and it is not
+            # silent: the summary line above carries the WARNING lead and every extra
+            # scope by name, so the standing exposure stays visible in the daily
+            # scrollback without stopping a pipeline over a decision already taken.
             return
         _page_contract(f"gh token CHECK FAILED: {report.reason} "
                        f"(sha256:{report.fingerprint or 'absent'})", settings)

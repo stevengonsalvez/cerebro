@@ -33,10 +33,11 @@ from cerebro.gitintel.token_check import (
     EXIT_OK,
     EXIT_OVERSCOPED,
     check,
+    summary_line,
 )
 
-#: The scope set the xyora PAT actually carries, measured. This is the string the guard
-#: exists to fail on.
+#: The scope set the xyora PAT actually carries, measured. The guard REPORTS this string;
+#: it no longer stops the lane for it (owner's decision on measured blast radius, 2026-08-28).
 XYORA_SCOPES = "admin:enterprise, admin:org, repo, workflow, delete:packages"
 
 FAKE_TOKEN = "ghp_fake000000000000000000000000000000"  # noqa: S105 — a fixture, not a secret
@@ -92,21 +93,36 @@ def test_a_classic_token_inside_the_allowed_set_exits_zero():
     assert report.scopes == ("public_repo",)
 
 
-def test_the_token_in_use_today_exits_five_and_names_every_offending_scope():
-    """THE EPIC'S PROOF THAT THE SECURITY FINDING IS MECHANICAL, NOT RECALLED."""
+def test_the_token_in_use_today_is_green_and_still_names_every_offending_scope():
+    """THE FINDING STAYS MECHANICAL. What changed is the CONSEQUENCE, not the detection.
+
+    Owner's decision 2026-08-28, taken on measured blast radius: the `xyora` account owns
+    0 repos, 0 private repos and belongs to 0 organisations, so `admin:enterprise`,
+    `admin:org`, `delete:packages`, `write:packages`, `project` and `codespace` have
+    nothing to act on. `repo` + `workflow` do — push access to three repositories — and
+    that exposure is understood and accepted for now.
+
+    So the check reports and does not stop the lane. A gate that fires every morning on a
+    condition its owner has already judged is not a safety mechanism; it is the thing that
+    teaches an operator to skip the line on the morning it finally means something.
+    """
     report = check(FAKE_TOKEN, _transport(200, {"x-oauth-scopes": XYORA_SCOPES}))
-    assert report.exit_code == EXIT_OVERSCOPED
+    assert report.exit_code == EXIT_OK, "an accepted over-scope must not fail the run"
+    assert report.ok is True
+    assert report.over_scoped is True, "green, but the flag a caller can enforce on"
     for scope in ("admin:enterprise", "admin:org", "repo", "workflow",
                   "delete:packages"):
         assert scope in report.reason, scope
     assert "over-scoped" in report.reason
+    assert "WARNING" in summary_line(report), "green must still READ as a warning"
 
 
 @pytest.mark.parametrize("scope", ["repo", "admin:org", "workflow", "delete:packages",
                                    "write:packages", "gist"])
-def test_any_single_scope_outside_the_allowed_set_fails(scope):
+def test_any_single_scope_outside_the_allowed_set_is_flagged(scope):
     report = check(FAKE_TOKEN, _transport(200, {"x-oauth-scopes": scope}))
-    assert report.exit_code == EXIT_OVERSCOPED
+    assert report.exit_code == EXIT_OK
+    assert report.over_scoped is True
     assert scope in report.reason
 
 
@@ -124,7 +140,7 @@ def test_an_unexpected_status_is_not_silently_green():
 
 def test_the_header_is_read_case_insensitively():
     report = check(FAKE_TOKEN, _transport(200, {"X-OAuth-Scopes": "repo"}))
-    assert report.header_present is True and report.exit_code == EXIT_OVERSCOPED
+    assert report.header_present is True and report.over_scoped is True
 
 
 def test_the_allowed_set_is_public_read_only():
@@ -220,16 +236,23 @@ def test_the_cli_exits_six_when_the_env_var_is_unset(cli, monkeypatch):
     assert json.loads(out[out.index("{"):out.index("}") + 1])["exit_code"] == 6
 
 
-def test_the_cli_exits_five_and_pages_against_an_over_scoped_token(cli, monkeypatch):
+def test_the_cli_is_green_and_does_not_page_against_the_accepted_over_scope(cli,
+                                                                            monkeypatch):
+    """ACCEPTED IS NOT THE SAME AS FORGOTTEN. Exit 0, no page, and the scope still named.
+
+    The pager is reserved for what actually breaks the lane: a credential GitHub refuses,
+    or no credential at all. Spending it on a standing, accepted condition is how a real
+    page gets ignored.
+    """
     monkeypatch.setenv("GITHUB_TOKEN_TEST", FAKE_TOKEN)
     cli.settings.dry_run = False
     cli.monkeypatch.setattr(token_check, "_probe",
                             _transport(200, {"x-oauth-scopes": XYORA_SCOPES}))
     code, out, _err = cli.run()
-    assert code == EXIT_OVERSCOPED
-    assert len(cli.pages) == 1
-    assert "admin:org" in cli.pages[0]
-    assert FAKE_TOKEN not in cli.pages[0] and FAKE_TOKEN not in out
+    assert code == EXIT_OK
+    assert cli.pages == [], "an accepted over-scope must never spend the pager"
+    assert "admin:org" in out and "WARNING" in out, "still visible in the scrollback"
+    assert FAKE_TOKEN not in out
 
 
 def test_the_cli_exits_zero_and_pages_nobody_for_a_fine_grained_token(cli, monkeypatch):

@@ -23,7 +23,7 @@ therefore decided ahead of the request:
     200, header ABSENT            0   fine-grained token; no classic scopes exist
     200, header present, empty    0   classic token carrying no scopes
     200, header present, subset   0   inside ALLOWED_SCOPES
-    200, header present, other    5   over-scoped: page
+    200, header present, other    0   over-scoped: WARN, do not page (owner's call)
     401 / 403                     5   the credential is bad: page
 
 THE TOKEN VALUE IS NEVER PRINTED, LOGGED OR WRITTEN. What comes out is a
@@ -49,7 +49,21 @@ RATE_LIMIT_PATH = "/rate_limit"
 ALLOWED_SCOPES = frozenset({"public_repo"})
 
 EXIT_OK = 0
-#: The token can do more than read public data, or it is refused outright.
+#: The credential is REFUSED outright (401/403) or the endpoint answered something this
+#: check cannot interpret. Still a page: a token the API rejects breaks the lane outright.
+#:
+#: OVER-SCOPE NO LONGER REACHES THIS CODE. Owner's decision, 2026-08-28, made on measured
+#: blast radius rather than on the length of the scope list: the `xyora` account owns 0
+#: repos, holds 0 private repos and belongs to 0 organisations, so `admin:enterprise`,
+#: `admin:org`, `delete:packages`, `write:packages`, `project` and `codespace` are INERT —
+#: there is nothing on that account to administer. What is NOT inert is `repo` + `workflow`,
+#: which carry push access to three repositories (two the owner's, one a third party's).
+#: That is the real exposure, it is understood, and it is accepted for now.
+#:
+#: So this check REPORTS it every morning and does not stop the pipeline for it. The
+#: distinction is deliberate: a gate that fires daily on a condition the owner has already
+#: judged and accepted is not a safety mechanism, it is noise that trains an operator to
+#: ignore the one morning it means something.
 EXIT_OVERSCOPED = 5
 #: No token at all. A DIFFERENT code, because the remedy is different: exit 5 says
 #: rotate, exit 6 says the env var did not reach the process — the exact failure the
@@ -68,6 +82,9 @@ class TokenReport:
     header_present: bool = False
     status: int = 0
     called: bool = False
+    #: The token carries scopes beyond the lane's needs. Reported, never fatal — see the
+    #: note on EXIT_OVERSCOPED for whose decision that is and what it rests on.
+    over_scoped: bool = False
 
     @property
     def ok(self) -> bool:
@@ -82,6 +99,7 @@ class TokenReport:
             "scopes": list(self.scopes),
             "scopes_header_present": self.header_present,
             "status": self.status,
+            "over_scoped": self.over_scoped,
             "allowed_scopes": sorted(ALLOWED_SCOPES),
         }
 
@@ -143,10 +161,15 @@ def check(value, transport=None) -> TokenReport:
 
     extra = tuple(sorted(set(scopes) - ALLOWED_SCOPES))
     if extra:
+        # GREEN, AND SAYING SO OUT LOUD. `over_scoped` is a separate field from `ok` on
+        # purpose: a caller that wants to enforce this can still read it, and the daily
+        # summary still names every extra scope, so accepting the risk never becomes the
+        # same thing as forgetting it.
         return TokenReport(
-            exit_code=EXIT_OVERSCOPED, fingerprint=mark, scopes=scopes,
+            exit_code=EXIT_OK, fingerprint=mark, scopes=scopes, over_scoped=True,
             header_present=True, status=int(status), called=True,
-            reason="over-scoped for a public-read lane: " + ", ".join(extra))
+            reason="over-scoped for a public-read lane, ACCEPTED by the owner: "
+                   + ", ".join(extra))
 
     return TokenReport(
         exit_code=EXIT_OK, fingerprint=mark, scopes=scopes, header_present=True,
@@ -164,7 +187,11 @@ def summary_line(report: TokenReport) -> str:
         scopes = "none (classic token, empty header)"
     else:
         scopes = "none (fine-grained token, header absent)"
-    return (f"token sha256:{report.fingerprint or 'absent'} scopes: {scopes} "
+    # A GREEN LINE THAT STILL READS AS A WARNING. The over-scope is accepted, not resolved,
+    # and the day it stops being acceptable an operator has to be able to see it in the
+    # scrollback without going and reading a config file to find out it was ever a thing.
+    lead = "WARNING " if report.over_scoped else ""
+    return (f"{lead}token sha256:{report.fingerprint or 'absent'} scopes: {scopes} "
             f"-> exit {report.exit_code} ({report.reason})")
 
 
