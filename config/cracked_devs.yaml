@@ -98,3 +98,15 @@ devs:
     why: "Most reliable primary-source LLM analysis on the open web"
     added: "2026-07-20"
     discovered_via: seed   # feed already in sources.yaml rss.feeds — dedup must handle this
+
+  - name: Diego Souza
+    tier: 2
+    x: null
+    github: diegosouzapw
+    blog: null
+    blog_feed: null
+    reddit: null
+    tags: [ai-gateway, llm-routing, token-efficiency, claude-code, codex, mcp]
+    why: "OmniRoute maintainer — high-signal AI gateway, free-tier routing, and token-compression work for coding agents"
+    added: "2026-08-29"
+    discovered_via: https://github.com/diegosouzapw/OmniRoute
