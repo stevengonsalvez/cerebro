@@ -103,7 +103,10 @@ crackscan:              # auto-discover cracked devs; auto-admits them as tier-3
   min_remaining: 200    # skip the deep pass when the token budget is below this
   seed_repos: []        # optional explicit owner/name repos to mine owners from
   seed_handles: []      # optional x/reddit handles to resolve -> github (deferred)
-  use_vault_seed_lane: false   # OFF until e03/F049 gates fetch()'s candidate list.
-                               # Turning this on before that gate lands makes crackscan
-                               # emit crackscan/considered Signals for ~175 un-admitted
-                               # vault owners. e03 flips it in the same commit as the gate.
+  use_vault_seed_lane: false   # STAYS OFF. The F049 opt-out gate has landed on
+                               # fetch()'s candidate list, and that is NOT a reason to
+                               # turn this on: it would feed ~175 vault owners into the
+                               # condemned cheap_score/deep_score funnel and emit a
+                               # crackscan/considered Signal per candidate into the live
+                               # public vault. The devs pipeline mines the same notes for
+                               # free. Retiring this flag belongs with crackscore.py.

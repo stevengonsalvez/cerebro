@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
+from ..gitintel import optout as optout_mod
 from ..gitintel import roster as roster_mod
 from ..gitintel import vault_seed
 from ..gitintel.crackscore import cheap_score, deep_score
@@ -19,7 +20,21 @@ def fetch(cfg: dict, settings) -> list[Signal]:
     budget permitting) -> admit score>=threshold up to admit_max -> append tier-3.
     Every admitted and considered candidate is emitted as a Signal for the briefing.
     Deterministic under test via an optional cfg['now'] ISO clock.
+
+    F049 — THE OPT-OUT GATE SITS ON THE CANDIDATE LIST, AND THAT PLACEMENT IS COURT
+    SETTLED. This function emits a `crackscan/considered` Signal for every candidate it
+    merely considered, not only for the ones it admits, and those Signals go into the
+    vault through the existing pipeline. Gating the roster append, or the `Devs/` write
+    stage, or anything else downstream therefore still leaks an opted-out login into
+    `Signals/`. The gate is applied TWICE inside this one function — once where the
+    candidate list is built, once immediately before `out` is assembled — so a future
+    refactor that reintroduces a path to `_signal()` cannot leak either.
+
+    A MALFORMED CONSENT FILE RAISES OUT OF HERE. `optout.load` fails closed on purpose
+    (see its module docstring): returning unfiltered candidates because the file could
+    not be read is the one failure mode this gate exists to make impossible.
     """
+    consent = optout_mod.load(cfg.get("optout_path") or optout_mod.DEFAULT_PATH)
     token = resolve_token(cfg, settings)  # None -> GitHubClient falls back to its own env read
     client = GitHubClient(settings, token=token)
 
@@ -42,8 +57,13 @@ def fetch(cfg: dict, settings) -> list[Signal]:
             continue
         if not login:
             continue
-        slug = login.strip().lstrip("@").lower()
+        slug = optout_mod.slug(login)
         if not slug or slug in seen:
+            continue
+        # F049, barrier 1. Dropped HERE, before `seen`/`logins`, so the login never
+        # reaches cheap_score, never reaches the roster append, and never reaches
+        # `_signal()`.
+        if slug in consent.logins:
             continue
         seen.add(slug)
         logins.append(login)
@@ -80,6 +100,14 @@ def fetch(cfg: dict, settings) -> list[Signal]:
         else:
             considered.append(s)
 
+    # F049, barrier 2. Defence in depth INSIDE the same function: barrier 1 already
+    # removed these logins, so this loop is a no-op today by construction. It is here
+    # because everything between it and barrier 1 is score plumbing that has been
+    # rewritten before and will be rewritten again, and the failure mode of a leak is a
+    # published Signal about a person who asked not to be here.
+    admitted = [s for s in admitted if optout_mod.slug(s.login) not in consent.logins]
+    considered = [s for s in considered if optout_mod.slug(s.login) not in consent.logins]
+
     if admitted:
         roster_mod.append_devs(roster_path, [_dev_dict(s) for s in admitted])
 
@@ -104,10 +132,20 @@ def _seed_repos(cfg: dict, settings) -> list[str]:
     vault_path = getattr(settings, "vault_path", "")
     repos += _vault_repos(vault_path)
     if cfg.get("use_vault_seed_lane") and vault_path:
-        # F001 vault Signal-note lane. OFF by default: turning it on before e03's
-        # fetch() opt-out gate lands would feed ~175 un-admitted vault owners into
-        # the condemned cheap_score/deep_score funnel, which still emits a
-        # `crackscan/considered` Signal per candidate.
+        # F001 vault Signal-note lane. STILL OFF, and the F049 gate landing is NOT the
+        # reason to turn it on. e01's comment here promised e03 would flip it; that
+        # promise predates the measurement and is overridden.
+        #
+        # Flipping it feeds roughly 175 vault owners into `cheap_score`/`deep_score` —
+        # the follower/star scorer the charter condemned and ordered REBUILT, whose
+        # admission arithmetic is provably impossible on a cold cache — and emits a
+        # `crackscan/considered` Signal per candidate into the live public vault. The
+        # opt-out gate removes ONE hazard from that lane; it does not make a condemned
+        # funnel worth switching on.
+        #
+        # The lane's real consumer is the devs pipeline, which mines the same Signal
+        # notes for free via `gitintel/vault_seed.py` and never touches this scorer.
+        # Retiring this flag belongs to whoever retires `crackscore.py`.
         repos += [s.full_name for s in vault_seed.seed_repos(vault_path)]
 
     out, seen = [], set()

@@ -51,6 +51,7 @@ CONTRIBUTORS_PATH = "/repos/{full_name}/contributors"
 #: and the xyora token carries far more scope than anything here needs.
 PUBLIC_READ_PATHS = (
     "/users/{login}",
+    "/users/{login}/repos",
     "/repos/{owner}/{repo}",
     "/repos/{owner}/{repo}/contributors",
 )

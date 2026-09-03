@@ -25,6 +25,19 @@ REC = json.loads(FIXTURE.read_text(encoding="utf-8"))
 FANOUT_FIXTURE = Path(__file__).parent / "fixtures" / "devs_schema_fanout_sample.json"
 FANOUT_REC = json.loads(FANOUT_FIXTURE.read_text(encoding="utf-8"))
 
+#: A THIRD fixture, and the one e03 exists to make possible: a real publish-set record
+#: with `repos_populated: true` and a populated `repos[]` of real public repo metadata.
+#: e01 and e02 could only ever produce `[]` with the marker false, so a corpus where the
+#: repo card actually renders had nothing to build against until this file existed.
+REPOS_FIXTURE = Path(__file__).parent / "fixtures" / "devs_schema_repos_sample.json"
+REPOS_REC = json.loads(REPOS_FIXTURE.read_text(encoding="utf-8"))
+
+#: The frozen `repos[]` element key set, transcribed from the site's `REPO_SNAKE` in
+#: `lib/vault/devs.ts`. The loader over there asserts it by EXACT equality, so an extra
+#: key is a build-killing throw and a missing one is a throw at `sealRepo`.
+REPO_SNAKE = ("name", "title", "description", "language", "topics", "stars_fact",
+              "first_seen", "last_push")
+
 #: e02 adds `not_owned_owners`. THE SET BELOW IS COMPARED BY EXACT EQUALITY, so this line
 #: and the field that produces it move in the SAME commit — which is the point of the
 #: freeze: an additive schema change is a deliberate, recorded, coordinated event rather
@@ -214,24 +227,81 @@ def test_low_n_is_a_bool_label_not_a_suppression_flag():
     assert REC["admitted"] is True or REC["automation"]["state"] != "clear"
 
 
+# --- e03: `repos[]` is POPULATED, and the marker still tells the truth ---------
+#
+# THIS REPLACES `test_repos_is_left_exactly_as_e01_left_it`, WHICH EXISTED TO FORCE THIS
+# COORDINATION. Its own docstring said the lane was e03's; the lane has landed, so the
+# assertion moves from "nobody populated this" to "the two states are distinguishable
+# and both are honest". The e01/e02 fixtures still carry the unpopulated shape, because
+# that is what those runs really produced and e04 renders the empty state from them.
+
 @pytest.mark.parametrize("rec", [REC, FANOUT_REC])
-def test_repos_is_left_exactly_as_e01_left_it(rec):
-    """e02 holds a `GET /repos` call for fork provenance and must NOT populate `repos[]`
-    opportunistically. That lane is e03's, and e04 branches on `repos_populated`;
-    flipping it here with partial data would publish an incomplete repo card as a fact
-    about a named human."""
+def test_the_e01_and_e02_fixtures_still_carry_the_unpopulated_shape(rec):
+    """Those runs never called the repo endpoints, so `[]` with the marker false is what
+    they really produced. e04 renders the empty state from exactly this."""
     assert rec["repos"] == []
     assert rec["repos_populated"] is False
 
 
-def test_repos_ships_empty_with_an_explicit_marker():
-    """e01 deliberately does not call the REST repo endpoints every element field needs.
-    `[]` on its own is indistinguishable from "this developer has no repos" and would
-    publish an empty repo card as a FACT about a named human. The marker is a typed
-    placeholder e03 populates and e04 branches on — e04 must render the repo card from
-    `repos_populated`, never from `len(repos)`."""
-    assert REC["repos"] == []
-    assert REC["repos_populated"] is False
+def test_the_marker_is_what_distinguishes_populated_from_nobody_looked():
+    """`[]` on its own is indistinguishable from "this developer has no repos" and would
+    publish an empty repo card as a FACT about a named human. e04 must render the card
+    from `repos_populated`, never from `len(repos)`, and the two fixtures side by side
+    are what makes that testable over there."""
+    assert REPOS_REC["repos_populated"] is True and REPOS_REC["repos"]
+    assert REC["repos_populated"] is False and REC["repos"] == []
+
+
+def test_the_populated_fixture_is_a_real_publish_set_record():
+    """A fixture that could not be published is a fixture e04 must never render. This one
+    passes the site's own three clauses, which is why a repo card exists for it at all."""
+    from cerebro.gitintel.pool import PREFILTER_UNCHECKED
+    assert REPOS_REC["admitted"] is True
+    assert REPOS_REC["automation"]["state"] == "clear"
+    assert REPOS_REC["automation"]["prefilter"] not in PREFILTER_UNCHECKED
+    assert REPOS_REC["provenance"], "floor 1: every published profile answers 'why here'"
+
+
+def test_every_repo_element_carries_exactly_the_frozen_keys_with_the_right_types():
+    repos = REPOS_REC["repos"]
+    assert 1 <= len(repos) <= 6
+    for repo in repos:
+        assert set(repo) == set(REPO_SNAKE), repo.get("name")
+        assert isinstance(repo["name"], str) and repo["name"]
+        assert isinstance(repo["title"], str) and repo["title"]
+        assert repo["description"] is None or isinstance(repo["description"], str)
+        assert repo["language"] is None or isinstance(repo["language"], str)
+        assert isinstance(repo["topics"], list)
+        assert all(isinstance(t, str) for t in repo["topics"])
+        assert repo["stars_fact"] is None or isinstance(repo["stars_fact"], int)
+        assert repo["first_seen"] is None or isinstance(repo["first_seen"], str)
+        assert repo["last_push"] is None or isinstance(repo["last_push"], str)
+
+
+def test_stars_fact_is_the_only_magnitude_anywhere_in_the_populated_record():
+    """The frozen name is `stars_fact`, and it is a rendered fact only. A key spelled
+    `stars` or `stargazers_count` anywhere in the record is the ruling being lost."""
+    flat = json.dumps(REPOS_REC)
+    assert '"stars"' not in flat and '"stargazers_count"' not in flat
+    assert any(r["stars_fact"] is not None for r in REPOS_REC["repos"])
+
+
+def test_the_repo_cap_holds_and_the_selection_is_not_star_ordered():
+    """F033: stars are a displayed fact, never a sort key. The recorded order is the
+    API's recency order, so the star counts in it are NOT descending."""
+    stars = [r["stars_fact"] or 0 for r in REPOS_REC["repos"]]
+    assert len(stars) <= 6
+    assert stars != sorted(stars, reverse=True) or len(set(stars)) <= 1, \
+        "the fixture must not be star-ordered, or it proves nothing about the selection"
+
+
+def test_first_seen_is_the_vaults_own_capture_and_is_null_when_it_never_cited_the_repo():
+    """The field means "when the vault first saw this repo", never GitHub's `created_at`.
+    Most repos a dev owns were never cited by a Signal note, so `null` is the normal
+    value and the fixture carries both cases."""
+    seen = [r["first_seen"] for r in REPOS_REC["repos"]]
+    assert any(x is not None for x in seen), "the fixture must exercise the cited case"
+    assert any(x is None for x in seen), "and the uncited case, which is the common one"
 
 
 def test_reasons_carries_one_audit_line_per_floor():

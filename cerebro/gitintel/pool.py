@@ -296,6 +296,28 @@ class Budget:
     prefilter_deferred: int = 0
     #: Fan-out candidates the paid pre-filter checked and rejected as non-human.
     prefilter_rejected: int = 0
+    #: e03's REST repo lane (F033/F037), which populates `repos[]` on the publish set at
+    #: one call per published dev. Its own knob because its own ceiling: the flag rate
+    #: bounds the fork lane, and the PUBLISH SET bounds this one, and those two numbers
+    #: move independently.
+    repo_calls_used: int = 0
+    repo_calls_cap: int = 0
+    #: The cap was reached and the lane stopped. `repos_unpopulated` counts who was left
+    #: without a repo card as a result, so an exhausted budget is a number beside a flag
+    #: rather than a flag on its own.
+    repo_budget_exhausted: bool = False
+    #: Published devs whose repo call actually returned, and published devs it did not
+    #: reach. `repos_populated` on the RECORD is the per-person form of the same fact.
+    repos_populated: int = 0
+    repos_unpopulated: int = 0
+    #: Logins the consent file removed before the ClickHouse scan was rendered — so they
+    #: never entered the query bytes, the run json, or a REST call. Counted because a
+    #: gate whose effect is invisible in the artifact is indistinguishable from a gate
+    #: nobody wired up.
+    optout_removed: int = 0
+    #: Which command produced this artifact. `devs-spike` is the F066 gate rehearsal;
+    #: `devs-refresh` is the stage that actually writes a corpus.
+    stage: str = ""
 
     def to_dict(self) -> dict:
         from dataclasses import asdict

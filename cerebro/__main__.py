@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 from typing import Any
 
 from . import __version__
@@ -107,6 +108,38 @@ def main() -> None:
                          "shared across every flagged candidate. On exhaustion the "
                          "remaining flags stand UNEVIDENCED; a budget running out never "
                          "clears anybody (default: 300)")
+
+    dr = sub.add_parser(
+        "devs-refresh",
+        help="write the Devs/ corpus from the devs pool (opt-out gated, "
+             "reconciling; dry-run writes to _scratch/Devs/)")
+    dr_mx = dr.add_mutually_exclusive_group()
+    dr_mx.add_argument("--dry-run", action="store_true",
+                       help="force a dry run: write to _scratch/Devs/")
+    dr_mx.add_argument("--write", action="store_true",
+                       help="force a real write to Devs/ regardless of settings.dry_run")
+    dr.add_argument("--out", default=None,
+                    help="artifact directory (default: logs/devs/<date>/, gitignored, "
+                         "never the vault)")
+    dr.add_argument("--vault", default=None,
+                    help="corpus to mine AND write into (default: settings.vault_path). "
+                         "The Signals/ corpus the pool is mined from is not in every "
+                         "checkout; point this at one that has it or the pool is empty")
+    dr.add_argument("--optout", default=None,
+                    help="path to the CONSENT file (default: config/devs_optout.yaml)")
+    dr.add_argument("--verdicts", default=None,
+                    help="path to the QUALITY verdicts file (a different file, always)")
+    dr.add_argument("--limit", type=int, default=20,
+                    help="rows in the eyeball top list (not a cap on the corpus)")
+    dr.add_argument("--lanes", default="vault,fanout,roster")
+    dr.add_argument("--fanout-repos", type=int, default=60)
+    dr.add_argument("--rest-budget", type=int, default=1400)
+    dr.add_argument("--fork-budget", type=int, default=300)
+    dr.add_argument("--repo-budget", type=int, default=500,
+                    help="hard cap on TOTAL repos[] REST calls for the run, shared "
+                         "across the publish set and spent in signal-recurrence order. "
+                         "Devs the cap does not reach keep repos_populated: false and "
+                         "render no repo card (default: 500)")
 
     args = ap.parse_args()
 
@@ -251,6 +284,111 @@ def main() -> None:
               "(zero bots, zero vendor orgs, zero denied logins, zero unresolved flags)")
         print("The eyeball is NOT optional: the predicate only tests for shapes already "
               "known.")
+        return
+
+    if args.command == "devs-refresh":
+        # Handled BEFORE `from .orchestrator import run`, exactly like `roundup` and
+        # `devs-spike`, so this stage is STRUCTURALLY INCAPABLE of triggering a pipeline
+        # run. run.sh calls it after the roundup and before `git add`, soft-failing.
+        import datetime as _datetime
+        import sys
+
+        from .gitintel import denylist as _denylist, devs_spike, optout as _optout
+        from .gitintel import repo_facts as _repo_facts
+        from .gitintel.cache import GitIntelCache
+        from .gitintel.github_client import GitHubClient, resolve_token
+        from .sink import devs as devs_sink
+
+        stamp = _datetime.date.today().isoformat()
+        out_dir = Path(args.out) if args.out else Path("logs") / "devs" / stamp
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        # Tri-state dry-run, same rule as the roundup: NEITHER flag defers to
+        # config/settings.yaml, which is what run.sh relies on.
+        dry_override = True if args.dry_run else (False if args.write else None)
+        settings = load(dry_run_override=dry_override, allow_example=True)
+        vault = args.vault or settings.vault_path
+        optout_path = args.optout or _optout.DEFAULT_PATH
+        verdicts_path = args.verdicts or _denylist.DEFAULT_PATH
+
+        # FAIL CLOSED, AND FAIL FIRST. A malformed consent file exits non-zero here,
+        # before a single query is rendered or a single call is spent. Returning
+        # unfiltered candidates because the file could not be parsed would publish a
+        # person who asked to be removed.
+        try:
+            consent = _optout.load(optout_path)
+        except ValueError as exc:
+            print(f"OPT-OUT FILE UNREADABLE — NOTHING WAS WRITTEN\n  {exc}")
+            sys.exit(2)
+        verdicts = _denylist.load(verdicts_path)
+
+        crackscan_cfg = (settings.sources or {}).get("crackscan", {})
+        token = resolve_token(crackscan_cfg, settings)
+        client = GitHubClient(settings, token=token)
+        # THE SECOND CLIENT, AND THE WHOLE REASON THE REPO LANE IS AFFORDABLE. Repo
+        # metadata does not change hourly; a 24h TTL would re-buy the entire corpus every
+        # morning for nothing.
+        gh_cfg = getattr(settings, "github", {}) or {}
+        repo_client = GitHubClient(settings, token=token, cache=GitIntelCache(
+            gh_cfg.get("cache_path"), _repo_facts.REPO_CACHE_TTL_HOURS))
+
+        lanes = tuple(x.strip().lower() for x in (args.lanes or "").split(",") if x.strip())
+        unknown = [x for x in lanes if x not in devs_spike.LANES]
+        if unknown:
+            raise SystemExit(f"unknown lane(s) {unknown}; choose from {devs_spike.LANES}")
+
+        result, top, records, paths = devs_spike.run(
+            vault, out_dir, client=client, verdicts_path=verdicts_path,
+            optout_path=optout_path, limit=args.limit, lanes=lanes,
+            fanout_repos=args.fanout_repos, rest_budget=args.rest_budget,
+            fork_budget=args.fork_budget, repo_budget=args.repo_budget,
+            repo_client=repo_client, stage="devs-refresh")
+
+        for w in result.warnings:
+            print(f"WARNING: {w}")
+        if not result.ok:
+            # SHIP NOTHING. Not a partial corpus, not yesterday's corpus with today's
+            # additions — nothing. The artifacts stay for the operator to read.
+            for f in result.failures:
+                print(f"  {f}")
+            print("SANITY GATE FAILED — NOTHING WAS WRITTEN")
+            sys.exit(1)
+
+        budget = json.loads(Path(paths["budget"]).read_text(encoding="utf-8"))
+        # HEALTHY, and every term is a way the run can be WRONG rather than merely small.
+        # A truncated REST budget means accounts nobody checked; a missing ClickHouse scan
+        # means windows nobody measured. Either one makes today's absences untrustworthy,
+        # and an untrustworthy absence must not unpublish a real person.
+        healthy = (result.ok
+                   and not budget.get("truncated")
+                   and budget.get("clickhouse_scans") == len(devs_spike.WINDOWS)
+                   and bool(records))
+
+        corpus_plan, written = devs_sink.write_corpus(
+            records, settings, vault_path=vault, optout=consent, verdicts=verdicts,
+            healthy=healthy)
+
+        report = out_dir / f"devs-withheld-{stamp}.md"
+        report.write_text(_withheld_report(corpus_plan, stamp, healthy),
+                          encoding="utf-8")
+
+        summary = {
+            "stage": "devs-refresh",
+            "dry_run": bool(settings.dry_run),
+            "healthy": healthy,
+            "pool": len(records),
+            "published": len(corpus_plan.writes),
+            "withheld": len(corpus_plan.withheld),
+            "written": len(written["written"]),
+            "unchanged": len(written["unchanged"]),
+            "deleted_consent": len(corpus_plan.deletes_consent),
+            "deleted_churn": len(corpus_plan.deletes_churn),
+            "refused_reason": corpus_plan.refused_reason,
+            "corpus_dir": written["dir"],
+            "artifacts": {k: str(v) for k, v in paths.items() if k != "sql"},
+            "withheld_report": str(report),
+        }
+        print(json.dumps(summary, indent=2))
         return
 
     from .orchestrator import run
@@ -585,6 +723,74 @@ def _yaml_scalar_out(value: str) -> str:
     if s == "" or re.search(r'(^[\s\[\]{}#&*!|>%@`"\',])|(:\s)|(\s#)|(\s$)', s):
         return '"' + s.replace('"', '\\"') + '"'
     return s
+
+
+def _withheld_report(corpus_plan, stamp: str, healthy: bool) -> str:
+    """THE AUDIT TRAIL FOR EVERYBODY THE WRITE GATE HELD BACK.
+
+    `cerebro-vault` is PUBLIC, so a withheld person's record is NOT WRITTEN — which means
+    the only place their absence is legible is here, in `logs/devs/` (gitignored, never
+    the vault). Every withheld login is named with the clause it failed and the remedy,
+    because "we withheld 1,193 people" is not transparency and a silent absence is
+    indistinguishable from a bug.
+
+    It describes what the pipeline did. It says nothing about any person.
+    """
+    from .sink import devs as devs_sink
+
+    remedies = {
+        devs_sink.REASON_PROVENANCE:
+            "no vault Signal note cites this login or a repo they own, so the profile "
+            "could not answer 'why is this person here'. The remedy needs no code: the "
+            "moment any Signal note cites them, they publish on the next run.",
+        devs_sink.REASON_OPTED_OUT:
+            "this person asked to be removed. There is no remedy and none is wanted; "
+            "any note already on disk was deleted in the same run.",
+        devs_sink.REASON_DENIED:
+            "a recorded verdict in config/devs_denylist.yaml excludes this account. "
+            "Reversing it is an edit to that file by a reviewer, never an edit here.",
+        devs_sink.REASON_NOT_ADMITTED:
+            "an admission floor failed. The per-floor audit lines are on the record in "
+            "the run json.",
+    }
+    groups: dict[str, list[str]] = {}
+    for login, reason in corpus_plan.withheld:
+        groups.setdefault(reason, []).append(login)
+
+    lines = [
+        f"# devs withheld — {stamp}",
+        "",
+        "THE WRITE GATE IS THE PUBLISH GATE. Nothing below was written into the vault,",
+        "because the vault is a public repository and a written record is published data",
+        "about a named human whether or not a page renders from it. This file is the",
+        "operator's audit trail and lives under gitignored `logs/`.",
+        "",
+        f"run health: {'healthy' if healthy else 'DEGRADED — churn deletions refused'}",
+        f"published: {len(corpus_plan.writes)}   withheld: {len(corpus_plan.withheld)}",
+        f"deletions: {len(corpus_plan.deletes_consent)} consent, "
+        f"{len(corpus_plan.deletes_churn)} churn"
+        + (f" (REFUSED: {corpus_plan.refused_reason})"
+           if corpus_plan.refused_reason else ""),
+        "",
+    ]
+    for reason in sorted(groups, key=lambda r: (-len(groups[r]), r)):
+        logins = sorted(groups[reason], key=str.lower)
+        lines += [f"## {reason} — {len(logins)}", ""]
+        remedy = next((v for k, v in remedies.items() if reason.startswith(k)), "")
+        if not remedy and reason.startswith("prefilter:"):
+            remedy = ("a humanness call was intended and never made. Raise "
+                      "`--rest-budget` and re-run; nobody is suppressed by this.")
+        if not remedy and reason.startswith("automation:"):
+            remedy = ("a shape fired and no verdict resolves it. The paste-ready blocks "
+                      "in the flag queue artifact are both directions of that decision.")
+        if remedy:
+            lines += [remedy, ""]
+        lines += [f"- {x}" for x in logins]
+        lines.append("")
+    if not groups:
+        lines.append("_(nothing was withheld)_")
+        lines.append("")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

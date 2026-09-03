@@ -1,0 +1,39 @@
+# CONSENT — the people who asked not to be in /cerebro/devs.
+#
+# THIS IS NOT `config/devs_denylist.yaml` AND THE TWO MUST NEVER BE MERGED.
+# That file records what a REVIEWER CONCLUDED about an account's shape (a quality
+# judgement, with `verdict:`, `shape:`, `evidence:` and `reviewed_by:` on every entry).
+# This file records what a PERSON ASKED FOR. Nothing here is a judgement of anybody, and
+# an entry here carries no evidence because a request needs none.
+#
+# WHAT ADDING A LOGIN HERE DOES, on the very next run of `cerebro devs-refresh`:
+#   1. the login is dropped from `crackscan.fetch()`'s candidate list, so no
+#      `crackscan/considered` or `crackscan/admitted` Signal about them is ever emitted
+#      into the vault;
+#   2. the login is dropped from the devs pool the moment the three lanes assemble and
+#      BEFORE the ClickHouse scan is rendered, so it never appears in the query bytes,
+#      never appears in the run json, and never costs a REST call;
+#   3. any `Devs/<login>.md` already on disk is DELETED, and that deletion runs even on
+#      an unhealthy run and is never subject to the churn cap.
+#
+# The site carries a third, independent layer (F050) and the published promise wording
+# (F052) lives there. This file must never be described in copy as anything other than
+# what it is: a list of removal requests.
+#
+# THE LOADER FAILS CLOSED. A missing file means nobody has opted out. A file that exists
+# and does not parse, or an entry without a `login`, STOPS THE RUN. Treating a corrupt
+# consent file as "nobody opted out" would publish a person who asked to be removed.
+#
+# SHAPE OF AN ENTRY. `login` is required; `requested_on` (YYYY-MM-DD) and `note` are
+# optional. `verdict`, `shape`, `evidence` and `reviewed_by` are REJECTED at load time —
+# those belong to the verdicts file, and a consent record that looks like a review
+# conclusion is the confusion this separation exists to prevent.
+#
+#   logins:
+#     - login: someone
+#       requested_on: 2026-09-01
+#       note: "asked by email"
+#
+# Matching is on the same slug rule the pool uses: lowercased, `@`-stripped, trimmed.
+
+logins: []

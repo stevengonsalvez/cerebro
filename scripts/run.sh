@@ -45,6 +45,7 @@ notify.push_failure(sys.argv[1], load())' "$1" || true
 # briefing must still reach the vault if the roundup breaks — but it pages, because a
 # roundup that stays broken means the weekly email silently stops going out.
 .venv/bin/python -m cerebro roundup || warn_and_page "weekly roundup failed"
+.venv/bin/python -m cerebro devs-refresh || warn_and_page "devs refresh failed"
 
 # The vault is a separate Git repository. Keep generated briefings visible in
 # its remote, not only on this Mac.
@@ -52,7 +53,8 @@ VAULT_PATH="$(.venv/bin/python -c 'from cerebro.config import load; print(load()
 # `git add` exits 128 on a pathspec matching nothing, and `set -e` would then kill the push.
 # Weekly/ legitimately may not exist (first ever run, or a roundup that soft-failed).
 mkdir -p "$VAULT_PATH/Weekly"
-git -C "$VAULT_PATH" add -- Daily Signals Weekly
+mkdir -p "$VAULT_PATH/Devs"
+git -C "$VAULT_PATH" add -- Daily Signals Weekly Devs
 if ! git -C "$VAULT_PATH" diff --cached --quiet; then
   git -C "$VAULT_PATH" commit -S -m "vault: $(date +%F) daily briefing"
   git -C "$VAULT_PATH" push
