@@ -1,0 +1,192 @@
+# QUALITY verdicts — recorded human review outcomes for the /cerebro/devs pipeline.
+#
+# THIS IS NOT THE OPT-OUT LIST. Opt-out is CONSENT (F049/F050) and lives in its own
+# file. The two must never be merged: this file records what a reviewer concluded
+# about an account's SHAPE; that one records what a person asked for.
+#
+# Court settled Q7 gives human review two terminal states, so both are recorded here
+# and both carry the SAME five mandatory fields (verdict, shape, evidence,
+# reviewed_by, reviewed_on). A bare login is rejected at load time.
+#
+#   denied:   the only path to automation state `excluded`. No arithmetic reaches it.
+#   cleared:  the only durable form of "flagged-then-resolved-clear by human review".
+#             Without it, a cleared engineer is re-flagged and withheld on every run
+#             for ever, and the review queue never converges.
+#
+# A login in BOTH sections is a load-time error, not a precedence question.
+#
+# EVERY `evidence:` STRING IS REGENERATED FROM THE RUN THAT PRODUCED THE VERDICT.
+# Numbers drift: the registry records diegosouzapw at 3 not-owned basenames, three
+# separate live runs on 2026-08-26 measured 2. A stale number in a published verdict
+# about a named person is exactly what the verification doctrine forbids.
+
+denied:
+  - login: Dicklesworthstone
+    verdict: automation
+    shape: mass_self_repo
+    evidence: "90d live 2026-08-26: 27764 pushes / 109 distinct repos / 90 active days (91 raw, clamped to the window) / 0 not-owned (ratio 0.0000) / 308.49 pushes per active day / 254.72 pushes per repo / basename concentration 0.0092"
+    reviewed_by: owner
+    reviewed_on: 2026-08-26
+
+  - login: diegosouzapw
+    verdict: automation
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 2274 pushes / 130 distinct repos / 87 active days / 124 not-owned across 2 basenames / max basename group 124 / concentration 0.9538 / 26.14 pushes per active day"
+    reviewed_by: owner
+    reviewed_on: 2026-08-26
+
+cleared:
+  # Worked from the F066 flag queue on 2026-08-26. All 23 flagged accounts were
+  # inspected by hand: profile, bio, follower count, and the actual basenames of the
+  # repos each pushed to over the 90d window. Every one is a named human shipping real
+  # work; not one is automation.
+  #
+  # THE SHAPE THAT FIRED ON ALL OF THEM IS THE SAME, AND IT IS A REAL LIMITATION OF THE
+  # RULE, RECORDED HERE FOR e02. `fork_farm` keys on basename concentration, which
+  # cannot distinguish "a fork farm mass-pushing 124 copies of one template" from
+  # "a maintainer working on their own popular project across its forks". koala73 is 24
+  # repos ALL named worldmonitor, his own 84.3k-star project; diegosouzapw is 124 repos
+  # in 2 basenames of templated forks. They are shape-identical at 1.0000 and 0.9538 and
+  # NO threshold on this metric separates them. The separating fact is whether the
+  # not-owned repos are forks of an upstream the person also authors, which needs a REST
+  # lane e01 does not have. Until e02 adds it, the flag is a review request with a high
+  # false-positive rate on this pool, which is exactly why it is a FLAG and never an
+  # auto-exclude.
+  - login: Alishahryar1
+    verdict: human
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 102 pushes / 8 distinct repos / 41 active days / 6 not-owned across 1 basenames / concentration 0.8750 / 2.49 pushes per active day. Ali Khokhar; free-claude-code 50.3k stars, his own project worked across its 7 forks. 1223 followers"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: calesthio
+    verdict: human
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 56 pushes / 13 distinct repos / 20 active days / 10 not-owned across 1 basenames / concentration 0.8462 / 2.80 pushes per active day. Creator of OpenMontage 51.2k stars; all 11 same-basename repos are that project across its forks"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: can1357
+    verdict: human
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 426 pushes / 38 distinct repos / 69 active days / 28 not-owned across 2 basenames / concentration 0.7368 / 6.17 pushes per active day. Can Boluk, security researcher and reverse engineer; oh-my-pi 27.7k stars, 3.3k followers. The 38 repos share a project prefix"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: chopratejas
+    verdict: human
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 291 pushes / 29 distinct repos / 63 active days / 27 not-owned across 2 basenames / concentration 0.9310 / 4.62 pushes per active day. Tejas Chopra, software engineer, 41 public repos, 986 followers; contributes upstream through forks"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: esengine
+    verdict: human
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 824 pushes / 11 distinct repos / 83 active days / 7 not-owned across 1 basenames / concentration 0.7273 / 9.93 pushes per active day. YHH; DeepSeek-Reasonix 35.2k stars and the estella game engine 645 stars, both his own original work. The 11 same-basename repos are his own project across forks"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: f-trycua
+    verdict: human
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 328 pushes / 11 distinct repos / 59 active days / 10 not-owned across 5 basenames / concentration 0.6364 / 5.56 pushes per active day. Francesco Bonacci; all 7 same-basename repos are cua, his employer's open-source project, worked across its forks"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: guyb1
+    verdict: human
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 60 pushes / 8 distinct repos / 26 active days / 8 not-owned across 3 basenames / concentration 0.7500 / 2.31 pushes per active day. Guy Ben-Aharon; the 8 repos are onecli and its SDK, a project in the vault corpus that he contributes to through forks, at 2.31 pushes per active day"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: jackwener
+    verdict: human
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 417 pushes / 39 distinct repos / 56 active days / 34 not-owned across 4 basenames / concentration 0.7692 / 7.45 pushes per active day. jakevin; PMC member and committer of Apache Arrow, DataFusion and Doris; OpenCLI 28.6k stars, 3.0k followers"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: jlowin
+    verdict: human
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 163 pushes / 9 distinct repos / 26 active days / 8 not-owned across 2 basenames / concentration 0.7778 / 6.27 pushes per active day. Jeremiah Lowin, CEO of PrefectHQ and creator of FastMCP; 2.4k followers, contributes upstream to the MCP Python SDK through forks"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: koala73
+    verdict: human
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 960 pushes / 24 distinct repos / 81 active days / 23 not-owned across 1 basenames / concentration 1.0000 / 11.85 pushes per active day. Elie Habib; all 24 same-basename repos are worldmonitor, his own 84.3k-star project, worked across its forks. 4099 followers"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: lizhengfeng101
+    verdict: human
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 137 pushes / 13 distinct repos / 56 active days / 9 not-owned across 2 basenames / concentration 0.6154 / 2.45 pushes per active day. Kite, AI engineer at Alibaba and stated creator of OpenCodeReview; all 8 same-basename repos are open-code-review, his own project"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: nwparker
+    verdict: human
+    shape: high_push_rate
+    evidence: "90d live 2026-08-26: 1392 pushes / 43 distinct repos / 80 active days / 42 not-owned across 3 basenames / concentration 0.9535 / 17.40 pushes per active day. Neil, CTO of Stably.ai; the 43 repos are orca IDE work across its forks plus his own evidence repos"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: ogulcancelik
+    verdict: human
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 230 pushes / 22 distinct repos / 77 active days / 18 not-owned across 2 basenames / concentration 0.8182 / 2.99 pushes per active day. Can Celik; pi-extensions 421 stars and herdr-browser 343 stars, his own original work across the pi ecosystem"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: qin-ctx
+    verdict: human
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 132 pushes / 8 distinct repos / 46 active days / 8 not-owned across 1 basenames / concentration 1.0000 / 2.87 pushes per active day. Qin Haojie; all 8 same-basename repos are openviking, one project he contributes to, at 2.87 pushes per active day"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: santifer
+    verdict: human
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 411 pushes / 44 distinct repos / 64 active days / 37 not-owned across 3 basenames / concentration 0.8182 / 6.42 pushes per active day. Santiago Fernandez de Valderrama; career-ops 68.7k stars, his own project worked across its forks. 3.2k followers"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: senamakel
+    verdict: human
+    shape: high_push_rate
+    evidence: "90d live 2026-08-26: 1376 pushes / 69 distinct repos / 88 active days / 60 not-owned across 20 basenames / concentration 0.5072 / 15.64 pushes per active day. Steven Enamakel, 68 public repos; ships prmpt.cash and llm-ladder-router under his own login. 19.9 pushes per repo is deep work on few projects, the opposite of one-push-per-repo"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: Soulter
+    verdict: human
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 334 pushes / 20 distinct repos / 68 active days / 16 not-owned across 5 basenames / concentration 0.6000 / 4.91 pushes per active day. Creator of AstrBot; the 20 repos are astrbot plugins and forks of his own project, 96 public repos of the same ecosystem"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: steipete
+    verdict: human
+    shape: high_push_rate
+    evidence: "90d live 2026-08-26: 12918 pushes / 704 distinct repos / 90 active days / 646 not-owned across 104 basenames / concentration 0.4375 / 143.53 pushes per active day. Peter Steinberger, founder of PSPDFKit; CodexBar 20.6k stars, 52.7k followers. The 704-repo/646-not-owned spread is OpenClaw-ecosystem work across forks of projects he maintains, not fan-out"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: steve8708
+    verdict: human
+    shape: high_push_rate
+    evidence: "90d live 2026-08-26: 1323 pushes / 3 distinct repos / 86 active days / 3 not-owned across 3 basenames / concentration 0.3333 / 15.38 pushes per active day. Steve Sewell, founder and CEO of Builder.io; 1323 pushes across THREE repos over 86 active days is the deepest per-repo work in the pool"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: teknium1
+    verdict: human
+    shape: high_push_rate
+    evidence: "90d live 2026-08-26: 1450 pushes / 13 distinct repos / 81 active days / 11 not-owned across 5 basenames / concentration 0.5385 / 17.90 pushes per active day. Teknium, co-founder of Nous Research; 6.5k followers, ships the Hermes agent tooling under his own login"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: Wei-Shaw
+    verdict: human
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 260 pushes / 15 distinct repos / 51 active days / 11 not-owned across 2 basenames / concentration 0.7333 / 5.10 pushes per active day. Wesley Liddick; sub2api 39.5k stars and claude-relay-service 12.6k stars, both his own original work"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: wesm
+    verdict: human
+    shape: high_push_rate
+    evidence: "90d live 2026-08-26: 1767 pushes / 88 distinct repos / 88 active days / 80 not-owned across 20 basenames / concentration 0.3636 / 20.08 pushes per active day. Wes McKinney, creator of pandas and Apache Arrow, Apache Parquet PMC member, Principal Architect at Posit; 16.8k followers"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26
+  - login: ymichael
+    verdict: human
+    shape: fork_farm
+    evidence: "90d live 2026-08-26: 311 pushes / 8 distinct repos / 44 active days / 6 not-owned across 1 basenames / concentration 0.8750 / 7.07 pushes per active day. Michael Yong, software engineer, 82 public repos since 2011; the 8 repos are bb, one project, at 309 pushes"
+    reviewed_by: e01-builder
+    reviewed_on: 2026-08-26

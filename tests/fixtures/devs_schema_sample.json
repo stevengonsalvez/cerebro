@@ -1,0 +1,79 @@
+{
+  "admitted": true,
+  "automation": {
+    "basename_concentration": 0.0556,
+    "cleared_by": null,
+    "cleared_on": null,
+    "not_owned_ratio": 0.2407,
+    "push_per_day": 4.6818,
+    "repo_per_active_day": 0.8182,
+    "shape_evidence": [],
+    "shapes": [],
+    "state": "clear"
+  },
+  "discovered_via": "vault",
+  "generated_at": "2026-08-26T21:48:59.436444+00:00",
+  "login": "simonw",
+  "low_n": false,
+  "name": null,
+  "provenance": [
+    "0726bc457d4dcf89",
+    "1be978947e68d1f2",
+    "481b19745d66d642",
+    "4d3291c25d56323b",
+    "97c4e9cb8b163ddb",
+    "98a2deac3e2f9725",
+    "b949a65ff91f9791",
+    "c7515e0fa4368a55",
+    "d3abe74726b22711",
+    "d4d674821fc308ad",
+    "d61fc285c7155696",
+    "e76a6eae5d38637b",
+    "e7c647c4d0689526"
+  ],
+  "pushes_per_week": [
+    22,
+    22,
+    47,
+    53,
+    13,
+    62,
+    26,
+    5,
+    17,
+    17,
+    12,
+    11,
+    2
+  ],
+  "reasons": [
+    "provenance: 13 vault signal(s) \u2014 pass",
+    "activity: 66 active days in 90d \u2014 pass",
+    "automation: clear \u2014 pass"
+  ],
+  "repos": [],
+  "repos_populated": false,
+  "windows": {
+    "30d": {
+      "active_days": 16,
+      "distinct_repos": 21,
+      "not_owned_basenames": 4,
+      "pushes": 46,
+      "repos_not_owned": 4
+    },
+    "7d": {
+      "active_days": 2,
+      "distinct_repos": 2,
+      "not_owned_basenames": 0,
+      "pushes": 2,
+      "repos_not_owned": 0
+    },
+    "90d": {
+      "active_days": 66,
+      "distinct_repos": 54,
+      "not_owned_basenames": 12,
+      "pushes": 309,
+      "repos_not_owned": 13
+    }
+  }
+}

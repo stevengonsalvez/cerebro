@@ -78,6 +78,19 @@ def main() -> None:
                     help="force a real write to Weekly/ regardless of settings.dry_run "
                          "(honours $CEREBRO_VAULT — point it at a copy, never at the live vault)")
 
+    ds = sub.add_parser("devs-spike",
+                        help="F066 sanity gate: dry-run the vault-lane devs pipeline "
+                             "and write an eyeballable top-20 (writes nothing to the vault)")
+    ds.add_argument("--dry-run", action="store_true", required=True,
+                    help="the only supported mode; a live mode is not implemented")
+    ds.add_argument("--out", default=".agents/scratch/",
+                    help="directory for the top-20, flag queue, run json and query bytes")
+    ds.add_argument("--vault", default=None,
+                    help="corpus to mine (default: settings.vault_path, read-only either way)")
+    ds.add_argument("--verdicts", default=None,
+                    help="path to the quality verdicts file")
+    ds.add_argument("--limit", type=int, default=20)
+
     args = ap.parse_args()
 
     if args.command == "health" or args.health:
@@ -176,6 +189,41 @@ def main() -> None:
         result["notes_read"] = len(read.notes)
         result["notes_skipped"] = read.skipped
         print(json.dumps(result, indent=2))
+        return
+
+    if args.command == "devs-spike":
+        # Handled BEFORE `from .orchestrator import run`: the spike is a dry-run read of
+        # the vault plus a free ClickHouse query, and returning from here makes it
+        # structurally incapable of triggering a pipeline run. It emits zero Signals.
+        import sys
+
+        from .gitintel import denylist as _denylist, devs_spike
+        from .gitintel.github_client import GitHubClient, resolve_token
+
+        settings = load(dry_run_override=True, allow_example=True)
+        vault = args.vault or settings.vault_path
+        crackscan_cfg = (settings.sources or {}).get("crackscan", {})
+        client = GitHubClient(settings, token=resolve_token(crackscan_cfg, settings))
+        result, top, records, paths = devs_spike.run(
+            vault, args.out, client=client,
+            verdicts_path=args.verdicts or _denylist.DEFAULT_PATH,
+            limit=args.limit,
+        )
+        print()
+        print(f"top-{len(top)} written to {paths['top']}  (artifact-hash {paths['hash']})")
+        print(f"flag queue      {paths['queue']}")
+        print(f"run json        {paths['json']}")
+        for w in result.warnings:
+            print(f"WARNING: {w}")
+        if not result.ok:
+            for f in result.failures:
+                print(f"  {f}")
+            print("SANITY GATE FAILED — SHIP NOTHING")
+            sys.exit(1)
+        print("SANITY GATE: mechanical predicate GREEN "
+              "(zero bots, zero vendor orgs, zero denied logins, zero unresolved flags)")
+        print("The eyeball is NOT optional: the predicate only tests for shapes already "
+              "known.")
         return
 
     from .orchestrator import run
