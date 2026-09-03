@@ -37,7 +37,8 @@ cleared:
 def test_the_shipped_denials_are_exactly_the_ones_a_review_recorded(tmp_path):
     """The denied section is the ONLY path to `excluded`, so its membership is pinned.
 
-    `gcgh159` joined on 2026-08-27 from the e02 eyeball, not from any mechanical shape:
+    `diegosouzapw` was WITHDRAWN on 2026-09-03 — see the file header. `gcgh159` joined on
+    2026-08-27 from the e02 eyeball, not from any mechanical shape:
     489 pushes onto the single repo `GCGH159/green` across 88 of 90 days, a tree of
     auto-log.md/data.txt/stats.txt, templated four-per-batch commits one second apart.
     Every flag in `admission.flags()` passes it — push_per_active_day 5.56 is under the
@@ -46,7 +47,7 @@ def test_the_shipped_denials_are_exactly_the_ones_a_review_recorded(tmp_path):
     eyeball is load-bearing, which is why criterion 4 says "verified by eye".
     """
     v = denylist.load(SHIPPED)
-    assert sorted(v.denied) == ["dicklesworthstone", "diegosouzapw", "gcgh159"]
+    assert sorted(v.denied) == ["dicklesworthstone", "gcgh159"]
 
 
 def test_no_shipped_verdict_claims_the_owner_signed_it(tmp_path):
@@ -95,10 +96,7 @@ def test_the_shipped_denials_carry_regenerated_numeric_evidence():
         assert "90d" in entry.evidence
         assert entry.reviewed_by and entry.reviewed_on
     assert v.denied["dicklesworthstone"].shape == "mass_self_repo"
-    assert v.denied["diegosouzapw"].shape == "fork_farm"
-    # the recorded drift: two live runs measured 2 not-owned basenames, not the
-    # registry's 3, and the shipped evidence must carry the measurement
-    assert "2 basenames" in v.denied["diegosouzapw"].evidence
+    assert v.denied["gcgh159"].shape == "single_repo_daily_cadence"
 
 
 def test_the_shipped_file_is_not_the_opt_out_list():
