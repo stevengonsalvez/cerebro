@@ -36,6 +36,8 @@ from . import (
     fanout,
     fork_provenance,
     gharchive,
+    growth as growth_mod,
+    portfolio as portfolio_mod,
     optout as optout_mod,
     pool,
     repo_facts,
@@ -300,16 +302,28 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     stamp = date.today().isoformat()
-    generated_at = datetime.now(timezone.utc).isoformat()
+    now = _now_utc()
+    generated_at = now.isoformat()
+    #: ONE INSTANT FOR THE WHOLE RUN. A per-login `now()` would put a 2,568-login run's
+    #: rows on either side of a second boundary and make "how many logins did this run
+    #: snapshot" unanswerable by `count(distinct captured_at)`.
+    captured_at = now.replace(microsecond=0).isoformat()
     lanes = tuple(x for x in LANES if x in set(lanes))
     if not lanes:
         raise ValueError(f"no lanes selected; choose from {LANES}")
 
-    # ONE ACCOUNTANT. Every REST number in the artifact is a delta off these two, so no
+    # ONE ACCOUNTANT. Every REST number in the artifact is a delta off these three, so no
     # lane can keep a private tally that disagrees with what actually left the process.
+    #
+    # `_errors` is read off BOTH clients because the repo lane runs on its own
+    # longer-TTL client, and a 403 there is exactly as much a reason to distrust an
+    # absence as a 403 on the pool client. `_error_clients` dedups by identity so the
+    # `repo_client or client` fallback cannot double-count one object.
     calls_at_start = getattr(client, "_calls", 0)
     hits_at_start = getattr(client, "_cache_hits", 0)
     counter_is_real = hasattr(client, "_calls") and hasattr(client, "_cache_hits")
+    _error_clients = list({id(c): c for c in (client, repo_client) if c is not None}.values())
+    errors_at_start = sum(getattr(c, "_errors", 0) for c in _error_clients)
 
     verdicts = denylist.load(verdicts_path)
     log(f"verdicts: {len(verdicts.denied)} denied, {len(verdicts.cleared)} cleared")
@@ -413,6 +427,20 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
     log(f"gh archive: {len(metrics)} logins, {active} with 90d activity "
         f"({len(metrics) - active} zero-activity, which is a label case not a drop)")
 
+    # --- F057: THE RUN WRITES ITS OWN HISTORY, HERE, FROM THE FREE LANE -------
+    #
+    # MEASUREMENT IS NOT A REWARD FOR PUBLISHING. This sits immediately after the free
+    # scan and before the paid pre-filter, admission, the publish set and the write gate,
+    # so a run whose sanity gate fails, or one that refuses its churn deletions, still
+    # accrues the history F024 reads. The condemned scorer's defect was the opposite
+    # arrangement: `record=False` at `crackscore.py:39,44` meant the history was never
+    # written at all, so its growth terms were structurally 0 for ever.
+    #
+    # It runs on `devs-spike` too. A push count is a push count whichever command asked;
+    # the stage is recorded on the artifact, never on the row.
+    snapshots_written, snapshot_store = _record_history(
+        client, metrics, captured_at=captured_at, log=log)
+
     # --- the ONE paid step, on new fan-out logins only --------------------
     #
     # F063 work order: the seed repos the vault keeps returning to come first, so a run
@@ -467,6 +495,8 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
         prefilter_rejected=len(pre.rejected),
         repo_calls_cap=max(0, int(repo_budget)),
         optout_removed=len(removed_logins),
+        snapshots_written=snapshots_written,
+        snapshot_store=snapshot_store,
         stage=stage,
     )
     fork_bud = fork_provenance.ForkBudget(int(fork_budget))
@@ -581,10 +611,48 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
 
     budget.rest_calls_used = getattr(client, "_calls", calls_at_start) - calls_at_start
     budget.rest_cache_hits = getattr(client, "_cache_hits", hits_at_start) - hits_at_start
+    budget.rest_failures = (
+        sum(getattr(c, "_errors", 0) for c in _error_clients) - errors_at_start)
     if not counter_is_real:
         log("WARNING: the client has no REST counter — every budget number is unmeasured")
     log(f"budget: {budget.rest_calls_used}/{budget.rest_calls_cap} REST calls, "
         f"{budget.rest_cache_hits} cache hits, {budget.clickhouse_scans} ClickHouse scans")
+    if budget.rest_failures:
+        # Loud, and phrased as what it MEANS rather than as a count: a run that could not
+        # resolve people has absences it cannot account for, and an unaccountable absence
+        # must never unpublish somebody.
+        log(f"WARNING: {budget.rest_failures} REST call(s) FAILED (rate limit, 5xx or "
+            f"transport). Today's absences are untrustworthy and this run is DEGRADED.")
+
+    # --- F024: growth, from the history this run just extended -----------------
+    #
+    # Written as an ARTIFACT and nowhere else. It reaches no `Devs/*.md` field in this
+    # epic: on the day this lands there are 0 days of history, so the record would carry
+    # `null` about ~1,300 named humans, and the site's loader throws on a field that is
+    # on neither its ADMITTED nor its CONSUMED list.
+    growth_payload = growth_mod.report(
+        _history_store(client), [r.login for r in records])
+    growth_path = out / f"devs-growth-{stamp}.json"
+    growth_path.write_text(
+        json.dumps(growth_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    census["growth"] = growth_mod.census_line(growth_payload)
+    log(census["growth"])
+
+    # --- F027: portfolio freshness, from repos[] the repo lane already fetched ---
+    #
+    # ZERO MARGINAL REST CALLS, and the counter delta below is what proves it rather than
+    # a claim in a docstring. Artifact only, for the same D2 reason as growth.
+    calls_before_freshness = getattr(client, "_calls", 0)
+    freshness_payload = portfolio_mod.report(records)
+    freshness_path = out / f"devs-freshness-{stamp}.json"
+    freshness_path.write_text(
+        json.dumps(freshness_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    census["freshness"] = portfolio_mod.census_line(freshness_payload)
+    log(census["freshness"])
+    if getattr(client, "_calls", calls_before_freshness) != calls_before_freshness:
+        log("WARNING: the freshness pass spent REST calls — it is supposed to read only "
+            "repos[] that the repo lane already fetched")
+
 
     result = sanity_check(top, verdicts)
 
@@ -612,15 +680,144 @@ def run(vault_path, out_dir, *, client, verdicts_path=denylist.DEFAULT_PATH,
 
     paths = {"top": top_path, "queue": queue_path, "json": json_path,
              "census": census_path, "budget": budget_path,
+             "growth": growth_path, "freshness": freshness_path,
              "sql": sql_paths, "hash": digest}
+
+    # --- F064: the cleanup, LAST, and never fatal ----------------------------
+    #
+    # AFTER the artifacts are on disk, inside a try/except that logs and continues: a
+    # cleanup failure must never lose a run's work. The budget json is then REWRITTEN
+    # with the prune's numbers, which is the one extra write this ordering costs and is
+    # cheaper than the alternative — pruning before the artifacts, where a locked or
+    # corrupt cache would take down a run that had already done everything it was for.
+    _prune_cache(client, budget, log=log)
+    try:
+        budget_path.write_text(
+            json.dumps(budget.to_dict(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8")
+    except OSError as exc:  # noqa: BLE001 — the run's real work is already written
+        log(f"WARNING: could not rewrite the budget artifact with the prune numbers: {exc}")
+
     return result, top, records, paths
+
+
+class _NoHistory:
+    """The store a cache-less client gets: every history is empty, nothing raises.
+
+    A null object rather than a branch at the call site, so "this client records no
+    history" and "this login has no history yet" produce the SAME honest artifact —
+    `delta: null` with a reason — instead of one of them producing a missing key.
+    """
+
+    @staticmethod
+    def active_day_snapshots(login, window_days):
+        return []
+
+
+def _history_store(client):
+    store = getattr(client, "cache", None)
+    if store is None or not hasattr(store, "active_day_snapshots"):
+        return _NoHistory()
+    return store
+
+
+def _prune_cache(client, budget, *, log):
+    """F064's retention policy, run at the end of the stage. Never raises.
+
+    THE UNBOUNDED THING IS THE RESPONSE CACHE. Measured on this worktree: 3,410 cached
+    responses carrying 369.8 MB in a 375 MB file, and until F064 nothing had ever deleted
+    a row of it. Snapshots are ~60 bytes and ~7,700 rows a day.
+
+    `VACUUM` is deliberately NOT run here — see `cache.prune`. The freed pages are
+    reported and `cerebro cache-vacuum` reclaims them out of band.
+    """
+    store = getattr(client, "cache", None)
+    if store is None or not hasattr(store, "prune"):
+        return
+    try:
+        pruned = store.prune()
+    except Exception as exc:  # noqa: BLE001 — a cleanup must never lose a run's work
+        log(f"WARNING: cache prune failed ({exc}) — the run's artifacts are untouched")
+        return
+    budget.responses_deleted = int(pruned.get("responses_deleted") or 0)
+    budget.snapshots_deleted = int(pruned.get("snapshots_deleted") or 0)
+    budget.snapshots_downsampled = int(pruned.get("snapshots_downsampled") or 0)
+    budget.cache_bytes = int(pruned.get("bytes_before") or 0)
+    log(f"cache prune: {budget.responses_deleted} response(s) deleted, "
+        f"{budget.snapshots_downsampled} snapshot(s) downsampled, "
+        f"{budget.snapshots_deleted} deleted; cache {budget.cache_bytes} bytes, "
+        f"{pruned.get('freelist_pages', 0)} free page(s) reclaimable with cache-vacuum")
+
+
+def _now_utc():
+    """The run's wall clock, in ONE place.
+
+    A function rather than an inline `datetime.now()` so a test can simulate two runs a
+    simulated day apart and watch the snapshot history actually accrue — which is the
+    only way to prove the >=7-day growth clock ever starts.
+    """
+    return datetime.now(timezone.utc)
+
+
+def _record_history(client, metrics, *, captured_at, log):
+    """Write every (login, window) pair into the snapshot tables. Returns (pairs, store).
+
+    `pairs` is the number of (login, window) snapshots recorded, which is exactly the row
+    count each table gained, so `budget.snapshots_written` can be checked against a
+    `sqlite3` count rather than against itself.
+
+    AN UNMEASURED METER SAYS SO. A client with no `.cache` (a stub, a hand-rolled
+    double) records nothing; that is a legitimate configuration and a silent 0 is not.
+    e03 shipped `healthy: true` on a run with 273 rate-limit errors in its log precisely
+    because nothing announced what it had failed to measure.
+    """
+    store = getattr(client, "cache", None)
+    if store is None or not hasattr(store, "record_window_metrics"):
+        log("WARNING: the client has no cache — this run recorded no history, so the "
+            "growth reader gains nothing from it")
+        return 0, ""
+    pairs = 0
+    failed = 0
+    for login, by_window in metrics.items():
+        for w in WINDOWS:
+            m = by_window.get(w)
+            if m is None:
+                continue
+            # THE SNAPSHOT WRITE MUST NEVER BE THE THING THAT TAKES A RUN DOWN — cache.py
+            # says so about itself, and until now nothing enforced it. An operator running
+            # `cerebro cache-vacuum` (a long exclusive VACUUM over a 384MB file) across the
+            # 07:00 stage raises sqlite3.OperationalError "database is locked" here, and
+            # __main__ catches only the two GHArchive types, so the whole refresh died with
+            # a traceback BEFORE writing any corpus. The corpus was never at risk — run.sh
+            # contained it — but the operator was paged for a crash when the truth was a
+            # degraded run, and a wrong diagnosis at 07:00 is its own kind of damage.
+            #
+            # Counted, not swallowed. e03 shipped `healthy: true` through 273 rate-limit
+            # errors because nothing announced what it had failed to measure; a bare
+            # `except: pass` here would rebuild that exact hole one layer down. `pairs`
+            # still counts only rows that really landed, so `budget.snapshots_written`
+            # stays checkable against a live `sqlite3` count.
+            try:
+                if store.record_window_metrics(login, w, m, captured_at=captured_at):
+                    pairs += 1
+            except Exception as exc:  # noqa: BLE001 — see above; a snapshot never fails a run
+                failed += 1
+                if failed == 1:
+                    log(f"WARNING: snapshot write failed for {login}/{w}d ({exc}) — "
+                        f"the run continues and the corpus is untouched")
+    path = str(getattr(store, "path", "") or "")
+    log(f"snapshots: {pairs} window snapshot(s) recorded at {captured_at} -> {path}")
+    if failed:
+        log(f"WARNING: {failed} snapshot write(s) failed this run — growth readings will "
+            f"be thinner than the pool size implies until a later run records them")
+    return pairs, path
 
 
 def _publish_set(records, consent, verdicts):
     """The records the writer will actually publish, in F063 recurrence work order.
 
     THE PREDICATE LIVES IN `sink/devs.py` AND IS IMPORTED, NEVER RESTATED. It is the
-    six-clause write gate, and a second copy of it here would be a second answer to
+    seven-clause write gate, and a second copy of it here would be a second answer to
     "is this person published", which is the sort of drift that ends with a page about
     somebody a reviewer excluded.
     """
@@ -934,10 +1131,27 @@ def _render_census(census: dict, budget, roster_skipped, stamp: str) -> str:
         "|---|--:|--:|",
         f"| REST calls | {b['rest_calls_used']} | {b['rest_calls_cap']} |",
         f"| REST cache hits | {b['rest_cache_hits']} | — |",
+        # SCOPED IN THE LABEL, because the two rows have different denominators and a
+        # reader comparing them otherwise sees broken arithmetic. `rest_calls_used`
+        # counts the POOL client; `rest_failures` counts both it and the repo lane's
+        # own longer-TTL client, so on a rate-limited run failures can exceed calls.
+        f"| REST failures (both clients) | {b['rest_failures']} | 0 |",
         f"| ClickHouse scans | {b['clickhouse_scans']} | 3 |",
+        f"| history snapshots written | {b['snapshots_written']} | — |",
         f"| fork provenance calls | {b['fork_calls_used']} | {b['fork_calls_cap']} |",
         "",
     ]
+    if b["rest_failures"]:
+        lines.append(f"- **{b['rest_failures']} REST CALL(S) FAILED**: a rate limit, a "
+                     f"5xx or a transport error. Every consumer in this lane swallows "
+                     f"its own exception so one bad account cannot sink the run, which "
+                     f"is why the failure count and not the pool size is what says this "
+                     f"run's absences are untrustworthy. Churn deletions are refused.")
+    else:
+        lines.append("- No REST call failed.")
+    for key in ("growth", "freshness"):
+        if census.get(key):
+            lines.append(f"- {census[key]}")
     if b["truncated"]:
         lines.append(f"- **REST BUDGET TRUNCATED**: {b['skipped_logins']} candidate(s) "
                      f"were never humanness-checked. They are in the pool, labelled, and "

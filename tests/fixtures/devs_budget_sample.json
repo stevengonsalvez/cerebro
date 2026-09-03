@@ -1,4 +1,5 @@
 {
+  "cache_bytes": 377532416,
   "clickhouse_scans": 3,
   "fork_budget_exhausted": false,
   "fork_calls_cap": 300,
@@ -12,10 +13,16 @@
   "repo_calls_used": 0,
   "repos_populated": 1316,
   "repos_unpopulated": 0,
+  "responses_deleted": 0,
   "rest_cache_hits": 1741,
   "rest_calls_cap": 2200,
   "rest_calls_used": 10,
+  "rest_failures": 0,
   "skipped_logins": 0,
+  "snapshot_store": "/Users/stevengonsalvez/.agents-in-a-box/worktrees/by-name/cerebro--f-host-the-vault--b73e0fbf/cerebro-gitintel.sqlite",
+  "snapshots_deleted": 0,
+  "snapshots_downsampled": 0,
+  "snapshots_written": 7707,
   "stage": "devs-refresh",
   "truncated": false
 }

@@ -60,6 +60,42 @@ def main() -> None:
     cd_roster.add_argument("--overwrite", action="store_true",
                            help="let resolution replace curated values (default: fill blanks only)")
     cd_roster.add_argument("--limit", type=int, default=20, help="suggest: max candidates")
+    cd_roster.add_argument(
+        "--reverse-resolve", action="store_true",
+        help="enrich: also try to resolve a GitHub login FROM a dev's blog. Off by "
+             "default and Court-PARKED: the reverse resolver has no measured precision "
+             "on this pool, and a mislinked account on a named person's page is worse "
+             "than no link at all")
+
+    dc = sub.add_parser(
+        "devs-contract",
+        help="F069: assert the four github_events columns the pool query reads, the "
+             "PushEvent enum member and feed liveness. Exit 0 green, 3 contract drift, "
+             "4 endpoint unreachable")
+    dc.add_argument("--offline", default=None,
+                    help="read a DESCRIBE fixture from this path instead of the network, "
+                         "so the failure path is testable without pretending the endpoint "
+                         "is down")
+
+    sub.add_parser(
+        "devs-token-check",
+        help="F059: fail when the GitHub token carries any scope beyond public read. "
+             "Exit 0 allowed, 5 over-scoped or refused, 6 no token in the environment. "
+             "Prints scope NAMES and a sha256 fingerprint, never the value")
+
+    cs = sub.add_parser("cache-stats",
+                        help="what the gitintel cache holds: rows and bytes per table, "
+                             "the snapshot span, and the reclaimable free pages "
+                             "(read-only)")
+    cs.add_argument("--cache", default=None,
+                    help="path to the cache (default: settings.github.cache_path)")
+
+    cv = sub.add_parser("cache-vacuum",
+                        help="reclaim the pages the prune freed. OPERATOR-RUN and out of "
+                             "band: a 375 MB file rewrite never happens inside the 07:00 "
+                             "pipeline stage")
+    cv.add_argument("--cache", default=None,
+                    help="path to the cache (default: settings.github.cache_path)")
 
     serve = sub.add_parser("serve", help="serve local Cerebro UI")
     serve.add_argument("--host", default="127.0.0.1")
@@ -241,6 +277,94 @@ def main() -> None:
         print(json.dumps(result, indent=2))
         return
 
+    if args.command == "devs-token-check":
+        # Handled BEFORE `from .orchestrator import run`, like every other devs-lane
+        # subcommand. One GET of public metadata; no vault, no pool, no pipeline.
+        import sys
+
+        from .gitintel import token_check as _token_check
+        from .gitintel.github_client import resolve_token
+
+        settings = load(allow_example=True)
+        # Resolved through the ONE audited path, exactly like every other consumer, so
+        # this module never reads os.environ for itself and there is one thing to audit.
+        report = _token_check.check(
+            resolve_token((settings.sources or {}).get("crackscan", {}), settings))
+        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+        print(_token_check.summary_line(report))
+        if report.ok:
+            # Green, including the accepted over-scope. It is not paged and it is not
+            # silent: the summary line above carries the WARNING lead and every extra
+            # scope by name, so the standing exposure stays visible in the daily
+            # scrollback without stopping a pipeline over a decision already taken.
+            return
+        _page_contract(f"gh token CHECK FAILED: {report.reason} "
+                       f"(sha256:{report.fingerprint or 'absent'})", settings)
+        sys.exit(report.exit_code)
+
+    if args.command == "devs-contract":
+        # Handled BEFORE `from .orchestrator import run`, like every other devs-lane
+        # subcommand, so a preflight check is structurally incapable of triggering a
+        # pipeline run.
+        #
+        # THREE EXIT CODES BECAUSE THERE ARE THREE ANSWERS. 0 the contract holds; 3 the
+        # endpoint answered and the answer no longer matches the query; 4 the endpoint
+        # could not be reached. Today both failures reach an operator as UNREACHABLE,
+        # which sends them to read a status page about a service that is answering.
+        #
+        # It NEVER gates `devs-refresh` (see scripts/run.sh): the refresh has its own
+        # degradation path, and a preflight that blocked the run would turn an advisory
+        # into a self-inflicted outage on the morning ClickHouse merely hiccups.
+        import sys
+
+        from .gitintel import contract as _contract
+        from .gitintel import gharchive as _gharchive
+
+        # No `dry_run_override`: this stage writes nothing anywhere, so "dry run" here
+        # means only "is this a dev checkout", which is exactly the question the paging
+        # decision asks. The live install's settings.yaml carries dry_run: false.
+        settings = load(allow_example=True)
+        try:
+            if args.offline:
+                report = _contract.run_check(
+                    offline_describe=Path(args.offline).read_text(encoding="utf-8"))
+            else:
+                report = _contract.run_check()
+        except _gharchive.GHArchiveContractError as exc:
+            print(json.dumps({"ok": False, "failure": "contract",
+                              "error": str(exc)[:500]}, indent=2))
+            _page_contract(f"gh archive CONTRACT DRIFT: {str(exc)[:200]}", settings)
+            sys.exit(3)
+        except _gharchive.GHArchiveUnavailable as exc:
+            print(json.dumps({"ok": False, "failure": "unreachable",
+                              "error": str(exc)[:500]}, indent=2))
+            _page_contract(f"gh archive UNREACHABLE: {str(exc)[:200]}", settings)
+            sys.exit(4)
+
+        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+        if report.ok:
+            return
+        moved = ", ".join(f"{d.subject} ({d.detail})" for d in report.drift)
+        _page_contract(f"gh archive CONTRACT DRIFT: {moved[:200]}", settings)
+        sys.exit(3)
+
+    if args.command in ("cache-stats", "cache-vacuum"):
+        # Handled BEFORE `from .orchestrator import run`, like every other devs-lane
+        # subcommand, so a cache inspection is structurally incapable of triggering a
+        # pipeline run. Both are local sqlite operations: no network, no vault, no token.
+        from .gitintel.cache import GitIntelCache
+
+        settings = load(dry_run_override=True, allow_example=True)
+        gh_cfg = getattr(settings, "github", {}) or {}
+        cache = GitIntelCache(args.cache or gh_cfg.get("cache_path"))
+        if args.command == "cache-stats":
+            print(json.dumps(cache.stats(), indent=2, sort_keys=True))
+            return
+        out = cache.vacuum()
+        freed = out["bytes_before"] - out["bytes_after"]
+        print(json.dumps({**out, "bytes_freed": freed}, indent=2, sort_keys=True))
+        return
+
     if args.command == "devs-spike":
         # Handled BEFORE `from .orchestrator import run`: the spike is a dry-run read of
         # the vault plus a free ClickHouse query, and returning from here makes it
@@ -337,12 +461,33 @@ def main() -> None:
         if unknown:
             raise SystemExit(f"unknown lane(s) {unknown}; choose from {devs_spike.LANES}")
 
-        result, top, records, paths = devs_spike.run(
-            vault, out_dir, client=client, verdicts_path=verdicts_path,
-            optout_path=optout_path, limit=args.limit, lanes=lanes,
-            fanout_repos=args.fanout_repos, rest_budget=args.rest_budget,
-            fork_budget=args.fork_budget, repo_budget=args.repo_budget,
-            repo_client=repo_client, stage="devs-refresh")
+        # F058. THE FREE LANE IS A SINGLE POINT OF FAILURE AND THE ANSWER IS TO FREEZE,
+        # NOT TO REPLAY. `play.clickhouse.com` is free, community-run and has no SLA;
+        # when it cannot answer, this stage writes NOTHING and deletes NOTHING, and every
+        # published profile keeps the `generated_at` of the run that produced it — which
+        # the site already renders as the profile's dateline. Republishing five-day-old
+        # push counts under today's timestamp would be a false statement about a named
+        # human, and the only field that could carry the staleness is one the site's
+        # loader would throw on.
+        from .gitintel import gharchive as _gharchive
+
+        try:
+            result, top, records, paths = devs_spike.run(
+                vault, out_dir, client=client, verdicts_path=verdicts_path,
+                optout_path=optout_path, limit=args.limit, lanes=lanes,
+                fanout_repos=args.fanout_repos, rest_budget=args.rest_budget,
+                fork_budget=args.fork_budget, repo_budget=args.repo_budget,
+                repo_client=repo_client, stage="devs-refresh")
+        except _gharchive.GHArchiveContractError as exc:
+            _degraded_exit("contract", exc, settings=settings, vault=vault,
+                           out_dir=out_dir, stamp=stamp, consent=consent,
+                           verdicts=verdicts, client=client)
+            return
+        except _gharchive.GHArchiveUnavailable as exc:
+            _degraded_exit("unreachable", exc, settings=settings, vault=vault,
+                           out_dir=out_dir, stamp=stamp, consent=consent,
+                           verdicts=verdicts, client=client)
+            return
 
         for w in result.warnings:
             print(f"WARNING: {w}")
@@ -359,8 +504,23 @@ def main() -> None:
         # A truncated REST budget means accounts nobody checked; a missing ClickHouse scan
         # means windows nobody measured. Either one makes today's absences untrustworthy,
         # and an untrustworthy absence must not unpublish a real person.
+        #
+        # `rest_failures` IS THE TERM FOR A DEGRADED LANE RATHER THAN A SMALL ONE, and it
+        # is not covered by any other term here. Measured, not hypothesised: re-running
+        # this stage with no token against the 1,036-note corpus logged 273 `resolve
+        # failed ... GitHub 403 ... API rate limit exceeded` lines, published 31 of 1,316,
+        # and set NOTHING else in this conjunction — `truncated` stays false because the
+        # budget was never exhausted (the calls were made and refused), the ClickHouse
+        # lane needs no token, and `records` was non-empty. Only the churn cap stood
+        # between that run and deleting real people, and a smaller degradation slips
+        # under the cap.
+        #
+        # ANY failure, not a threshold. The consequence of a false positive is that
+        # today's churn deletions wait for tomorrow; the consequence of a false negative
+        # is deleting a note about a named human because GitHub was busy.
         healthy = (result.ok
                    and not budget.get("truncated")
+                   and not budget.get("rest_failures")
                    and budget.get("clickhouse_scans") == len(devs_spike.WINDOWS)
                    and bool(records))
 
@@ -376,6 +536,12 @@ def main() -> None:
             "stage": "devs-refresh",
             "dry_run": bool(settings.dry_run),
             "healthy": healthy,
+            # Beside `healthy` rather than only in the budget artifact, because this is
+            # the number that explains a `false` an operator is reading at 07:05.
+            "rest_failures": int(budget.get("rest_failures") or 0),
+            # F057. Beside `healthy` because it is the meter that says whether the >=7-day
+            # growth clock advanced today, and a 0 here on a real run means it did not.
+            "snapshots_written": int(budget.get("snapshots_written") or 0),
             "pool": len(records),
             "published": len(corpus_plan.writes),
             "withheld": len(corpus_plan.withheld),
@@ -389,6 +555,7 @@ def main() -> None:
             "withheld_report": str(report),
         }
         print(json.dumps(summary, indent=2))
+        _page_if_degraded(summary, settings)
         return
 
     from .orchestrator import run
@@ -554,10 +721,21 @@ def _roster_enrich(args, settings, devs, roster_mod) -> dict[str, Any]:
     client = GitHubClient(settings)
     changes: list[tuple[str, str, str]] = []
     diffs: list[dict[str, Any]] = []
+    # F016. THE REVERSE DIRECTION IS A SUBTRACTION, NOT A FEATURE. Until this flag existed
+    # `resolve_from_blog` ran by DEFAULT for every dev with a blog and no handle, and the
+    # Court PARKED that path: it has no measured precision on this pool, and a mislinked X
+    # account on a named person's page is the charter's wrong-number-worse-than-no-page
+    # class. The resolver stays in the module, parked rather than deleted, behind a flag
+    # that prints what it cannot promise.
+    reverse = bool(getattr(args, "reverse_resolve", False))
+    if reverse:
+        print("NOTE: --reverse-resolve is ON. Resolving a GitHub login from a blog has "
+              "NO measured precision on this pool; every value it fills is a guess and a "
+              "wrong one is a false claim about a named person. Review before --write.")
     for dev in devs:
         if dev.github:
             ident = identity.resolve_from_github(dev.github, client)
-        elif dev.blog:
+        elif dev.blog and reverse:
             ident = identity.resolve_from_blog(dev.blog, client, fetch_page=_fetch_page)
         else:
             continue
@@ -725,6 +903,191 @@ def _yaml_scalar_out(value: str) -> str:
     return s
 
 
+#: F058's two page texts, and the two words an operator reads at 07:05. They are the
+#: whole operational payload of the down/changed split: one sends somebody to the query,
+#: the other to a status page.
+DEGRADED_TEXT = {
+    "contract": "gh archive CONTRACT DRIFT",
+    "unreachable": "gh archive UNREACHABLE",
+}
+
+
+def _degraded_exit(failure_class: str, exc, *, settings, vault, out_dir, stamp,
+                   consent, verdicts, client) -> None:
+    """The free lane could not answer. Freeze the corpus, say so, exit 0.
+
+    FIVE THINGS HAPPEN AND ONE DELIBERATELY DOES NOT.
+
+    1. `write_corpus` is NOT called, so no note is written, updated or deleted as churn.
+       The corpus on disk IS the last snapshot, and each note's `generated_at` is the
+       visible as-of date the site already renders (`app/cerebro/dev/[login]/page.tsx`
+       sets `date={asOf(dev)}`). It stops advancing exactly when the numbers stop being
+       re-derived, which is the honest behaviour and needs no new field.
+    2. CONSENT DELETIONS STILL RUN. `config/devs_optout.yaml` promises removal "even on
+       an unhealthy run and uncapped", and a person who asked to be removed does not wait
+       for somebody else's database. Only the delete half executes: `plan()` with no
+       records produces an empty publish set, no churn, and the consent deletions
+       computed from what is on disk.
+    3. An artifact names the failure class, the truncated exception, `last_good_at` from
+       the snapshot table, and the corpus size found on disk. `last_good_at` is how an
+       operator tells "ClickHouse died this morning" from "this stage has been dead for
+       nine days" — a distinction that is invisible in the corpus itself.
+    4. It pages ONCE, with the class's own text, and never from a dry run.
+    5. EXIT 0. The stage did not crash; it declined to act. Telling `run.sh` otherwise
+       sends an operator hunting a traceback that does not exist, and the page already
+       carries the state. Any exception that is not one of the two named types still
+       propagates and still exits non-zero.
+    """
+    from .sink import devs as devs_sink
+
+    base = Path(vault)
+    root = (base / "_scratch") if settings.dry_run else base
+    existing = devs_sink.existing_logins(root)
+
+    deleted_consent: list[str] = []
+    if consent:
+        corpus_plan = devs_sink.plan([], existing, optout=consent, verdicts=verdicts,
+                                     healthy=False)
+        # Belt: `plan([])` cannot produce writes or churn, and this stage must never
+        # write on a degraded run even if that ever changed.
+        assert not corpus_plan.writes and not corpus_plan.deletes_churn
+        deleted_consent = list(devs_sink.apply(corpus_plan, root)["deleted"])
+
+    cache = getattr(client, "cache", None)
+    last_good_at = None
+    if cache is not None and hasattr(cache, "last_snapshot_at"):
+        try:
+            last_good_at = cache.last_snapshot_at()
+        except Exception:  # noqa: BLE001 — a broken cache must not mask the outage
+            last_good_at = None
+
+    text = DEGRADED_TEXT.get(failure_class, "gh archive DEGRADED")
+    report = Path(out_dir) / f"devs-degraded-{stamp}.md"
+    report.write_text(
+        _degraded_report(failure_class, exc, last_good_at, len(existing),
+                         deleted_consent, stamp, text),
+        encoding="utf-8")
+
+    summary = {
+        "stage": "devs-refresh",
+        "dry_run": bool(settings.dry_run),
+        "healthy": False,
+        "degraded": failure_class,
+        "last_good_at": last_good_at,
+        "corpus_on_disk": len(existing),
+        "written": 0,
+        "unchanged": 0,
+        "published": 0,
+        "withheld": 0,
+        "deleted_consent": len(deleted_consent),
+        "deleted_churn": 0,
+        "refused_reason": failure_class,
+        "error": str(exc)[:300],
+        "degraded_report": str(report),
+    }
+    print(json.dumps(summary, indent=2))
+
+    if not getattr(settings, "dry_run", True):
+        try:
+            from .sink import notify
+            notify.push_failure(
+                f"{text}: {str(exc)[:160]} — corpus FROZEN at {len(existing)} notes, "
+                f"last good {last_good_at or 'never'}; "
+                f"{len(deleted_consent)} consent deletion(s) still applied", settings)
+        except Exception:  # noqa: BLE001 — alerting must never become the failure
+            pass
+
+
+def _degraded_report(failure_class, exc, last_good_at, corpus_size, deleted_consent,
+                     stamp, text) -> str:
+    """The operator's page, on disk. Names what happened and what did NOT happen."""
+    lines = [
+        f"# devs refresh DEGRADED — {stamp}",
+        "",
+        f"- failure class: **{failure_class}** ({text})",
+        f"- error: `{str(exc)[:300]}`",
+        f"- last good snapshot: `{last_good_at or 'never — no run has recorded history'}`",
+        f"- corpus found on disk: {corpus_size} note(s)",
+        f"- consent deletions applied: {len(deleted_consent)}"
+        + (f" ({', '.join(deleted_consent)})" if deleted_consent else ""),
+        "",
+        "No note was written and no note was deleted; every published profile still "
+        "carries the `generated_at` of the run that produced it.",
+        "",
+        "The corpus is FROZEN, not replayed. Serving today's date over five-day-old "
+        "counts would be a false statement about a named person; the profile dateline "
+        "the site already renders stops advancing instead, which is the honest form of "
+        "the same fact.",
+        "",
+    ]
+    if failure_class == "contract":
+        lines += [
+            "CONTRACT DRIFT means the endpoint ANSWERED and the answer no longer matches "
+            "the query. No amount of waiting fixes it. Run `cerebro devs-contract` and "
+            "read the column it names.",
+            "",
+        ]
+    else:
+        lines += [
+            "UNREACHABLE means the endpoint could not be reached inside the retry "
+            "budget. Nothing here needs a code change; the next scheduled run retries.",
+            "",
+        ]
+    return "\n".join(lines)
+
+
+def _page_contract(message: str, settings) -> None:
+    """F069's page. Best-effort, never fatal, never from a dev checkout.
+
+    The two texts (`CONTRACT DRIFT` / `UNREACHABLE`) are the entire operational payload of
+    D4's type split: they are what sends an operator to the query or to the status page.
+    """
+    if getattr(settings, "dry_run", True):
+        return
+    try:
+        from .sink import notify
+        notify.push_failure(message, settings)
+    except Exception:  # noqa: BLE001 — alerting must never become the failure
+        pass
+
+
+def _page_if_degraded(summary: dict, settings) -> None:
+    """A frozen corpus PAGES. Best-effort, never fatal, never in dry-run.
+
+    THE FAILURE THIS CLOSES IS SILENCE, NOT BREAKAGE. `sink/devs.py` promises the churn
+    cap "returns a loud reason the pipeline stage turns into a page", and it does return
+    one — into `refused_reason` inside a summary the stage prints on its way to exit 0.
+    `run.sh`'s `|| warn_and_page` only fires on a NON-ZERO exit, so a run that refuses its
+    deletions, or one that is permanently unhealthy, leaves the public corpus frozen with
+    the only trace in a gitignored log nobody reads. That is precisely the shape this repo
+    already fixed once for the roundup (commit ebe7c08): a soft failure that echoes into
+    an unread file stops publication in silence.
+
+    EXIT 0 IS KEPT DELIBERATELY. A degraded run still WROTE — it refused only the
+    deletions — so exiting non-zero would tell `run.sh` the stage failed and would tell an
+    operator to look for a crash that did not happen. The page carries the state instead.
+
+    NOT IN DRY-RUN. Every dev checkout and every test runs this stage dry, and an alerting
+    path that fires from a test run is one an operator mutes.
+    """
+    if getattr(settings, "dry_run", True):
+        return
+    reason = summary.get("refused_reason") or ""
+    if summary.get("healthy") and not reason:
+        return
+    try:
+        from .sink import notify
+        notify.push_failure(
+            f"devs refresh DEGRADED: healthy={summary.get('healthy')} "
+            f"refused={reason or 'none'} "
+            f"rest_failures={summary.get('rest_failures')} "
+            f"published={summary.get('published')} "
+            f"(churn deletions refused; corpus frozen)",
+            settings)
+    except Exception:  # noqa: BLE001 — alerting must never become the failure
+        pass
+
+
 def _withheld_report(corpus_plan, stamp: str, healthy: bool) -> str:
     """THE AUDIT TRAIL FOR EVERYBODY THE WRITE GATE HELD BACK.
 
@@ -749,6 +1112,11 @@ def _withheld_report(corpus_plan, stamp: str, healthy: bool) -> str:
         devs_sink.REASON_DENIED:
             "a recorded verdict in config/devs_denylist.yaml excludes this account. "
             "Reversing it is an edit to that file by a reviewer, never an edit here.",
+        devs_sink.REASON_BAD_LOGIN:
+            "the `login` on this record is not a GitHub login (alphanumerics and single "
+            "hyphens, 39 characters maximum), so no `Devs/<login>.md` filename can be "
+            "built from it without naming a file outside the corpus. The remedy is at "
+            "the lane that produced it, never here.",
         devs_sink.REASON_NOT_ADMITTED:
             "an admission floor failed. The per-floor audit lines are on the record in "
             "the run json.",

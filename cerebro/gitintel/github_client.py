@@ -43,6 +43,23 @@ class GitHubClient:
         #: and a budget check against that passes vacuously.
         self._calls = 0
         self._cache_hits = 0
+        #: THE THIRD COUNTER, AND THE ONE THAT MAKES A DEGRADED RUN VISIBLE. Every REST
+        #: consumer in the devs lane swallows its own exceptions on purpose — "one bad
+        #: account must not sink the lane" — so a rate-limited or token-less run walks
+        #: the whole pool, resolves nobody, and reports a small-but-clean result. That is
+        #: indistinguishable from a genuinely small pool at every meter downstream, and
+        #: `sink/devs.py` deletes the difference as churn.
+        #:
+        #: It is counted HERE rather than at each swallow because the swallows are not
+        #: all reachable: `owner_resolve.resolve_owner` returns `None` on a failed
+        #: contributors call, which its caller cannot tell apart from "no human found".
+        #: One accountant, at the only place every failure passes through.
+        #:
+        #: A 404 IS NOT A FAILURE. `request()` returns `None` for it, and that is an
+        #: ANSWER — the account or repo is gone. Counting it would make a healthy run
+        #: that met one deleted account look degraded, and a predicate that cries wolf
+        #: gets turned off.
+        self._errors = 0
 
     def _cache_key(self, method: str, path: str, params: dict | None) -> str:
         payload = json.dumps({
@@ -76,6 +93,7 @@ class GitHubClient:
         try:
             resp = requests.get(url, params=params or {}, headers=headers, timeout=self.timeout)
         except requests.RequestException as exc:
+            self._errors += 1
             raise GitHubClientError(f"GitHub request failed for {path}: {exc}") from exc
         self.rate_limit = {
             "limit": resp.headers.get("X-RateLimit-Limit", ""),
@@ -91,6 +109,7 @@ class GitHubClient:
         if resp.status_code == 404:
             return None
         if resp.status_code >= 400:
+            self._errors += 1
             msg = data.get("message") if isinstance(data, dict) else str(data)
             raise GitHubClientError(f"GitHub {resp.status_code} for {path}: {msg}")
         return data

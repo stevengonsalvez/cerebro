@@ -22,6 +22,8 @@ RUN_SH = REPO / "scripts" / "run.sh"
 DAILY = "python -m cerebro"
 ROUNDUP = "python -m cerebro roundup"
 DEVS = "python -m cerebro devs-refresh"
+CONTRACT = "python -m cerebro devs-contract"
+TOKEN = "python -m cerebro devs-token-check"
 ADD = "add -- Daily Signals Weekly Devs"
 COMMIT = "commit -S -m"
 PUSH = " push"
@@ -34,6 +36,8 @@ case "$*" in
   *vault_path*)                 printf '%s\\n' "$FAKE_VAULT"; exit 0 ;;
   *VERCEL_DEPLOY_HOOK_URL*)     printf '%s\\n' "$FAKE_HOOK";  exit 0 ;;
   "-m cerebro roundup")         exit "${ROUNDUP_RC:-0}" ;;
+  "-m cerebro devs-contract")   exit "${CONTRACT_RC:-0}" ;;
+  "-m cerebro devs-token-check") exit "${TOKEN_RC:-0}" ;;
   "-m cerebro devs-refresh")    exit "${DEVS_RC:-0}" ;;
   "-m cerebro")                 exit "${CEREBRO_RC:-0}" ;;
 esac
@@ -339,20 +343,83 @@ def test_the_git_stub_reproduces_the_exit_128_landmine_for_devs_too(sandbox):
     assert "did not match any files" in out.stderr
 
 
-def test_the_run_sh_diff_is_exactly_three_added_lines_and_one_removed():
-    """The stage is three edits inside existing shapes, not a rewrite. Asserted so a
-    future edit to the launchd entrypoint is a deliberate, reviewable one."""
+def test_the_run_sh_diff_against_devs_writer_is_exactly_two_added_commands():
+    """THE TRIPWIRE, RE-BASED ON `f/devs-writer` AND RIDING THE LINE IT GUARDS.
+
+    e06 adds two commands to the launchd entrypoint — the F069 contract preflight and
+    the F059 token check — in two different commits six tasks apart. The count is a
+    statement about the tree AS IT STANDS, so it was bumped by the commit that added each
+    line: 1 at the contract check, 2 here. Jumping it ahead of its subject would have
+    redded the suite for every commit in between; softening it to a range would retire
+    the tripwire entirely.
+
+    COMMENT LINES ARE COUNTED SEPARATELY, not ignored. This file's house style is dense
+    rationale beside every soft-fail, and a comment cannot change what the script does;
+    what must stay reviewable is the number of COMMANDS. Both numbers are asserted.
+    """
     base = subprocess.run(
-        ["git", "diff", "--unified=0", "f/devs-pool", "--", "scripts/run.sh"],
+        ["git", "diff", "--unified=0", "f/devs-writer", "--", "scripts/run.sh"],
         cwd=REPO, capture_output=True, text=True)
     if base.returncode != 0:
-        pytest.skip("f/devs-pool is not present in this checkout")
-    added = [ln for ln in base.stdout.splitlines()
+        pytest.skip("f/devs-writer is not present in this checkout")
+    added = [ln[1:] for ln in base.stdout.splitlines()
              if ln.startswith("+") and not ln.startswith("+++")]
     removed = [ln for ln in base.stdout.splitlines()
                if ln.startswith("-") and not ln.startswith("---")]
-    assert len(added) == 3, added
-    assert len(removed) == 1, removed
+    commands = [ln for ln in added if ln.strip() and not ln.lstrip().startswith("#")]
+    comments = [ln for ln in added if ln.lstrip().startswith("#")]
+    assert commands == [
+        '.venv/bin/python -m cerebro devs-contract || warn_and_page '
+        '"gh archive contract check failed"',
+        '.venv/bin/python -m cerebro devs-token-check || warn_and_page '
+        '"gh token check failed"'], commands
+    assert len(comments) == 8, comments
+    assert removed == [], removed
+
+
+# --- F069: the preflight is advisory, never a gate ----------------------------
+
+def test_the_contract_check_runs_before_the_devs_refresh(sandbox):
+    """A preflight that ran after the stage it is meant to precede would report on a
+    contract the run had already used."""
+    sandbox.run()
+    assert sandbox.index(ROUNDUP) < sandbox.index(CONTRACT)
+    assert sandbox.index(CONTRACT) < sandbox.index(DEVS)
+
+
+@pytest.mark.parametrize("rc", [3, 4])
+def test_a_failing_contract_check_still_lets_the_refresh_run(sandbox, rc):
+    """THE WHOLE REASON IT IS NOT A GATE. Exit 3 is drift and exit 4 is an unreachable
+    endpoint; on either morning the refresh must still run, because it has its own
+    degradation path and blocking it would turn a hiccup into a self-inflicted outage."""
+    result = sandbox.run(CONTRACT_RC=rc)
+    assert result.returncode == 0, result.stderr
+    assert sandbox.count(DEVS) == 1
+    assert sandbox.count(PUSH) == 1
+
+
+def test_a_failing_contract_check_pages_exactly_once(sandbox):
+    result = sandbox.run(CONTRACT_RC=3)
+    assert "gh archive contract check failed" in result.stderr
+    assert sandbox.count("push_failure") == 1
+
+
+def test_a_failing_contract_check_does_not_page_for_the_refresh_as_well(sandbox):
+    """Two soft-failing neighbours, two independent pages: a contract failure must not
+    be reported as a refresh failure, which is the misdiagnosis F069 exists to end."""
+    result = sandbox.run(CONTRACT_RC=3, DEVS_RC=1)
+    assert result.returncode == 0
+    assert sandbox.count("push_failure") == 2
+    assert "gh archive contract check failed" in result.stderr
+    assert "devs refresh failed" in result.stderr
+
+
+def test_the_contract_check_carries_no_flags(sandbox):
+    """No --offline in production: the preflight checks the real endpoint or it checks
+    nothing."""
+    sandbox.run()
+    calls = [c for c in sandbox.calls if "-m cerebro devs-contract" in c]
+    assert calls == ["stub:python:.venv/bin/python python -m cerebro devs-contract"]
 
 
 # --- the F052 takedown path rides this exact pathspec -------------------------
@@ -384,3 +451,42 @@ def test_the_extended_pathspec_stages_a_devs_deletion_as_a_real_git_delete(tmp_p
     assert git("add", "--", "Daily", "Signals", "Weekly", "Devs").returncode == 0
     staged = git("diff", "--cached", "--name-status").stdout
     assert "D\tDevs/gone.md" in staged, staged
+
+
+# --- F059: the token check is the second advisory preflight -------------------
+
+def test_the_token_check_runs_between_the_contract_check_and_the_refresh(sandbox):
+    sandbox.run()
+    assert sandbox.index(CONTRACT) < sandbox.index(TOKEN)
+    assert sandbox.index(TOKEN) < sandbox.index(DEVS)
+
+
+@pytest.mark.parametrize("rc", [5, 6])
+def test_a_failing_token_check_still_lets_the_refresh_run(sandbox, rc):
+    """5 is over-scoped or refused, 6 is "no token reached the process". Either is a
+    credential problem, and neither is a reason to stop publishing what the lane can
+    still read — the pool query needs no token at all."""
+    result = sandbox.run(TOKEN_RC=rc)
+    assert result.returncode == 0, result.stderr
+    assert sandbox.count(DEVS) == 1
+    assert sandbox.count(PUSH) == 1
+
+
+def test_a_failing_token_check_pages_once_with_its_own_message(sandbox):
+    result = sandbox.run(TOKEN_RC=5)
+    assert "gh token check failed" in result.stderr
+    assert "contract" not in result.stderr
+    assert sandbox.count("push_failure") == 1
+
+
+def test_all_three_preflights_can_fail_independently(sandbox):
+    result = sandbox.run(CONTRACT_RC=3, TOKEN_RC=5, DEVS_RC=1)
+    assert result.returncode == 0
+    assert sandbox.count("push_failure") == 3
+    assert sandbox.count(PUSH) == 1
+
+
+def test_the_token_check_carries_no_flags(sandbox):
+    sandbox.run()
+    calls = [c for c in sandbox.calls if "-m cerebro devs-token-check" in c]
+    assert calls == ["stub:python:.venv/bin/python python -m cerebro devs-token-check"]

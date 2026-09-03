@@ -278,6 +278,24 @@ class Budget:
     rest_calls_used: int = 0
     rest_cache_hits: int = 0
     rest_calls_cap: int = 0
+    #: REST calls that RAISED — a 403 rate limit, a 5xx, a transport error. A delta off
+    #: the client's own `_errors`, for the same one-accountant reason as the two above.
+    #:
+    #: SCOPED WIDER THAN `rest_calls_used`, DELIBERATELY. That field counts the POOL
+    #: client; this one counts the pool client AND the repo lane's own longer-TTL client,
+    #: because a 403 there is exactly as much a reason to distrust an absence. The two
+    #: therefore have different denominators and this one CAN exceed the other — measured
+    #: on the token-less reproduction, 263 failures against 232 pool calls.
+    #:
+    #: THIS IS THE METER THAT SAYS TODAY'S ABSENCES ARE UNTRUSTWORTHY. Every REST consumer
+    #: in this lane swallows its own exceptions so one bad account cannot sink the run;
+    #: the arithmetic consequence is that a token-less run resolves nobody, publishes a
+    #: fraction of the corpus, and sets no other flag here. `truncated` does not fire
+    #: (the budget was never exhausted — the calls were made and refused) and
+    #: `clickhouse_scans` is unaffected (the free lane needs no token). Without this
+    #: number the writer's churn rule reads a rate limit as "these people stopped
+    #: existing" and deletes them up to the cap.
+    rest_failures: int = 0
     clickhouse_scans: int = 0
     #: The paid pre-filter hit `rest_calls_cap` and stopped. `skipped_logins` counts who.
     truncated: bool = False
@@ -315,6 +333,22 @@ class Budget:
     #: gate whose effect is invisible in the artifact is indistinguishable from a gate
     #: nobody wired up.
     optout_removed: int = 0
+    #: F057. (login, window) snapshots this run wrote, which is exactly the number of
+    #: rows EACH snapshot table gained — so the meter is checkable against a `sqlite3`
+    #: count instead of against itself. A run with a cache-less client records 0 and
+    #: LOGS that it did; an unmeasured meter that stays quiet is the e03 failure.
+    snapshots_written: int = 0
+    #: Where that history went (the sqlite path), or "" when nothing was recorded. An
+    #: operator reading `snapshots_written: 0` needs to know whether the store was
+    #: missing or the pool was empty.
+    snapshot_store: str = ""
+    #: F064's cleanup, which runs LAST and never fatally. `cache_bytes` is the file size
+    #: BEFORE the prune, measured on the real file: on this worktree the response cache
+    #: reached 375 MB / 3,410 rows and nothing had ever deleted a row of it.
+    responses_deleted: int = 0
+    snapshots_deleted: int = 0
+    snapshots_downsampled: int = 0
+    cache_bytes: int = 0
     #: Which command produced this artifact. `devs-spike` is the F066 gate rehearsal;
     #: `devs-refresh` is the stage that actually writes a corpus.
     stage: str = ""

@@ -6,7 +6,12 @@ pointed at a live run's artifact FAILS on a fresh clone and in CI — or, worse,
 becomes a vacuous assertion that reports green. `tests/fixtures/devs_budget_sample.json`
 is a real budget json, produced by a real warm `devs-refresh --dry-run` against the
 1,036-note Signals corpus on 2026-08-27, committed unedited. The e01/e02 precedent for
-exactly this is `devs_schema_sample.json`.
+exactly this is `devs_schema_sample.json`. It is RE-MEASURED, never hand-edited, every
+time the producer's key set moves: `rest_failures` landing moved `rest_calls_used`
+10 -> 11 and `rest_cache_hits` 1,741 -> 1,740 (one cached entry had aged past its TTL),
+and F057's two history keys moved them again on a third. This is the FOURTH real warm
+run, taken when F064's four prune keys landed: 10 calls and 1,741 hits. Adding a key by
+hand would make this file a claim about a run rather than a record of one.
 
 What the recorded run cost, and why each number is the one to watch:
 
@@ -16,9 +21,25 @@ What the recorded run cost, and why each number is the one to watch:
     rest_calls_used        10   against a 2,200 cap, warm. The e02 COLD figure is 1,744.
     rest_cache_hits     1,741   the split is what makes "a second run is materially
                                 cheaper" measurable rather than asserted.
+    rest_failures           0   REST calls that RAISED. The meter that separates a
+                                DEGRADED run from a small one — see the test below.
     repo_calls_used         0   against a 500 cap, on a corpus already fully populated
     repos_populated     1,316   under a 168-hour TTL. THE STEADY STATE.
     fork_calls_used       140   against a 300 cap, on the 28 fork-shaped candidates.
+    snapshots_written   7,707   F057. 2,569 scanned logins x 3 windows, written from the
+                                FREE lane before admission — so it is the row count each
+                                snapshot table gained, and `sqlite3` agrees (see below).
+                                It exceeds `pool` because measurement happens BEFORE the
+                                identity dedup, which is the correct order: a login the
+                                pool later collapses still pushed on the days it pushed.
+    snapshot_store              the sqlite file that history went to. "" would mean the
+                                client had no cache and the run measured nothing.
+    responses_deleted       0   F064, and THE FIRST REAL MEASUREMENT OF THE POLICY: on a
+                                377 MB cache built over the last few days, nothing is yet
+                                past the 336 h retention, so the correct behaviour is to
+                                delete nothing. A non-zero here on this run would mean the
+                                cutoff was wrong, not that the cache was tidy.
+    cache_bytes   377,532,416   the file BEFORE the prune. The number F064 exists for.
 """
 from __future__ import annotations
 
@@ -76,6 +97,37 @@ def test_a_warm_run_is_materially_cheaper_than_a_cold_one():
     mean the counter is unwired and every number here is unmeasured."""
     assert BUDGET["rest_cache_hits"] > BUDGET["rest_calls_used"]
     assert BUDGET["rest_cache_hits"] > 0
+
+
+def test_the_recorded_run_had_zero_rest_failures_and_says_so_as_a_number():
+    """`0` IS THE MEASUREMENT THAT MAKES THE FLAG MEAN SOMETHING. A budget with no
+    failure meter cannot tell a run that resolved nobody apart from a run that found
+    nobody, and `sink/devs.py` deletes the difference as churn. This is the negative
+    control for `tests/test_devs_degraded.py`, which drives the same meter positive."""
+    assert BUDGET["rest_failures"] == 0
+    assert isinstance(BUDGET["rest_failures"], int)
+
+
+def test_the_recorded_run_advanced_the_growth_clock_and_says_where_it_went():
+    """F057. A run that records no history cannot ever produce a growth delta, and the
+    condemned scorer's `record=False` is exactly that failure shipped for six months.
+    `snapshots_written` is the row count EACH table gained, so it is checkable against
+    the store rather than against itself."""
+    assert BUDGET["snapshots_written"] > 0
+    assert BUDGET["snapshots_written"] % len(devs_spike.WINDOWS) == 0
+    assert BUDGET["snapshots_written"] >= 3 * BUDGET["repos_populated"]
+    assert str(BUDGET["snapshot_store"]).endswith(".sqlite")
+
+
+def test_the_recorded_prune_deleted_nothing_because_nothing_was_old_enough():
+    """F064's first real measurement, and the shape that makes it meaningful. Every
+    response in the recorded 377 MB cache was written in the last few days, so a correct
+    prune deletes ZERO of them; a non-zero count on this run would mean the cutoff moved,
+    not that the cache was tidy. `cache_bytes` is the file the policy exists for."""
+    assert BUDGET["responses_deleted"] == 0
+    assert BUDGET["snapshots_deleted"] == 0
+    assert BUDGET["snapshots_downsampled"] == 0
+    assert BUDGET["cache_bytes"] > 100_000_000
 
 
 def test_the_fixture_key_set_is_exactly_the_producers_key_set():

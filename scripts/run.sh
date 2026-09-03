@@ -45,6 +45,16 @@ notify.push_failure(sys.argv[1], load())' "$1" || true
 # briefing must still reach the vault if the roundup breaks — but it pages, because a
 # roundup that stays broken means the weekly email silently stops going out.
 .venv/bin/python -m cerebro roundup || warn_and_page "weekly roundup failed"
+# F069 preflight. ADVISORY, never a gate: it pages when the github_events contract has
+# moved (exit 3) or the endpoint is unreachable (exit 4), and devs-refresh runs either
+# way, because the refresh has its own degradation path and a preflight that blocked the
+# run would turn a ClickHouse hiccup into a self-inflicted outage.
+.venv/bin/python -m cerebro devs-contract || warn_and_page "gh archive contract check failed"
+# F059 preflight. Also advisory: an over-scoped or missing token is a credential problem,
+# not a reason to stop publishing what the lane can still read. Exit 5 is over-scoped or
+# refused, exit 6 is "no token reached the process" — the failure the morning after a
+# rotation that stopped before the env was updated.
+.venv/bin/python -m cerebro devs-token-check || warn_and_page "gh token check failed"
 .venv/bin/python -m cerebro devs-refresh || warn_and_page "devs refresh failed"
 
 # The vault is a separate Git repository. Keep generated briefings visible in

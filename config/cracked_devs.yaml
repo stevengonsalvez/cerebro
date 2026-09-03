@@ -98,3 +98,16 @@ devs:
     why: "Most reliable primary-source LLM analysis on the open web"
     added: "2026-07-20"
     discovered_via: seed   # feed already in sources.yaml rss.feeds — dedup must handle this
+
+  - name: bennett
+    tier: 2
+    x: null
+    github: b-nnett
+    blog: null
+    blog_feed: null
+    reddit: null
+    tags: [codex, agent-tooling, coding-agents]
+    why: "Ships agent-tooling in volume: codex-plusplus 3.7k stars, goose 2.7k, plus a
+      Codex subscription router, iOS-simulator and Apple Watch clients — 28 non-fork repos"
+    added: "2026-08-28"
+    discovered_via: owner

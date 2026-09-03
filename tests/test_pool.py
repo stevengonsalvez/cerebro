@@ -147,23 +147,39 @@ def test_an_unknown_lane_name_still_resolves_deterministically():
 
 # --- F008: the roster arithmetic, measured not assumed ----------------------
 
-def test_the_real_roster_emits_four_entries_and_records_three_skips():
-    """SEVEN devs, FOUR handles. Any assertion of seven pool entries is asserting
-    against data that does not exist: Pieter Levels, Skirano and Sentient Agency are
-    `github: null` in the committed YAML."""
+def test_the_real_roster_emits_exactly_the_devs_that_carry_a_handle():
+    """A dev with `github: null` produces NOTHING and is recorded as a skip.
+
+    Pieter Levels, Skirano and Sentient Agency are `github: null` in the committed YAML,
+    so any assertion that the pool holds one entry per roster dev is asserting against
+    data that does not exist.
+
+    Derived from the file rather than pinned to a number, because the owner adding a dev
+    is the documented way this list grows and it should not cost a test edit. What is
+    pinned is the PROPERTY: emitted logins are exactly the non-null handles, and every
+    dev without one is skipped with a reason.
+    """
+    raw = yaml.safe_load(Path(ROSTER).read_text(encoding="utf-8"))
+    expected = sorted(d["github"].lower() for d in raw["devs"] if d.get("github"))
+    unhandled = sorted(d["name"] for d in raw["devs"] if not d.get("github"))
+
     entries, skipped = roster_lane(ROSTER)
-    assert sorted(c.login for c in entries) == ["bcherny", "mattpocock", "simonw", "t3dotgg"]
-    assert sorted(s.name for s in skipped) == ["Pieter Levels", "Sentient Agency", "Skirano"]
+    assert sorted(c.login for c in entries) == expected
+    assert sorted(s.name for s in skipped) == unhandled
     assert {s.reason for s in skipped} == {NO_HANDLE}
 
 
-def test_the_file_really_does_carry_seven_devs_so_four_plus_three_is_the_whole_roster():
-    """Pins the premise. If the owner adds a handle the counts move and this test tells
-    you which way, instead of a lane silently emitting more entries."""
+def test_every_roster_dev_is_either_emitted_or_skipped_and_none_is_silently_dropped():
+    """THE COMPLETENESS PROPERTY, which is what the old count was really protecting.
+
+    emitted + skipped == the devs in the file. A lane that quietly dropped somebody would
+    satisfy any assertion about the entries it DID emit; only the arithmetic catches it.
+    Stated as a property so that adding a dev — the one supported way this file changes —
+    exercises the check instead of breaking it.
+    """
     raw = yaml.safe_load(Path(ROSTER).read_text(encoding="utf-8"))
-    assert len(raw["devs"]) == 7
     entries, skipped = roster_lane(ROSTER)
-    assert len(entries) + len(skipped) == 7
+    assert len(entries) + len(skipped) == len(raw["devs"])
 
 
 def test_no_handle_is_ever_invented_from_the_x_handle_or_the_display_name(tmp_path):
@@ -219,10 +235,19 @@ def test_the_skip_is_a_record_not_a_log_line():
 
 
 def test_the_roster_lane_output_feeds_assemble_unchanged():
+    """One shared login COLLAPSES; every other roster dev stands alone.
+
+    Counted off the lane's own output rather than a literal, so the owner adding a dev to
+    the YAML exercises the merge instead of breaking this test. The property is the
+    collapse: `simonw` appears in both lanes and must produce ONE candidate, not two.
+    """
     entries, _ = roster_lane(ROSTER)
     vault = [Cand("simonw", ("note-1",), ("simonw/llm",), "vault", "")]
     merged = {c.login: c for c in assemble(vault, entries)}
-    assert len(merged) == 4, "simonw collapses; the other three roster devs stand alone"
+    assert len(merged) == len(entries), (
+        "simonw is in both lanes and collapses to one, so the merged count is exactly "
+        "the roster count — every other roster dev standing alone")
+    assert "simonw" in {c.login for c in entries}, "the premise: simonw IS on the roster"
     assert merged["simonw"].discovered_via == "vault"
     assert merged["simonw"].discovered_via_all == ("roster", "vault")
     assert merged["simonw"].name == "Simon Willison"

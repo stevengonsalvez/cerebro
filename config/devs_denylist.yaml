@@ -9,6 +9,22 @@
 # reviewed_by, reviewed_on). A bare login is rejected at load time.
 #
 #   denied:   the only path to automation state `excluded`. No arithmetic reaches it.
+#
+# WITHDRAWALS, so that removing a verdict leaves a trace instead of a gap:
+#   lizhengfeng101  cleared -> withdrawn 2026-08-26. The clearing said the 8 same-basename
+#                   repos were "his own project"; open-code-review is a FORK of
+#                   alibaba/open-code-review with 2 stars, and he has exactly one non-fork
+#                   repo. Withdrawn, NOT denied: nothing evidenced automation, and
+#                   inventing that would repeat the error in the other direction.
+#   diegosouzapw    denied  -> withdrawn 2026-09-03. Five independent measures put him and
+#                   the CLEARED koala73 in the same class: identical fork provenance
+#                   (own_upstream 5 / third_party 0), same fork_farm shape, both owning a
+#                   non-fork flagship (56,211 and 84,349 stars), more merged PRs (6,836 vs
+#                   4,487), and a push:merged ratio of 0.33 against koala73's 0.21 — where
+#                   the two accounts that ARE automation sit at 322.84 and 122.25. Nothing
+#                   distinguished them but magnitude, so one could not be condemned while
+#                   the other was cleared. The fork_farm flag stands unresolved; he is
+#                   withheld from publication, not judged.
 #   cleared:  the only durable form of "flagged-then-resolved-clear by human review".
 #             Without it, a cleared engineer is re-flagged and withheld on every run
 #             for ever, and the review queue never converges.
@@ -28,12 +44,6 @@ denied:
     reviewed_by: e01-builder
     reviewed_on: 2026-08-26
 
-  - login: diegosouzapw
-    verdict: automation
-    shape: fork_farm
-    evidence: "90d live 2026-08-26: 2274 pushes / 130 distinct repos / 87 active days / 124 not-owned across 2 basenames / max basename group 124 / concentration 0.9538 / 26.14 pushes per active day"
-    reviewed_by: e01-builder
-    reviewed_on: 2026-08-26
 
   - login: GCGH159
     verdict: automation

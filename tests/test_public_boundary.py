@@ -44,6 +44,16 @@ DEVS_LANE_MODULES = [
     "cerebro/gitintel/optout.py",
     "cerebro/gitintel/repo_facts.py",
     "cerebro/sink/devs.py",
+    # e06. EXTENDED, NEVER NARROWED. `growth.py` reaches no endpoint at all, and that is
+    # a property worth pinning: a growth reader that started making REST calls would be
+    # spending quota on a number nobody may display yet.
+    "cerebro/gitintel/growth.py",
+    "cerebro/gitintel/portfolio.py",
+    # `contract.py` posts SQL to the anonymous ClickHouse endpoint and `token_check.py` is
+    # the one module that holds a credential on purpose. Both are swept for exactly that
+    # reason: the module nobody thought needed guarding is where the next widening lands.
+    "cerebro/gitintel/contract.py",
+    "cerebro/gitintel/token_check.py",
 ]
 
 #: The allowlist, as regexes over a formatted path. Sourced from `fanout.PUBLIC_READ_PATHS`
@@ -131,18 +141,89 @@ def test_no_lane_module_reaches_for_a_mutating_http_verb(path):
                 "gharchive.py"), f"{path}: calls {name}()"
 
 
+#: The ONLY env vars a lane module may read for itself, each named with why it is not a
+#: credential. EXTENDED, NEVER WIDENED INTO A PATTERN: the entry is a literal name, so a
+#: module reading `os.environ.get(some_variable)` is still a build failure, and the
+#: credential-shaped names below are still unreachable.
+#:
+#:   CEREBRO_GHARCHIVE_ENDPOINT   a URL for the anonymous, tokenless ClickHouse endpoint.
+#:                                It exists so a REAL transport outage can be induced from
+#:                                a shell (V8), because a degradation path only ever
+#:                                reached by monkeypatch is a path nobody has tested.
+ALLOWED_ENV_NAMES = frozenset({"CEREBRO_GHARCHIVE_ENDPOINT"})
+
+
+def _env_name_read(node):
+    """The literal env name an `os.environ.get(...)`/`os.environ[...]` reads, or None.
+
+    None means "not a plain literal read", which is exactly the case this test refuses to
+    let through: a computed env name cannot be audited from the diff.
+    """
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
+            and node.func.attr == "get" and isinstance(node.func.value, ast.Attribute) \
+            and node.func.value.attr == "environ":
+        first = node.args[0] if node.args else None
+        if isinstance(first, ast.Constant) and isinstance(first.value, str):
+            return first.value
+    if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) \
+            and node.value.attr == "environ":
+        idx = node.slice
+        if isinstance(idx, ast.Constant) and isinstance(idx.value, str):
+            return idx.value
+    return None
+
+
 @pytest.mark.parametrize("path", DEVS_LANE_MODULES)
 def test_no_lane_module_reads_an_env_var_directly(path):
     """Token resolution lives in ONE place (`github_client.resolve_token`) so there is one
     thing to audit. A module reading `os.environ` for itself is a second, unaudited path
-    to a credential."""
-    for node in ast.walk(_tree(path)):
+    to a credential.
+
+    NARROWED, NOT WEAKENED, in e06: exactly one literal name is allowed
+    (`ALLOWED_ENV_NAMES`), it is a URL for a tokenless endpoint, and every other read —
+    including any computed name — still fails. `test_the_env_allowlist_still_rejects_a
+    _credential_shaped_read` below is the negative control that proves it.
+    """
+    tree = _tree(path)
+    allowed_nodes: set[int] = set()
+    for node in ast.walk(tree):
+        name = _env_name_read(node)
+        if name is None:
+            continue
+        assert name in ALLOWED_ENV_NAMES, \
+            f"{path}: reads os.environ[{name!r}] directly"
+        allowed_nodes.update(id(sub) for sub in ast.walk(node))
+
+    for node in ast.walk(tree):
         if isinstance(node, ast.Attribute) and node.attr == "environ":
-            raise AssertionError(f"{path}: reads os.environ directly")
+            assert id(node) in allowed_nodes, f"{path}: reads os.environ directly"
         if isinstance(node, ast.Call):
             fn = node.func
             if isinstance(fn, ast.Attribute) and fn.attr in ("getenv",):
                 raise AssertionError(f"{path}: calls getenv directly")
+
+
+def test_the_env_allowlist_names_one_url_and_no_credential():
+    """A one-entry allowlist is auditable; a pattern is not."""
+    assert ALLOWED_ENV_NAMES == {"CEREBRO_GHARCHIVE_ENDPOINT"}
+    for name in ALLOWED_ENV_NAMES:
+        assert "TOKEN" not in name.upper() and "SECRET" not in name.upper()
+        assert "KEY" not in name.upper() and "PASS" not in name.upper()
+
+
+@pytest.mark.parametrize("source", [
+    "import os\nX = os.environ.get('GITHUB_TOKEN')\n",
+    "import os\nX = os.environ['GITHUB_TOKEN_XYORA']\n",
+    "import os\nX = os.environ.get(name)\n",
+    "import os\nX = os.getenv('GITHUB_TOKEN')\n",
+])
+def test_the_env_allowlist_still_rejects_a_credential_shaped_read(source, tmp_path):
+    """THE NEGATIVE CONTROL FOR THE NARROWING. Each of these is what the rule exists to
+    stop, and each must still fail after the allowlist landed."""
+    module = tmp_path / "lane.py"
+    module.write_text(source, encoding="utf-8")
+    with pytest.raises(AssertionError):
+        test_no_lane_module_reads_an_env_var_directly(str(module))
 
 
 @pytest.mark.parametrize("path", DEVS_LANE_MODULES)
@@ -161,16 +242,25 @@ def test_no_lane_module_logs_prints_or_formats_the_token(path):
                 assert not bad, f"{path}: interpolates {bad} into a string"
 
 
-def test_the_allowlist_is_exactly_the_four_paths_the_lane_needs():
+def test_the_allowlist_is_exactly_the_five_paths_the_lane_needs():
     """Small on purpose. Every entry is one call site: owner resolution / humanness
-    pre-filter, the e03 repo lane, fork provenance, contributor fan-out. Growing it is a
-    deliberate edit that shows in the diff beside the call that needed it."""
+    pre-filter, the e03 repo lane, fork provenance, contributor fan-out, and e06's token
+    check. Growing it is a deliberate edit that shows in the diff beside the call that
+    needed it.
+
+    `/rate_limit` is registered here rather than left unlisted because it IS a call this
+    lane makes with the credential. It is the only endpoint whose purpose is metadata, it
+    does not consume the limit it reports, and it is the one place the token's scopes are
+    legible — which is what F059's guard reads."""
     assert PUBLIC_READ_PATHS == (
         "/users/{login}",
         "/users/{login}/repos",
         "/repos/{owner}/{repo}",
         "/repos/{owner}/{repo}/contributors",
+        "/rate_limit",
     )
+    from cerebro.gitintel.token_check import RATE_LIMIT_PATH
+    assert RATE_LIMIT_PATH in PUBLIC_READ_PATHS
 
 
 def test_the_allowlist_actually_rejects_something():

@@ -21,6 +21,7 @@ from cerebro.gitintel import gharchive
 from cerebro.gitintel.gharchive import (
     QUOTA_BUDGET,
     WEEK_SLOTS,
+    GHArchiveContractError,
     GHArchiveUnavailable,
     densify_weeks,
     parse_repo_array,
@@ -348,3 +349,126 @@ def test_the_new_fields_ride_the_same_three_scans():
     assert len(t.sent) == 3
     for sql in t.sent:
         assert "not_owned_owners" in sql and "dominant_repos" in sql
+
+
+# --- F069: down and changed are different failures ----------------------------
+#
+# THE BASELINE BEING REMOVED, MEASURED 2026-08-27 BEFORE THE CHANGE. Driving
+# `_post_with_retries` with a `Code: 47. DB::Exception: Unknown identifier: actor_login`
+# body and a recording `sleep` produced `sleeps=[30, 60, 120]`, 210 seconds, and then a
+# plain `GHArchiveUnavailable` — i.e. three minutes of waiting followed by telling the
+# operator the endpoint was DOWN when the QUERY was what broke. The saving is 210 s. It
+# is NOT two hours: the ~2 h ladder is `_is_quota`-only (`QUOTA_BUDGET = 2` announced
+# windows) and a drift body never reaches it.
+
+DRIFT_BODY = ("Code: 47. DB::Exception: Unknown identifier: actor_login. "
+              "There are columns: ... (UNKNOWN_IDENTIFIER)\n")
+
+
+def test_a_vanished_column_raises_on_the_first_attempt_without_sleeping():
+    """Pre-change behaviour: sleeps == [30, 60, 120]. Now it must be []."""
+    slept: list[float] = []
+    t = FakeTransport([DRIFT_BODY])
+    with pytest.raises(GHArchiveContractError) as exc:
+        pool_metrics(["simonw"], windows=(90,), transport=t, sleep=slept.append)
+    assert slept == [], "drift consumed a retry the ladder can never fix"
+    assert len(t.sent) == 1, "drift was retried"
+    assert "47" in str(exc.value)
+
+
+@pytest.mark.parametrize("code,label", [(47, "UNKNOWN_IDENTIFIER"),
+                                        (53, "TYPE_MISMATCH"),
+                                        (60, "UNKNOWN_TABLE")])
+def test_every_contract_code_is_drift_and_none_of_them_sleep(code, label):
+    slept: list[float] = []
+    body = f"Code: {code}. DB::Exception: something moved. ({label})\n"
+    with pytest.raises(GHArchiveContractError):
+        pool_metrics(["simonw"], windows=(90,), transport=FakeTransport([body]),
+                     sleep=slept.append)
+    assert slept == []
+
+
+def test_a_query_bug_of_ours_is_still_a_transient_and_still_uses_the_ladder():
+    """NARROW ON PURPOSE. `Code: 184 ILLEGAL_AGGREGATION` is a bug in OUR sql, not
+    upstream drift; an alarm that fires on every server-side error gets muted."""
+    slept: list[float] = []
+    err = "Code: 184. DB::Exception: Aggregate function ... ILLEGAL_AGGREGATION\n"
+    with pytest.raises(GHArchiveUnavailable) as exc:
+        pool_metrics(["simonw"], windows=(90,), transport=FakeTransport([err]),
+                     sleep=slept.append)
+    assert not isinstance(exc.value, GHArchiveContractError)
+    assert slept == [30, 60, 120]
+
+
+def test_a_short_result_header_is_drift_and_names_what_moved():
+    """The other drift shape: the endpoint answered 200 and the answer is missing a
+    column. It cost no sleeps before either — the parse runs after the ladder — but it
+    terminated as UNREACHABLE, which sent the operator to a status page."""
+    body = ("actor_login\tpushes\tdistinct_repos\tactive_days\trepos_not_owned\t"
+            "not_owned_basenames\tmax_basename_group\tweeks_map\n"
+            "someone\t1\t1\t1\t0\t0\t1\t([0],[1])\n")
+    with pytest.raises(GHArchiveContractError) as exc:
+        pool_metrics(["someone"], windows=(90,), transport=FakeTransport([body]),
+                     sleep=lambda s: None)
+    assert "not_owned_owners" in str(exc.value)
+
+
+def test_a_quota_body_is_still_unavailable_and_still_waits():
+    """Quota is congestion with an announced end. It is NOT drift and must keep waiting."""
+    slept: list[float] = []
+    now = lambda: datetime(2026, 8, 26, 21, 10, 7, tzinfo=timezone.utc)
+    with pytest.raises(GHArchiveUnavailable) as exc:
+        pool_metrics(["simonw"], windows=(90,), transport=FakeTransport([QUOTA_BODY]),
+                     sleep=slept.append, now=now)
+    assert not isinstance(exc.value, GHArchiveContractError)
+    assert len(slept) == QUOTA_BUDGET and all(x > 0 for x in slept)
+
+
+def test_a_transport_failure_is_still_unavailable_and_not_drift():
+    with pytest.raises(GHArchiveUnavailable) as exc:
+        pool_metrics(["simonw"], windows=(90,),
+                     transport=FakeTransport([OSError("connection refused")]),
+                     sleep=lambda s: None)
+    assert not isinstance(exc.value, GHArchiveContractError)
+
+
+def test_every_existing_handler_still_catches_the_new_type():
+    """THE SUBCLASS CONTRACT. Callers written against `GHArchiveUnavailable` predate this
+    type; a future edit that makes it a sibling would break them silently."""
+    assert issubclass(GHArchiveContractError, GHArchiveUnavailable)
+    try:
+        raise GHArchiveContractError("moved")
+    except GHArchiveUnavailable as caught:
+        assert isinstance(caught, GHArchiveContractError)
+
+
+def test_the_endpoint_is_env_overridable_and_defaults_unchanged(monkeypatch):
+    """One `os.environ.get` beside the constant. Without it a real transport outage
+    cannot be induced from a shell at all, and the degradation path is only ever
+    exercised by monkeypatch."""
+    import importlib
+
+    monkeypatch.delenv("CEREBRO_GHARCHIVE_ENDPOINT", raising=False)
+    reloaded = importlib.reload(gharchive)
+    assert reloaded.ENDPOINT == "https://play.clickhouse.com/?user=play"
+
+    monkeypatch.setenv("CEREBRO_GHARCHIVE_ENDPOINT", "http://127.0.0.1:1/")
+    reloaded = importlib.reload(gharchive)
+    assert reloaded.ENDPOINT == "http://127.0.0.1:1/"
+
+    monkeypatch.delenv("CEREBRO_GHARCHIVE_ENDPOINT", raising=False)
+    importlib.reload(gharchive)
+
+
+def test_no_docstring_in_this_lane_claims_a_two_hour_saving():
+    """Fact 3, enforced. The measured retry saving on the drift path is 210 seconds; the
+    ~2 h ladder is quota-only and a drift body never reaches it. A plan that justifies a
+    design with a number it did not measure is how a wrong number about a named person
+    gets published later."""
+    import re as _re
+    src = Path("cerebro/gitintel/gharchive.py").read_text(encoding="utf-8")
+    for match in _re.finditer(r"(?i)two hours|2 ?h(?:ours)? saving|save[sd]? (?:~ ?)?2 ?h",
+                              src):
+        window = src[max(0, match.start() - 200):match.end() + 200]
+        assert "quota" in window.lower(), \
+            f"a two-hour claim that is not about the quota ladder: {window!r}"
