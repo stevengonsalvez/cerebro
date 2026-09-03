@@ -90,6 +90,23 @@ def main() -> None:
     ds.add_argument("--verdicts", default=None,
                     help="path to the quality verdicts file")
     ds.add_argument("--limit", type=int, default=20)
+    ds.add_argument("--lanes", default="vault,fanout,roster",
+                    help="comma-separated discovery lanes: vault, fanout, roster "
+                         "(default: all three)")
+    ds.add_argument("--fanout-repos", type=int, default=60,
+                    help="seed repos the contributor fan-out reads, in signal-recurrence "
+                         "order; page 1 only, 1 REST call each (default: 60)")
+    ds.add_argument("--rest-budget", type=int, default=1400,
+                    help="hard cap on humanness pre-filter REST calls. Measured "
+                         "2026-08-27: 60 seed repos surface 2,452 contributors, 1,252 of "
+                         "which clear the activity floor and need the call. The overflow "
+                         "is recorded, and an unchecked account reaching the top list "
+                         "FAILS the sanity gate (default: 1400)")
+    ds.add_argument("--fork-budget", type=int, default=300,
+                    help="hard cap on TOTAL fork-provenance REST calls for the run, "
+                         "shared across every flagged candidate. On exhaustion the "
+                         "remaining flags stand UNEVIDENCED; a budget running out never "
+                         "clears anybody (default: 300)")
 
     args = ap.parse_args()
 
@@ -204,14 +221,24 @@ def main() -> None:
         vault = args.vault or settings.vault_path
         crackscan_cfg = (settings.sources or {}).get("crackscan", {})
         client = GitHubClient(settings, token=resolve_token(crackscan_cfg, settings))
+        lanes = tuple(x.strip().lower() for x in (args.lanes or "").split(",") if x.strip())
+        unknown = [x for x in lanes if x not in devs_spike.LANES]
+        if unknown:
+            raise SystemExit(f"unknown lane(s) {unknown}; choose from {devs_spike.LANES}")
         result, top, records, paths = devs_spike.run(
             vault, args.out, client=client,
             verdicts_path=args.verdicts or _denylist.DEFAULT_PATH,
             limit=args.limit,
+            lanes=lanes,
+            fanout_repos=args.fanout_repos,
+            rest_budget=args.rest_budget,
+            fork_budget=args.fork_budget,
         )
         print()
         print(f"top-{len(top)} written to {paths['top']}  (artifact-hash {paths['hash']})")
         print(f"flag queue      {paths['queue']}")
+        print(f"lane census     {paths['census']}")
+        print(f"budget report   {paths['budget']}")
         print(f"run json        {paths['json']}")
         for w in result.warnings:
             print(f"WARNING: {w}")

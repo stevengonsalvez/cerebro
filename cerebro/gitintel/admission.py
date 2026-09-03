@@ -43,20 +43,24 @@ insufficient in the other direction — koala73 is a fork farm at 11.85 and esen
 """
 
 MASS_SELF_REPO_MIN_REPOS = 30
-"""Dicklesworthstone: 109 repos, 0 not-owned, 308.5 push-per-active-day (90d, live).
+"""THE ONLY THING BETWEEN THIS RULE AND A REAL HUMAN. Calibrate it, not the rate.
 
-THIS CONJUNCT IS WHAT PROTECTS HUMANS, together with the push-rate one. paulmillr sits
-at 28 repos. Lower this and the rule starts reaching real prolific engineers.
+Catches: Dicklesworthstone 109 repos / 0 not-owned / 308.49 ppd, and mvanhorn 204 repos
+/ 4 not-owned / 8.84 ppd — both measured live 90d, and note the 35x spread in push rate
+between them. Highest human measured on this shape: paulmillr at 28 repos, ratio 0.0000
+(s2 cohort). Next-highest in the real 159-account active pool: Leonxlnx at 17 repos.
+The measured band 29..108 is EMPTY of humans in both cohorts, which is what makes 30
+defensible — but the headroom over paulmillr is TWO REPOS, so lowering this reaches a
+real prolific engineer immediately. Do not lower it.
 """
 
 NOT_OWNED_RATIO_SELF_MAX = 0.05
-"""WHAT PROTECTS HUMANS HERE IS THE CONJUNCTION, NOT THIS TERM.
+"""WHAT PROTECTS HUMANS HERE IS THE REPO-COUNT CONJUNCT, NOT THIS TERM.
 
 paulmillr (28 repos), torvalds, antirez and bcherny all sit at not_owned_ratio EXACTLY
 0.0 — measured live 2026-08-26 — the same value as Dicklesworthstone. They are kept
-clear by `>= 30 repos` AND `> 15 push/active-day` (paulmillr: 28 repos, 3.22 ppd), never
-by the ratio. Drop either conjunct and the rule reaches real humans. 0.05 rather than
-== 0.0 so that one push to one not-owned repo does not buy an escape.
+clear by `>= 30 repos` alone. 0.05 rather than == 0.0 so that one push to one not-owned
+repo does not buy an escape; mvanhorn passes it at 4/204 = 0.0196.
 """
 
 FORK_FARM_MIN_REPOS = 8
@@ -86,6 +90,26 @@ SYNTHETIC_PUSH_PER_REPO = 1.2
 """Human minimum measured: wesbos 1.50, ljharb 2.65 (at 65 repos, the only s2 human
 above the 50-repo guard alongside obra 8.49 and simonw 5.72)."""
 
+#: The `fork_farm` sub-shapes. ALL THREE ARE FLAGS. All three enter the review queue.
+#: NONE of them clears anybody, and `automation_state()` below is untouched: `excluded`
+#: stays reachable only from `verdicts.denied` and `clear` only from nothing-firing or a
+#: recorded `cleared:` verdict.
+#:
+#: THE SEPARATOR e01 ASKED FOR DOES NOT EXIST, AND THAT IS WHY THESE ARE NAMES AND NOT
+#: DECISIONS. e01's denylist header predicted that "forks of an upstream the person also
+#: authors" would separate a maintainer from a fork farm. Measured live: koala73
+#: (cleared: human) and diegosouzapw (denied: automation) BOTH return own_upstream 5,
+#: third_party 0, and both upstreams are non-fork repos the candidate owns
+#: (koala73/worldmonitor 84,341 stars; diegosouzapw/OmniRoute 56,206 stars). A rule that
+#: cleared one would clear the other. `tests/test_admission_flags.py` pins the equality
+#: so no future editor re-derives a separator that is not there.
+#:
+#: What the sub-shape buys is a CHEAPER, BETTER-INFORMED human decision: the reviewer
+#: reads "forks of diegosouzapw/OmniRoute, itself not a fork" instead of a bare
+#: concentration ratio. The decision stays theirs.
+FORK_SUBSHAPES = ("fork_farm_own_upstream", "fork_farm_third_party",
+                  "fork_farm_no_upstream")
+
 @dataclass(frozen=True)
 class Flag:
     """One automation shape that fired, carrying the numbers that fired it."""
@@ -104,6 +128,15 @@ def flags(m90) -> list[Flag]:
     diegosouzapw is 130 repos with 124 not-owned at concentration 0.9538. They are
     opposite shapes. Any single predicate wide enough to cover both swallows the entire
     human band between them.
+
+    THE SIGNATURE IS DELIBERATELY UNCHANGED FROM e01 AND TAKES NO KEYWORD. Two tests
+    (`test_flags_and_automation_state_take_no_threshold_kwargs`,
+    `test_no_admission_entry_point_has_a_default_valued_parameter`) forbid every
+    default-valued parameter on this function, because the scorer this replaces shipped
+    broken for six production runs behind exactly such an override seam. e02's fork
+    provenance is therefore applied by `name_fork_subshape()` AFTER this function
+    returns, rather than by growing a `fork_evidence=None` keyword here. Metrics in,
+    shapes out; refining a shape's NAME from external evidence is a separate step.
     """
     out: list[Flag] = []
     ppd = shape.push_per_active_day(m90)
@@ -131,9 +164,15 @@ def flags(m90) -> list[Flag]:
             values,
         ))
 
-    if (repos >= MASS_SELF_REPO_MIN_REPOS
-            and ratio <= NOT_OWNED_RATIO_SELF_MAX
-            and ppd > PUSH_PER_ACTIVE_DAY_FLAG):
+    # SHAPE, NOT RATE. This rule carried `ppd > PUSH_PER_ACTIVE_DAY_FLAG` as a third
+    # conjunct until 2026-08-26, which made it strictly narrower than `high_push_rate`
+    # and therefore incapable of detecting anything that rule had not already caught —
+    # a shape rule with zero detection power of its own. The live nearest-miss proves
+    # the cost: mvanhorn, 204 distinct repos with 200 of them his own, cleared every
+    # mechanical filter at 8.84 pushes per active day and reached the top-20 with an
+    # empty flag list. The Court settled that shape, not rate, separates the hard cases;
+    # the rate line is PAIRED WITH shape metrics, never a gate in front of them.
+    if repos >= MASS_SELF_REPO_MIN_REPOS and ratio <= NOT_OWNED_RATIO_SELF_MAX:
         out.append(Flag(
             "mass_self_repo",
             f"{repos} distinct repos, {m90.repos_not_owned} not owned "
@@ -160,6 +199,58 @@ def flags(m90) -> list[Flag]:
         ))
 
     return out
+
+
+def name_fork_subshape(fired, fork_evidence):
+    """Refine a fired `fork_farm` flag's NAME using fork provenance. Returns a new list.
+
+    A SEPARATE FUNCTION RATHER THAN A KEYWORD ON `flags()`, on purpose. e01 forbids every
+    default-valued parameter on the admission entry points because the condemned scorer
+    shipped broken behind an override seam of exactly that shape, and that guard is worth
+    more than the convenience of one keyword. Splitting the step also states the real
+    decomposition: `flags()` derives shapes from metrics, this derives a more precise
+    NAME from evidence gathered elsewhere.
+
+    IT RENAMES. IT NEVER ADDS, REMOVES, CLEARS OR EXCLUDES. The returned list has the
+    same length and the same order, `automation_state()` reads the same predicate it
+    always did, and every sub-shape is a flag that enters the review queue exactly as the
+    bare `fork_farm` would have.
+
+    Incomplete evidence — no evidence at all, a partial sample, an unresolved REST call,
+    an exhausted budget, or a genuinely mixed result — leaves the bare name standing. That
+    direction is the safe one: the bare flag still routes the account to a human, so
+    falling back costs a reviewer some context and costs nobody a wrong automatic outcome.
+    A flag is never renamed to a sub-shape it did not earn.
+    """
+    sub = _subshape_name(fork_evidence)
+    if not sub:
+        return list(fired)
+    from .fork_provenance import describe
+    detail = describe(fork_evidence)
+    return [
+        Flag(sub, f"{f.evidence} — {detail}", f.metric_values)
+        if f.name == "fork_farm" else f
+        for f in fired
+    ]
+
+
+def _subshape_name(ev) -> str | None:
+    """The precise sub-shape name, or None to leave the bare `fork_farm` standing.
+
+    Every branch returns a FLAG NAME. There is no branch that returns "clear", none that
+    returns "excluded", and none that returns a boolean.
+    """
+    if ev is None or not getattr(ev, "complete", False):
+        return None
+    if ev.third_party > 0:
+        # Any sample forking somebody else's repo is the shape worth naming, whatever
+        # else is in the sample.
+        return "fork_farm_third_party"
+    if ev.own_upstream == ev.checked and ev.checked > 0:
+        return "fork_farm_own_upstream"
+    if ev.no_upstream == ev.checked and ev.checked > 0:
+        return "fork_farm_no_upstream"
+    return None
 
 
 def automation_state(m90, login: str, verdicts) -> AutomationState:

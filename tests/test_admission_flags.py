@@ -97,16 +97,45 @@ def test_rich_harris_is_the_nearest_miss_human_and_stays_clear():
 
 def test_paulmillr_is_the_mass_self_repo_counter_example():
     """not_owned_ratio == 0.0 IS NOT A HUMAN-EXCLUSIVE SHAPE. paulmillr sits at exactly
-    the same ratio as Dicklesworthstone. What keeps him clear is the conjunction with
-    >= 30 repos and > 15 push/active-day, never the ratio term. A 'simplification' that
-    drops either conjunct fails here."""
-    from cerebro.gitintel.shape import not_owned_ratio, push_per_active_day
+    the same ratio as Dicklesworthstone, so the ratio term protects nobody. The ONLY
+    thing holding him clear is the repo-count conjunct, and the margin is TWO REPOS.
+    Lower MASS_SELF_REPO_MIN_REPOS and this test names the human you reached."""
+    from cerebro.gitintel.shape import not_owned_ratio
     m = COHORT["paulmillr"]
     assert not_owned_ratio(m) == 0.0
     assert not_owned_ratio(COHORT["Dicklesworthstone"]) == 0.0   # identical ratio
     assert m.distinct_repos == 28 < admission.MASS_SELF_REPO_MIN_REPOS
-    assert push_per_active_day(m) < admission.PUSH_PER_ACTIVE_DAY_FLAG
     assert names("paulmillr") == set()
+
+
+def test_mvanhorn_is_flagged_below_the_push_rate_line():
+    """THE REGRESSION THIS RULE WAS REWRITTEN FOR. mass_self_repo used to carry
+    `push_per_active_day > 15` as a third conjunct, which made it strictly narrower
+    than high_push_rate and unable to detect anything that rule had not already caught.
+    mvanhorn — 204 distinct repos, 200 of them his own, at 8.84 pushes per active day —
+    walked through every mechanical filter with an EMPTY flag list and reached the
+    published top-20 unreviewed. Live 90d measurement, 2026-08-26.
+
+    He is a real named engineer (Matt Van Horn, GitHub user since 2010, 4,901 followers)
+    and carries a `cleared:` verdict in config/devs_denylist.yaml. That is the point:
+    the shape is now DETECTED and the resolution is a recorded human verdict, instead
+    of the account passing silently."""
+    from cerebro.gitintel.shape import not_owned_ratio, push_per_active_day
+    m = COHORT["mvanhorn"]
+    assert m.distinct_repos == 204
+    assert push_per_active_day(m) == pytest.approx(8.84, abs=0.01)
+    assert push_per_active_day(m) < admission.PUSH_PER_ACTIVE_DAY_FLAG   # under the line
+    assert not_owned_ratio(m) == pytest.approx(0.0196, abs=0.001)
+    assert names("mvanhorn") == {"mass_self_repo"}
+
+
+def test_mass_self_repo_can_fire_without_high_push_rate():
+    """A shape rule that can only fire when a rate rule has already fired has zero
+    detection power. Asserted structurally, over the whole cohort, so the conjunct
+    cannot be reintroduced as a 'safety tightening'."""
+    rate_free = [login for login in COHORT
+                 if "mass_self_repo" in names(login) and "high_push_rate" not in names(login)]
+    assert rate_free, "mass_self_repo fires only alongside high_push_rate — it detects nothing"
 
 
 def test_torvalds_antirez_bcherny_also_sit_at_ratio_zero_and_stay_clear():
@@ -124,6 +153,56 @@ def test_ljharb_and_obra_clear_the_synthetic_repo_guard():
         if m.distinct_repos >= admission.SYNTHETIC_REPO_MIN_REPOS:
             assert pushes_per_repo(m) > admission.SYNTHETIC_PUSH_PER_REPO
         assert "synthetic_repo" not in names(login)
+
+
+# --- F012: the synthetic-repo shape, and the humans nearest to it -----------
+#
+# THIS SHAPE ONLY BECOMES REACHABLE WHEN FAN-OUT OPENS THE POOL. e01's vault lane never
+# produced an account anywhere near it, so the rule shipped uncalibrated against a live
+# positive. e02 is the epic that makes the shape reachable, so it is the epic that owes
+# the regression row and the nearest-miss humans beside it.
+
+def test_the_mishapos_regression_row_fires_synthetic_repo():
+    """RECON-GHARCHIVE s3, the shape the rule was written for: 195,021 pushes across
+    194,964 distinct repos — exactly 1.00 push per repo, sustained. Nothing a human does
+    looks like this, and nothing in the e01 pool did either."""
+    from cerebro.gitintel.gharchive import WindowMetrics
+    from cerebro.gitintel.shape import pushes_per_repo
+    mishapos = WindowMetrics(window_days=90, pushes=195021, distinct_repos=194964,
+                             active_days=90, repos_not_owned=0, not_owned_basenames=0,
+                             max_basename_group=1)
+    assert round(pushes_per_repo(mishapos), 2) == 1.00
+    fired = {f.name for f in flags(mishapos)}
+    assert "synthetic_repo" in fired
+
+
+def test_the_synthetic_repo_flag_is_still_only_a_flag():
+    """Even at 194,964 repos. `excluded` is reachable only from a recorded human verdict,
+    and no arithmetic path reaches it — not even this one."""
+    from cerebro.gitintel.gharchive import WindowMetrics
+    mishapos = WindowMetrics(window_days=90, pushes=195021, distinct_repos=194964,
+                             active_days=90, max_basename_group=1)
+    assert automation_state(mishapos, "mishapos", Verdicts()) == "flagged"
+
+
+@pytest.mark.parametrize("login,ppr", [("wesbos", 1.50), ("ljharb", 2.65)])
+def test_the_nearest_miss_humans_sit_just_above_the_push_per_repo_line(login, ppr):
+    """THE HEADROOM, STATED. wesbos is the human MINIMUM measured at 1.50 against a 1.2
+    line: 0.30 of clearance, 25%. Raising SYNTHETIC_PUSH_PER_REPO past 1.50 reaches a
+    real named engineer immediately."""
+    from cerebro.gitintel.shape import pushes_per_repo
+    m = COHORT[login]
+    assert pushes_per_repo(m) == pytest.approx(ppr, abs=0.01)
+    assert pushes_per_repo(m) > admission.SYNTHETIC_PUSH_PER_REPO
+    assert "synthetic_repo" not in names(login)
+
+
+def test_wesbos_is_held_clear_by_the_repo_count_guard_not_only_by_the_rate():
+    """wesbos is below the 50-repo line as well, so TWO independent conjuncts keep him
+    out. The rate headroom alone is 25% and that is thinner than it should be to rest on."""
+    m = COHORT["wesbos"]
+    assert m.distinct_repos < admission.SYNTHETIC_REPO_MIN_REPOS
+    assert "synthetic_repo" not in names("wesbos")
 
 
 # --- the false-positive floor (kill criterion 3) -----------------------------

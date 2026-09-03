@@ -49,13 +49,19 @@ def _count(v) -> int:
 def resolve_owner(full_name: str, client) -> str | None:
     """repo 'owner/name' -> human login. If owner is an org, fall back to top
     human committer. Returns login or None if no human found."""
-    owner = full_name.split("/")[0]
+    owner, _, name = full_name.partition("/")
     u = client.get_user(owner)
     if u and is_human(u):
         return u.get("login")
-    # org / non-human owner: top committers
+    # org / non-human owner: top committers.
+    #
+    # The path is built from `owner` and `name` SEPARATELY rather than by interpolating
+    # `full_name` whole. Both produce the same string, but only this form has the same
+    # shape as the `/repos/{owner}/{repo}/contributors` template on F053's public-read
+    # allowlist, so `tests/test_public_boundary.py` can check it by structure instead of
+    # taking a one-placeholder f-string on trust.
     try:
-        contribs = client.request(f"/repos/{full_name}/contributors", {"per_page": 5})
+        contribs = client.request(f"/repos/{owner}/{name}/contributors", {"per_page": 5})
     except Exception:
         return None
     for c in contribs or []:

@@ -26,6 +26,23 @@ class GitHubClient:
         self.cache = cache or GitIntelCache(cfg.get("cache_path"), int(cfg.get("cache_ttl_hours", 24)))
         self.cache_namespace = _cache_namespace(self.token)
         self.rate_limit: dict[str, Any] = {}
+        #: THE ONE ACCOUNTANT. Every REST budget number the devs lane reports is a delta
+        #: off these two counters and off nothing else, so no lane can keep a private
+        #: tally that disagrees with what actually left the process.
+        #:
+        #: `_calls` counts ATTEMPTS THAT COST QUOTA — incremented immediately before
+        #: `requests.get`, so a 404 and a transport exception both count, because both
+        #: spent (or tried to spend) budget whatever they returned. `_cache_hits` counts
+        #: the early return, and A CACHE HIT IS NOT A REST CALL: the split is what makes
+        #: "a second run inside 24h is materially cheaper" a measurable claim rather than
+        #: an assertion.
+        #:
+        #: These read as zero on a stub client, which is why callers assert the
+        #: attributes EXIST before trusting a budget: `getattr(client, "_calls", 0)`
+        #: against an uninstrumented client reports 0 no matter how many calls were made,
+        #: and a budget check against that passes vacuously.
+        self._calls = 0
+        self._cache_hits = 0
 
     def _cache_key(self, method: str, path: str, params: dict | None) -> str:
         payload = json.dumps({
@@ -43,6 +60,7 @@ class GitHubClient:
         if cached:
             status, data = cached
             if 200 <= status < 300:
+                self._cache_hits += 1
                 return data
         headers = {
             "Accept": "application/vnd.github+json",
@@ -51,6 +69,10 @@ class GitHubClient:
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
         url = path if path.startswith("http") else f"{API}{path}"
+        # Counted BEFORE the call, never after: a request that raises or 404s has still
+        # left the process and still cost quota. Counting successes would under-report
+        # exactly the runs where the budget matters most.
+        self._calls += 1
         try:
             resp = requests.get(url, params=params or {}, headers=headers, timeout=self.timeout)
         except requests.RequestException as exc:

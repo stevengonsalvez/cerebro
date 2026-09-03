@@ -27,6 +27,20 @@ MODULES = [
     "cerebro/gitintel/gharchive.py",
     "cerebro/gitintel/vault_seed.py",
     "cerebro/gitintel/denylist.py",
+    # owner_resolve is the one module in the lane that legitimately READS followers and
+    # public_repos, as a coarse presence pre-filter (the F011 ruling, the committers.top
+    # precedent). Reading them is permitted; sorting or ranking people by them is not,
+    # and the difference is exactly what this sweep tests. It grows a fan-out path in
+    # e02, which is when a "rank the contributors by followers" line would arrive.
+    "cerebro/gitintel/owner_resolve.py",
+    # e02's four new lane modules. THE SWEEP IS EXTENDED, NEVER WEAKENED: every rule
+    # above now runs against the fan-out lane, the pool assembler, the fork-provenance
+    # lane and the facet module, because each is a place a "rank the contributors by
+    # commit count" line could arrive and look reasonable.
+    "cerebro/gitintel/fanout.py",
+    "cerebro/gitintel/pool.py",
+    "cerebro/gitintel/fork_provenance.py",
+    "cerebro/gitintel/facets.py",
 ]
 
 VOLUME_NAMES = {"pushes", "followers", "stars", "score", "distinct_repos",
@@ -140,3 +154,152 @@ def test_the_three_floors_are_reported_separately_not_summed():
     assert "provenance" in a.reasons[0] and "FAIL" in a.reasons[0]
     assert "low-n" in a.reasons[1]
     assert "FLAGGED" in a.reasons[2]
+
+
+
+# --- e02: the lanes that could smuggle volume back in ------------------------
+
+def _body_source(fn) -> str:
+    """A function's source with its DOCSTRING removed.
+
+    Load-bearing: these modules explain at length that no score exists and that volume
+    ordering is banned, so a raw source scan for the word "score" fires on the prose that
+    documents the ban. The property being tested is about the CODE."""
+    import inspect
+    import textwrap
+    tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
+    node = tree.body[0]
+    if (node.body and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)):
+        node.body = node.body[1:]
+    return ast.unparse(tree)
+
+DEVS_LANE_DATACLASS_MODULES = [
+    "cerebro/gitintel/fanout.py",
+    "cerebro/gitintel/pool.py",
+    "cerebro/gitintel/fork_provenance.py",
+    "cerebro/gitintel/facets.py",
+    "cerebro/gitintel/devs_spike.py",
+]
+
+BANNED_FIELDS = {"contributions", "followers", "stars", "stargazers_count",
+                 "contribution_count", "watchers", "watchers_count", "forks_count"}
+
+
+@pytest.mark.parametrize("path", DEVS_LANE_DATACLASS_MODULES)
+def test_no_dataclass_in_the_devs_lane_declares_a_volume_field(path):
+    """THE LEAK CHECK THAT MATTERS, AND IT INSPECTS THE DECLARATION.
+
+    GitHub hands the fan-out lane a commit count on every contributor and the
+    contributors page IS a volume ranking. The count is dropped at the boundary, and the
+    only durable way to keep it dropped is for no dataclass downstream to have anywhere
+    to put it. A runtime probe over the returned logins would be `False` for every
+    conceivable implementation, including a broken one, and would validate nothing."""
+    for node in ast.walk(_tree(path)):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for stmt in node.body:
+            name = None
+            if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+                name = stmt.target.id
+            elif isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 \
+                    and isinstance(stmt.targets[0], ast.Name):
+                name = stmt.targets[0].id
+            if name and name.lower() in BANNED_FIELDS:
+                raise AssertionError(f"{path}: {node.name}.{name} is a volume field")
+
+
+def test_order_by_consistency_is_still_the_only_ordering_over_people():
+    """e02 adds THREE lanes and ZERO ordering functions over people. Every new `sorted(`
+    in the diff orders logins alphabetically, repos by signal recurrence, or window keys
+    — never people by a magnitude."""
+    import inspect
+
+    from cerebro.gitintel import admission, facets, fanout, fork_provenance, pool
+    orderings = []
+    for mod in (admission, fanout, pool, fork_provenance, facets):
+        for name, fn in vars(mod).items():
+            if name.startswith("_") or not inspect.isfunction(fn):
+                continue
+            if getattr(fn, "__module__", "") != mod.__name__:
+                continue
+            src = _body_source(fn)
+            if "sorted(" in src or ".sort(" in src:
+                orderings.append(f"{mod.__name__}.{name}")
+    # Everything that sorts, and what it sorts, accounted for by name:
+    #   admission.order_by_consistency  people, by active days   <- THE ONLY ONE
+    #   fanout.contributors             logins, alphabetically
+    #   fanout.work_queue               repos, by signal recurrence
+    #   fanout.fanout_lane              logins + repo names, alphabetically
+    #   pool.roster_lane                entries + skips, by key and by name
+    #   pool.assemble                   the output pool, by identity key
+    #   pool.paid_prefilter             work order, then results by key
+    #   fork_provenance.sample_repos    repo names, alphabetically
+    #   fork_provenance.evidence        upstream names, alphabetically
+    expected = {
+        "cerebro.gitintel.admission.order_by_consistency",
+        "cerebro.gitintel.fanout.contributors",
+        "cerebro.gitintel.fanout.work_queue",
+        "cerebro.gitintel.fanout.fanout_lane",
+        "cerebro.gitintel.pool.roster_lane",
+        "cerebro.gitintel.pool.assemble",
+        "cerebro.gitintel.pool.paid_prefilter",
+        "cerebro.gitintel.fork_provenance.sample_repos",
+        "cerebro.gitintel.fork_provenance.evidence",
+    }
+    assert set(orderings) == expected, (
+        "a sort appeared or vanished in the devs lane. Every one must be accounted for "
+        "by name here, with what it orders: "
+        f"unexpected={set(orderings) - expected} missing={expected - set(orderings)}")
+
+
+def test_the_only_ordering_over_people_reads_only_active_days():
+    """Consistency, never volume. `order_by_consistency` must not learn to read pushes."""
+    import inspect
+
+    from cerebro.gitintel.admission import order_by_consistency
+    src = _body_source(order_by_consistency)
+    for banned in VOLUME_NAMES:
+        assert banned not in src, f"order_by_consistency reads {banned}"
+    assert "active_days_90d" in src and "active_days_30d" in src
+
+
+def test_the_fanout_lane_destroys_the_api_ordering_whatever_it_receives():
+    """A fixture in GitHub's real commit-count order (measured on simonw/llm: 1170, 10,
+    5, 5, 4) must come back alphabetical."""
+    from cerebro.gitintel.fanout import contributors
+
+    class _Cl:
+        def request(self, path, params=None):
+            return [{"login": "zed", "type": "User", "contributions": 1170},
+                    {"login": "Mallory", "type": "User", "contributions": 10},
+                    {"login": "alice", "type": "User", "contributions": 5},
+                    {"login": "bob", "type": "User", "contributions": 4}]
+
+    assert contributors("simonw/llm", _Cl()) == ("alice", "bob", "Mallory", "zed")
+
+
+def test_the_recurrence_count_the_work_queue_sorts_on_reaches_no_record_field():
+    """F063's licence is that recurrence orders WORK and never a person. The count must
+    be unreachable from anything the run writes."""
+    import dataclasses
+
+    from cerebro.gitintel.devs_spike import DevRecord
+    from cerebro.gitintel.fanout import FanoutCandidate
+    from cerebro.gitintel.pool import Cand
+    for dc in (FanoutCandidate, Cand, DevRecord):
+        names = {f.name.lower() for f in dataclasses.fields(dc)}
+        assert not (names & {"recurrence", "recurrence_count", "seed_rank", "priority"})
+
+
+def test_no_volume_ranking_reached_the_record_or_the_facets():
+    """F020/F021 asserted ABSENT, over the record e04 actually renders."""
+    import dataclasses
+
+    from cerebro.gitintel.devs_spike import DevRecord
+    from cerebro.gitintel.facets import FACET_NAMES
+    names = {f.name.lower() for f in dataclasses.fields(DevRecord)}
+    assert not (names & BANNED_FIELDS)
+    assert not any("score" in n or "rank" in n for n in names)
+    assert not (set(FACET_NAMES) & BANNED_FIELDS)

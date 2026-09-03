@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from cerebro.gitintel import denylist, devs_spike
+from cerebro.gitintel import denylist, devs_spike, pool
 from cerebro.gitintel.devs_spike import DevRecord, sanity_check
 
 FIXTURE = Path(__file__).parent / "fixtures" / "gharchive_cohort_90d.tsv"
@@ -113,11 +113,22 @@ def test_provenance_reaches_every_row(tmp_path):
 
 # --- the predicate catches what it exists to catch ---------------------------
 
-def _rec(login, state="clear"):
+def _rec(login, state="clear", prefilter=pool.PREFILTER_VERIFIED):
+    """A record shaped like one `run()` emits. `prefilter` is explicit rather than
+    omitted: the field is frozen and always present in a real record, and leaving it out
+    of the fixture is what made the gate below untestable in the first place."""
+    automation = {"state": state}
+    if prefilter is not _NO_PREFILTER:
+        automation["prefilter"] = prefilter
     return DevRecord(login=login, name=None, discovered_via="vault", provenance=["h"],
                      windows={}, pushes_per_week=[0] * 13,
-                     automation={"state": state}, low_n=False, admitted=True,
+                     automation=automation, low_n=False, admitted=True,
                      reasons=[])
+
+
+#: Sentinel for "this record carries no prefilter marker at all" — a producer defect the
+#: gate must fail on rather than wave through.
+_NO_PREFILTER = object()
 
 
 def test_predicate_catches_a_bot_login():
@@ -141,10 +152,117 @@ def test_predicate_catches_an_unresolved_flagged_account():
     assert not r.ok and "not clear" in r.failures[0]
 
 
+def test_predicate_catches_an_account_the_rest_budget_never_checked():
+    """THE GATE THAT MAKES A TRUNCATED BUDGET SAFE. A candidate dropped by the REST cap
+    can be highly active and entirely unchecked, so it reaches the top list on activity
+    alone. Publishing "this is a person" without having looked is the failure the
+    verification doctrine calls worse than no page."""
+    r = sanity_check([_rec("unchecked", prefilter=pool.PREFILTER_TRUNCATED)],
+                     denylist.EMPTY)
+    assert not r.ok
+    assert "unchecked" in r.failures[0]
+    assert "deferred_rest_budget" in r.failures[0]
+    assert "--rest-budget" in r.failures[0]
+
+
+@pytest.mark.parametrize("marker", pool.PREFILTER_UNCHECKED)
+def test_predicate_catches_every_marker_that_means_a_call_was_never_made(marker):
+    """Both deferrals, not just the truncation one. Each means a different reason the
+    intended humanness call never happened, and neither means one did."""
+    r = sanity_check([_rec("unchecked", prefilter=marker)], denylist.EMPTY)
+    assert not r.ok and marker in r.failures[0]
+
+
+def test_predicate_catches_a_record_with_no_prefilter_marker_at_all():
+    """Fail-closed. `prefilter` is a frozen field; absence is a producer defect, and a
+    gate that waves absence through goes vacuous the day a new lane forgets to set it."""
+    r = sanity_check([_rec("nomarker", prefilter=_NO_PREFILTER)], denylist.EMPTY)
+    assert not r.ok and "nomarker" in r.failures[0] and "None" in r.failures[0]
+
+
+def test_predicate_catches_a_marker_outside_the_frozen_vocabulary():
+    """Same fail-closed reasoning one step further out: an unrecognised spelling is a
+    producer defect, and guessing that an unknown word means "verified" is the failure."""
+    r = sanity_check([_rec("invented", prefilter="looks_fine_to_me")], denylist.EMPTY)
+    assert not r.ok and "invented" in r.failures[0]
+
+
+def test_a_rest_verified_account_passes_the_prefilter_gate():
+    """The companion assertion, so the gate is proven to discriminate rather than merely
+    to reject."""
+    r = sanity_check([_rec("checked", prefilter=pool.PREFILTER_VERIFIED)], denylist.EMPTY)
+    assert r.ok is True and r.failures == []
+
+
+def test_a_curated_roster_account_passes_the_prefilter_gate():
+    """NOT a softening. The gate catches "a call was intended and never made"; a roster
+    entry is a login a human typed into `config/cracked_devs.yaml`, so a human looked and
+    no call was ever owed. It is also the one marker with no remedy — `--rest-budget`
+    cannot buy a call the pipeline never planned — so failing it would be an unclearable
+    stop on the owner's own list. `bcherny` is the live case: fan-out AND roster, admitted
+    on 37 vault signals, and no `get_user` was ever spent on him."""
+    r = sanity_check([_rec("bcherny", prefilter=pool.PREFILTER_ROSTER)], denylist.EMPTY)
+    assert r.ok is True and r.failures == []
+
+
 def test_predicate_names_every_offender_not_just_the_first():
     r = sanity_check([_rec("a[bot]"), _rec("google"), _rec("c", "flagged")],
                      denylist.EMPTY)
     assert len(r.failures) == 3
+
+
+def test_a_bot_shaped_login_without_the_bot_suffix_warns_and_never_fails():
+    """The Court ruled name-pattern filtering provably insufficient, so this is a
+    routing hint into the eyeball queue and nothing more. Failing on it would rebuild
+    name filtering as an auto-exclude — the exact thing the ruling forbids — and would
+    drop a human whose login happens to end in `-ci`."""
+    r = sanity_check([_rec("renovate-bot"), _rec("deploy-ci")], denylist.EMPTY)
+    assert r.ok is True and r.failures == []
+    hits = [w for w in r.warnings if "ends in" in w]
+    assert len(hits) == 2
+    assert "renovate-bot" in hits[0] and "'-bot'" in hits[0]
+    assert "deploy-ci" in hits[1] and "'-ci'" in hits[1]
+
+
+def test_a_plain_human_login_raises_no_suffix_warning():
+    r = sanity_check([_rec("simonw"), _rec("Rich-Harris"), _rec("t3dotgg")],
+                     denylist.EMPTY)
+    assert r.ok is True
+    assert not [w for w in r.warnings if "ends in" in w]
+
+
+def test_an_agent_recorded_clearing_is_named_in_the_warnings(tmp_path):
+    """WHOSE EYE. Charter success criterion 4 is 'verified by eye'; an admission that
+    rests on a verdict an AGENT recorded is not yet an admission the owner signed, and
+    the run has to say so every time rather than at the launch probe."""
+    from cerebro.gitintel.denylist import VerdictEntry, Verdicts
+    agent = VerdictEntry(login="koala73", verdict="human", shape="fork_farm",
+                         evidence="90d live: 960 pushes / 24 repos",
+                         reviewed_by="e01-builder", reviewed_on="2026-08-26")
+    owner = VerdictEntry(login="mvanhorn", verdict="human", shape="mass_self_repo",
+                         evidence="90d live: 716 pushes / 204 repos",
+                         reviewed_by="owner", reviewed_on="2026-08-26")
+    v = Verdicts(cleared={"koala73": agent, "mvanhorn": owner})
+    r = sanity_check([_rec("koala73"), _rec("mvanhorn"), _rec("simonw")], v)
+    assert r.ok is True, "an agent-recorded verdict warns, it never blocks"
+    hit = [w for w in r.warnings if "AGENT-recorded" in w]
+    assert len(hit) == 1
+    assert "koala73 (by e01-builder)" in hit[0]
+    assert "mvanhorn" not in hit[0], "an owner-signed verdict is not outstanding"
+    assert "simonw" not in hit[0], "an unflagged account needs no verdict at all"
+
+
+def test_the_live_verdicts_file_is_honest_about_who_reviewed_what():
+    """Not a mock. Every cleared entry that ships names its reviewer, and the split
+    between owner-signed and agent-recorded is a fact of the file, not a claim."""
+    from cerebro.gitintel import denylist as dl
+    v = dl.load()
+    assert v.cleared, "the cleared section is load-bearing and must not be empty"
+    for entry in list(v.cleared.values()) + list(v.denied.values()):
+        assert entry.reviewed_by.strip(), f"{entry.login}: no reviewer recorded"
+    agent = [e.login for e in v.cleared.values() if not dl.is_owner_signed(e)]
+    assert agent, ("if every clearing is owner-signed, delete the warning path rather "
+                   "than letting it rot untested")
 
 
 def test_zero_rows_is_a_failure_but_a_short_list_is_only_a_warning():
@@ -285,12 +403,26 @@ def test_the_spike_never_imports_the_condemned_scorer():
 
 
 def test_the_spike_never_writes_a_roster_or_the_cracked_devs_file():
-    """Checked against the CODE with the module docstring stripped: the prose is allowed
-    to say what the module refuses to write."""
+    """READING the roster is F008's lane; WRITING it is what stays forbidden.
+
+    e01 banned the string `cracked_devs` outright because e01 had no roster lane at all.
+    e02 does: `pool.roster_lane()` reads the file, and the lane census NAMES it, because
+    adding a missing `github:` handle is an owner edit to that path and the artifact has
+    to say where. So the ban narrows to write-shaped names and to the direct import,
+    which is the property that actually matters — the spike must not be able to mutate
+    the curated roster as a side effect of scanning."""
     code = SRC.replace(ast.get_docstring(ast.parse(SRC)) or "", "")
-    for banned in ("append_devs", "cracked_devs", "load_roster"):
-        assert banned not in code
-    assert "roster" not in _imported_modules()
+    for banned in ("append_devs", "write_roster", "save_roster", "load_roster",
+                   "to_yaml", "safe_dump", "yaml.dump"):
+        assert banned not in code, f"{banned} is a write path into the curated roster"
+    assert "roster" not in _imported_modules(), \
+        "the roster is reached through pool.roster_lane(), never imported directly"
+    # And nothing anywhere in the spike opens a file for writing outside `out`.
+    for node in ast.walk(ast.parse(SRC)):
+        if isinstance(node, ast.Call):
+            fn = node.func
+            name = fn.id if isinstance(fn, ast.Name) else getattr(fn, "attr", "")
+            assert name != "open", "the spike writes only through Path.write_text under out/"
 
 
 def test_the_run_writes_nothing_outside_the_out_dir(tmp_path):
@@ -328,10 +460,101 @@ def test_zero_activity_logins_are_labelled_never_dropped(tmp_path):
 
 
 def test_the_run_json_is_deterministic_and_parses(tmp_path):
-    _, _, _, paths = _run(tmp_path, HUMANS)
+    """The record count is the DEDUPED pool, not the corpus. With all three lanes the
+    roster contributes its handle-carrying devs and `simonw` collapses onto the vault
+    entry — one person, one record, which is the whole point of F015."""
+    from cerebro.gitintel import pool
+    _, _, records, paths = _run(tmp_path, HUMANS)
     data = json.loads(paths["json"].read_text(encoding="utf-8"))
-    assert len(data) == len(HUMANS)
+    roster, _skipped = pool.roster_lane()
+    expected = {pool.slug(x) for x in HUMANS} | {pool.slug(c.login) for c in roster}
+    assert len(data) == len(expected) == len(records)
+    assert {pool.slug(d["login"]) for d in data} == expected
     assert all("automation" in d and "windows" in d for d in data)
+
+
+def test_a_roster_dev_the_vault_never_cited_fails_the_provenance_floor(tmp_path):
+    """F008's "always profiled" is a rule about SUPPRESSION, not a licence to publish a
+    page about somebody with no answer to "why is this person here". The floor is not
+    exempted for anyone; the failure is recorded and handed to the writer as a visible
+    decision."""
+    _, top, records, _ = _run(tmp_path, HUMANS)
+    rec = next(r for r in records if r.login == "bcherny")
+    assert rec.discovered_via == "roster"
+    assert rec.provenance == []
+    assert rec.admitted is False
+    assert any("provenance" in r and "FAIL" in r for r in rec.reasons)
+    assert rec.login not in {r.login for r in top}
+
+
+def test_a_roster_only_dev_is_never_labelled_rest_verified(tmp_path):
+    """`rest_verified` is a claim that a real `GET /users/{login}` came back a person.
+    Nothing calls REST for a roster dev — the roster is a hand-written yaml file — so
+    labelling one verified would put a verification claim nobody earned into a record
+    about a named human. e04 renders this field; it must be able to tell the two apart."""
+    from cerebro.gitintel import pool
+    _, _, records, _ = _run(tmp_path, HUMANS)
+    roster_only = next(r for r in records if r.login == "bcherny")
+    assert roster_only.discovered_via_all == ["roster"]
+    assert roster_only.automation["prefilter"] == pool.PREFILTER_ROSTER
+    # ...and the vault lane still earns it, because `resolve_owner` ran `is_human` to
+    # produce the login at all.
+    both = next(r for r in records if r.login.lower() == "simonw")
+    assert sorted(both.discovered_via_all) == ["roster", "vault"]
+    assert both.automation["prefilter"] == pool.PREFILTER_VERIFIED
+
+
+def test_a_roster_dev_the_vault_did_cite_collapses_to_one_record(tmp_path):
+    _, _, records, _ = _run(tmp_path, HUMANS)
+    hits = [r for r in records if r.login.lower() == "simonw"]
+    assert len(hits) == 1, "one person, one profile"
+    assert hits[0].discovered_via == "vault", "vault beats roster on precedence"
+    assert sorted(hits[0].discovered_via_all) == ["roster", "vault"]
+    assert hits[0].name == "Simon Willison", "the roster supplies the curated name"
+    assert hits[0].admitted is True
+
+
+def test_the_lane_census_names_every_roster_dev_emitted_or_skipped(tmp_path):
+    """"Never suppressed" has to be auditable by reading an artifact."""
+    _, _, _, paths = _run(tmp_path, HUMANS)
+    text = paths["census"].read_text(encoding="utf-8")
+    for name in ("Pieter Levels", "Skirano", "Sentient Agency"):
+        assert name in text, f"{name} produced no pool entry and must be named"
+    assert "no github handle" in text
+    for login in ("bcherny", "mattpocock", "t3dotgg", "simonw"):
+        assert login in text
+
+
+def test_the_budget_artifact_records_every_meter(tmp_path):
+    _, _, _, paths = _run(tmp_path, HUMANS)
+    b = json.loads(paths["budget"].read_text(encoding="utf-8"))
+    assert b["clickhouse_scans"] == 3
+    for key in ("rest_calls_used", "rest_cache_hits", "rest_calls_cap", "truncated",
+                "skipped_logins", "fork_calls_used", "fork_calls_cap",
+                "fork_budget_exhausted", "fork_unevidenced"):
+        assert key in b
+    assert b["fork_calls_used"] <= b["fork_calls_cap"]
+
+
+def test_selecting_only_the_vault_lane_reproduces_the_e01_pool(tmp_path):
+    """The lanes are additive and independently switchable, so an e01-equivalent run is
+    still reachable and still measurable — which is what makes "the pool grew" a claim
+    about the fan-out lane rather than about the whole rewrite."""
+    vault = _corpus(tmp_path, HUMANS)
+    _, _, records, _ = devs_spike.run(
+        vault, tmp_path / "out", client=FakeClient(HUMANS),
+        verdicts_path=_verdicts(tmp_path), log=lambda *a: None,
+        transport=_transport(), lanes=("vault",))
+    assert sorted(r.login.lower() for r in records) == sorted(x.lower() for x in HUMANS)
+    assert all(r.discovered_via == "vault" for r in records)
+
+
+def test_an_unknown_lane_is_rejected_rather_than_silently_ignored(tmp_path):
+    vault = _corpus(tmp_path, HUMANS)
+    with pytest.raises(ValueError):
+        devs_spike.run(vault, tmp_path / "out", client=FakeClient(HUMANS),
+                       verdicts_path=_verdicts(tmp_path), log=lambda *a: None,
+                       transport=_transport(), lanes=("nonsense",))
 
 
 def test_limit_caps_the_top_list(tmp_path):

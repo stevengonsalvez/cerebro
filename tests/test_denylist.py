@@ -34,9 +34,37 @@ cleared:
 """
 
 
-def test_the_shipped_file_loads_with_the_two_day_one_denials(tmp_path):
+def test_the_shipped_denials_are_exactly_the_ones_a_review_recorded(tmp_path):
+    """The denied section is the ONLY path to `excluded`, so its membership is pinned.
+
+    `gcgh159` joined on 2026-08-27 from the e02 eyeball, not from any mechanical shape:
+    489 pushes onto the single repo `GCGH159/green` across 88 of 90 days, a tree of
+    auto-log.md/data.txt/stats.txt, templated four-per-batch commits one second apart.
+    Every flag in `admission.flags()` passes it — push_per_active_day 5.56 is under the
+    15 line, not_owned_ratio 0.0 cannot fire fork_farm, distinct_repos 1 cannot fire
+    mass_self_repo. It is the live proof that the mechanical predicate is a floor and the
+    eyeball is load-bearing, which is why criterion 4 says "verified by eye".
+    """
     v = denylist.load(SHIPPED)
-    assert sorted(v.denied) == ["dicklesworthstone", "diegosouzapw"]
+    assert sorted(v.denied) == ["dicklesworthstone", "diegosouzapw", "gcgh159"]
+
+
+def test_no_shipped_verdict_claims_the_owner_signed_it(tmp_path):
+    """NOTHING in this file may assert the owner's signature until the owner gives it.
+
+    Two entries shipped stamped `reviewed_by: owner` on 2026-08-26, written by the
+    building agent in the commit that created the file. The owner never saw them. A false
+    signature is worse than a missing one: `OWNER_REVIEWERS` exists so a run can say whose
+    eye, and `sanity_check` warns on every agent-recorded admission — two forged stamps
+    silenced that warning for the only verdicts strong enough to exclude a person.
+    """
+    v = denylist.load(SHIPPED)
+    forged = [e.login for d in (v.denied, v.cleared) for e in d.values()
+              if denylist.is_owner_signed(e)]
+    assert forged == [], (
+        f"{len(forged)} verdict(s) claim an owner signature that was never given: "
+        f"{forged}. An agent records `reviewed_by: <agent-name>`; only the owner's own "
+        f"countersign may use a name in OWNER_REVIEWERS.")
 
 
 def test_the_shipped_clearings_are_reviewed_and_carry_this_runs_numbers():

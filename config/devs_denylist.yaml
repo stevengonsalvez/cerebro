@@ -25,15 +25,22 @@ denied:
     verdict: automation
     shape: mass_self_repo
     evidence: "90d live 2026-08-26: 27764 pushes / 109 distinct repos / 90 active days (91 raw, clamped to the window) / 0 not-owned (ratio 0.0000) / 308.49 pushes per active day / 254.72 pushes per repo / basename concentration 0.0092"
-    reviewed_by: owner
+    reviewed_by: e01-builder
     reviewed_on: 2026-08-26
 
   - login: diegosouzapw
     verdict: automation
     shape: fork_farm
     evidence: "90d live 2026-08-26: 2274 pushes / 130 distinct repos / 87 active days / 124 not-owned across 2 basenames / max basename group 124 / concentration 0.9538 / 26.14 pushes per active day"
-    reviewed_by: owner
+    reviewed_by: e01-builder
     reviewed_on: 2026-08-26
+
+  - login: GCGH159
+    verdict: automation
+    shape: single_repo_daily_cadence
+    evidence: "90d live 2026-08-27: 489 pushes / 1 distinct repo (GCGH159/green) / 88 active days / 0 not-owned / concentration 1.0 / 5.56 pushes per active day; repo tree is auto-log.md + data.txt + stats.txt + logs/, 0 stars, no description, no language; commits templated 4-per-batch one second apart. Found by the e02 eyeball; NO mechanical shape fires on it."
+    reviewed_by: e02-eyeball
+    reviewed_on: 2026-08-27
 
 cleared:
   # Worked from the F066 flag queue on 2026-08-26. All 23 flagged accounts were
@@ -112,11 +119,11 @@ cleared:
     evidence: "90d live 2026-08-26: 960 pushes / 24 distinct repos / 81 active days / 23 not-owned across 1 basenames / concentration 1.0000 / 11.85 pushes per active day. Elie Habib; all 24 same-basename repos are worldmonitor, his own 84.3k-star project, worked across its forks. 4099 followers"
     reviewed_by: e01-builder
     reviewed_on: 2026-08-26
-  - login: lizhengfeng101
+  - login: mvanhorn
     verdict: human
-    shape: fork_farm
-    evidence: "90d live 2026-08-26: 137 pushes / 13 distinct repos / 56 active days / 9 not-owned across 2 basenames / concentration 0.6154 / 2.45 pushes per active day. Kite, AI engineer at Alibaba and stated creator of OpenCodeReview; all 8 same-basename repos are open-code-review, his own project"
-    reviewed_by: e01-builder
+    shape: mass_self_repo
+    evidence: "90d live 2026-08-26: 716 pushes / 204 distinct repos / 81 active days / 4 not-owned across 1 basenames / concentration 0.0245 / 8.84 pushes per active day. Matt Van Horn, GitHub user since 2010, 4901 followers, 2104 public repos; co-founded June (acquired by @webergrills) and the company that became Lyft. Per-repo distribution is head-heavy human work, not fan-out: printing-press-library 208 pushes over 52 days, cli-printing-press 120 over 35, last30days-skill 69 over 18, agentcookie 24, then a 1-4-push tail of self-namespaced forks of upstream projects (react-spectrum, penpot, podman)"
+    reviewed_by: e01-fixer
     reviewed_on: 2026-08-26
   - login: nwparker
     verdict: human
