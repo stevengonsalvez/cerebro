@@ -175,3 +175,42 @@ def test_the_shipped_consent_file_says_what_it_is_not():
     assert "CONSENT" in text
     for banned in ("hand-picked", "curated", "human-reviewed"):
         assert banned not in text.lower()
+
+
+def test_a_consent_file_under_the_wrong_top_level_key_raises_instead_of_removing_nobody(
+    tmp_path,
+):
+    """THE SIBLING FILE'S KEY IS THE OBVIOUS MISTAKE, AND IT USED TO BE SILENT.
+
+    The site's consent file (`lib/vault/devs-optout.json`) keys its list `optedOut`. Writing
+    that key in THIS file parses as perfectly valid YAML, and before the guard it fell
+    through `raw.get("logins") is None` to an empty set — meaning "nobody opted out", which
+    publishes every person who asked to be removed while the run reports itself healthy.
+
+    Found by making exactly that mistake while proving the launch requirement. The module's
+    stated contract is "Missing is EMPTY; malformed RAISES. Never both", and this was both.
+    """
+    p = tmp_path / "optout.yaml"
+    p.write_text(
+        'optedOut:\n  - login: somebody\n    recordedOn: "2026-09-04"\n', encoding="utf-8"
+    )
+    with pytest.raises(ValueError) as exc:
+        optout.load(p)
+    assert "logins" in str(exc.value)
+    assert "optedOut" in str(exc.value), "the error must name the key it actually found"
+
+
+def test_an_absent_consent_file_is_still_empty_and_not_an_error(tmp_path):
+    """The other half of the contract, pinned beside it so the guard cannot widen into it.
+
+    A file that does not exist means nobody has asked to be removed yet. That is the normal
+    state of a new deployment and it must never raise.
+    """
+    assert optout.load(tmp_path / "nope.yaml").logins == frozenset()
+
+
+def test_an_empty_consent_file_is_empty_and_not_an_error(tmp_path):
+    """A comments-only file is the shipped state of config/devs_optout.yaml itself."""
+    p = tmp_path / "optout.yaml"
+    p.write_text("# nobody has asked to be removed\n", encoding="utf-8")
+    assert optout.load(p).logins == frozenset()

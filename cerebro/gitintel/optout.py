@@ -128,6 +128,27 @@ def load(path=DEFAULT_PATH) -> OptOut:
             f"{type(raw).__name__}."
         )
 
+    # A FILE THAT EXISTS BUT NAMES NO `logins:` IS MALFORMED, NOT EMPTY. This module's
+    # contract is "Missing is EMPTY; malformed RAISES. Never both", and a mapping with
+    # content but no `logins:` key was falling through to "nobody opted out" — which
+    # publishes every person who asked to be removed, silently, which is the exact outcome
+    # every other guard in this file exists to prevent.
+    #
+    # The confusion is not hypothetical and it is not exotic: the SIBLING consent file,
+    # `lib/vault/devs-optout.json` on the site, keys its list `optedOut`. Writing that key
+    # here is the obvious mistake, it parses as valid YAML, and before this check it
+    # removed nobody while reporting a healthy run. It was found by making exactly that
+    # mistake.
+    if raw and "logins" not in raw:
+        raise ValueError(
+            f"{path}: the consent file has content but no `logins:` key (found "
+            f"{', '.join(sorted(map(str, raw)))}). An unreadable consent file STOPS the "
+            f"run rather than publishing somebody who asked to be removed, and a file "
+            f"whose list is under the wrong key is unreadable in the only sense that "
+            f"matters. NOTE: the site's consent file uses `optedOut`; this one uses "
+            f"`logins:` with a `login:` key per entry."
+        )
+
     rows = raw.get("logins")
     if rows is None:
         rows = []
