@@ -37,14 +37,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ONE ISSUE, ONE PREPARED BRANCH, however many times this fires.
+      #
+      # An issue created WITH the label raises `opened` AND `labeled`, so two runs start for
+      # one request. `concurrency` serialises them, it does not collapse them: the first run
+      # pushed the branch and the second died pushing the same ref non-fast-forward, marking
+      # a request that had in fact been handled as a failed run. Found by the first real
+      # request this flow ever saw.
+      #
+      # The branch name already encodes the issue, so its existence on the remote IS the
+      # "already handled" record. Checking the remote rather than a run-local flag also
+      # covers a re-label months later, and an edit after a refusal still works because a
+      # refusal leaves no branch behind.
+      - id: guard
+        name: Stand down if this issue already has a branch
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          BRANCH="cracked-devs/request-${ISSUE_NUMBER}"
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "::notice::${BRANCH} already exists — this request was prepared by an earlier run"
+            echo "prepared=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prepared=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-python@v5
+        if: steps.guard.outputs.prepared == 'false'
         with:
           python-version: '3.12'
 
-      - run: pip install pyyaml requests
+      - if: steps.guard.outputs.prepared == 'false'
+        run: pip install pyyaml requests
 
       - id: decide
         name: Validate the request and write the roster entry
+        if: steps.guard.outputs.prepared == 'false'
         continue-on-error: true
         env:
           # The three untrusted values, passed as data. Never interpolated into a script.
@@ -109,7 +138,7 @@ jobs:
           fi
 
       - name: Fail the run when the script itself broke
-        if: steps.decide.outputs.status == ''
+        if: steps.guard.outputs.prepared == 'false' && steps.decide.outputs.status == ''
         run: |
           echo "the request script produced no decision — that is a defect in the flow, not in the request" >&2
           exit 1
