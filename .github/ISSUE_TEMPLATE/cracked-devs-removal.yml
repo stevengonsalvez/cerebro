@@ -1,0 +1,40 @@
+name: Ask to be removed from Cracked Devs
+description: Ask for a GitHub account to be taken off the developer index and profiles.
+title: "cracked-devs: remove @"
+labels: ["cracked-devs-removal"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **You do not have to give a reason, and none is recorded.** The list this keeps
+        holds the login, the date, how the request arrived and who wrote it down. Nothing
+        about you, and nothing that reads as a judgement of you.
+
+        **What comes down.** The developer profile page and the index entry, plus the feed
+        item and the weekly-roundup mention. The site rebuilds from a fresh clone every
+        morning at 07:00, so a removal recorded today is live by the next morning at the
+        latest; an urgent one is rebuilt the same day by hand.
+
+        **What cannot come down**, and it is fairer to say so here than to discover it
+        later: public git history, the public GitHub event feed these numbers are derived
+        from, search-engine or archive caches, and copies anyone has already taken. Where
+        this archive cites public writing by someone as a signal, that citation is a
+        separate record with its own removal path and is not covered by this request.
+
+        **Asking on someone else's behalf is fine.** Nothing here is automated — a person
+        reads this and records it, and coming off does not need proof of identity.
+  - type: input
+    id: handle
+    attributes:
+      label: GitHub handle to remove
+      description: Just the handle, e.g. `octocat`.
+      placeholder: octocat
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Optional. A reason is not needed and will not be recorded.
+    validations:
+      required: false
