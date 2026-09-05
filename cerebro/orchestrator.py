@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from .config import Settings
 from .llm import claude, digest, triage
 from .models import RunStats
-from .process import comments, dedup, extract, feedback, junkgate, prerank
+from .process import briefing_gate, comments, dedup, extract, feedback, junkgate, prerank
 from .sink import export, notify, vault
 from .sources import SOURCES
 from .state import State
@@ -69,6 +69,14 @@ def run(settings: Settings) -> tuple[RunStats, dict]:
     extract.enrich(top)
     comments.enrich(top, settings, meter=meter)   # HN community take on the top-N
     briefing = digest.digest(top, settings, meter=meter)
+    # F071. `claude -p` auto-discovers CLAUDE.md, so the digest model can inherit the
+    # OPERATOR'S assistant conventions and write them into the newspaper — six briefings
+    # shipped that way before this existed. claude.PERSONA_OVERRIDE asks it not to; this
+    # checks what came back. Strip and announce rather than fail: in the real incident every
+    # signal was correct and only the surrounding commentary did not belong, so refusing to
+    # publish would have thrown away a good briefing.
+    briefing, leaked = briefing_gate.sanitize(briefing)
+    st.leaked = leaked
     st.digested = len(top)
     st.input_tokens, st.output_tokens = meter["input_tokens"], meter["output_tokens"]
     st.cache_read, st.cache_creation = meter["cache_read"], meter["cache_creation"]
@@ -79,6 +87,14 @@ def run(settings: Settings) -> tuple[RunStats, dict]:
     export.write(top, settings, st)   # autoresearch signal-export sink (no-op unless export.enabled)
     for s in ranked:        # mark only LLM-evaluated items; pre-rank-dropped tail re-evaluates cheaply tomorrow
         state.mark(s)
+    if leaked:
+        # A stripped briefing that nobody hears about is worse than the leak: the next
+        # recurrence would be invisible. This is the only place that says it out loud.
+        detail = ", ".join(f"{k}x{v}" for k, v in sorted(leaked.items()))
+        notify.push_failure(
+            f"briefing gate stripped assistant artefacts from {date}: {detail}. "
+            f"The digest model is emitting CLAUDE.md conventions again — check "
+            f"cerebro/llm/claude.py PERSONA_OVERRIDE.", settings)
     notify.push(st, paths["daily"], settings)
     state.log_run(st)
     state.close()
