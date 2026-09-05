@@ -1,0 +1,52 @@
+name: Ask to be tracked in Cracked Devs
+description: Self-nomination only — ask for your own GitHub account to be tracked.
+title: "cracked-devs: track @"
+labels: ["cracked-devs-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **What this does.** CEREBRO reads public activity around the repositories it
+        already keeps signals about. This form asks for your account to be added to the
+        tracked roster.
+
+        **What it does not do.** Being on the roster does not create a page. A profile at
+        `/cerebro/dev/<your login>` appears once the pipeline has kept a signal about a
+        repository you own or push to, and not before — pages need an answer to "why is
+        this person here" that does not come from the roster.
+
+        **What gets published.** Public GitHub activity, stated as measurements: pushes,
+        repositories, how many separate days you were active. No score, no ranking of
+        people, no judgement of anybody. Those pages are not indexed by search engines.
+
+        **Changing your mind.** Open an issue asking to be removed and you come off, from
+        the index, the profile, the feed and the weekly roundup. You do not need a reason.
+
+        **Self-nomination only.** The account asking has to be the account being added. If
+        you want to suggest somebody else, they can ask themselves.
+  - type: input
+    id: handle
+    attributes:
+      label: GitHub handle
+      description: Just the handle, e.g. `octocat`. It has to match the account you are filing this from.
+      placeholder: octocat
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: |
+        Optional, and read by a human rather than by the automation. Nothing you write
+        here is copied into any file or onto any page.
+    validations:
+      required: false
+  - type: checkboxes
+    id: ack
+    attributes:
+      label: Before you file this
+      options:
+        - label: I am asking for my own account, not somebody else's.
+          required: true
+        - label: I understand only public GitHub data is published, as measurements, and that I can ask to be removed at any time.
+          required: true

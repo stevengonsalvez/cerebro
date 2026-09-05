@@ -1,0 +1,102 @@
+# Turns a self-request issue into a reviewable pull request. Nothing merges itself.
+#
+# THE ISSUE IS UNTRUSTED INPUT AND IS TREATED AS SUCH. Anyone on the internet can open one.
+# The body, the author and the number reach the script as ENVIRONMENT VARIABLES and never as
+# `${{ }}` interpolated into a `run:` block, which is the shape that turns an issue title
+# into a shell command. The script writes exactly one login into config/cracked_devs.yaml
+# and derives the display name from GitHub's own public account record, so no prose from the
+# issue reaches a tracked file.
+#
+# `issues`, NEVER `pull_request_target`. This runs on the default branch with the repository
+# checked out at the default branch; it never checks out a contributor's code and never runs
+# anything the requester wrote.
+#
+# THE HUMAN GATE IS THE MERGE. The workflow opens a PR and stops. Publishing a page about a
+# named person stays a decision the owner takes by merging, which is the same bar every
+# other roster edit has always had.
+name: cracked-devs request
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  # One request at a time: two runs appending to the same file would race on the branch.
+  group: cracked-devs-request
+  cancel-in-progress: false
+
+jobs:
+  request:
+    if: contains(github.event.issue.labels.*.name, 'cracked-devs-request')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install pyyaml requests
+
+      - id: decide
+        name: Validate the request and write the roster entry
+        continue-on-error: true
+        env:
+          # The three untrusted values, passed as data. Never interpolated into a script.
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m cerebro.gitintel.devs_request
+
+      - name: Say why, when the answer is no
+        if: steps.decide.outputs.status == 'refused'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REASON: ${{ steps.decide.outputs.reason }}
+        run: |
+          printf 'Thanks for asking. This one needs a person rather than the automation: %s\n' "$REASON" > body.md
+          gh issue comment "$ISSUE_NUMBER" --body-file body.md
+          gh issue edit "$ISSUE_NUMBER" --add-label needs-owner
+
+      - name: Open the pull request
+        if: steps.decide.outputs.status == 'added'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LOGIN: ${{ steps.decide.outputs.login }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          BRANCH="cracked-devs/request-${ISSUE_NUMBER}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add config/cracked_devs.yaml
+          # $LOGIN passed the login regex before the file was written, so it carries no
+          # shell metacharacters — quoted anyway, because that argument stops being true
+          # the moment somebody relaxes the regex.
+          git commit -m "chore(devs): add ${LOGIN} to the tracked roster on request"
+          git push origin "$BRANCH"
+          {
+            printf 'Closes #%s\n\n' "$ISSUE_NUMBER"
+            printf 'Self-requested by @%s, validated as a real user account.\n\n' "$LOGIN"
+            printf 'Tier 3, so nothing here is wired into the ingestion sources. A profile\n'
+            printf 'page appears only once the pipeline has kept a signal about a repository\n'
+            printf 'they own or push to — the roster alone does not clear the provenance floor.\n'
+          } > pr.md
+          gh pr create --base main --head "$BRANCH" \
+            --title "chore(devs): track ${LOGIN} on request (#${ISSUE_NUMBER})" \
+            --body-file pr.md
+          gh issue comment "$ISSUE_NUMBER" --body "Opened a pull request for this. It goes live once it is merged."
+
+      - name: Fail the run when the script itself broke
+        if: steps.decide.outputs.status == ''
+        run: |
+          echo "the request script produced no decision — that is a defect in the flow, not in the request" >&2
+          exit 1
