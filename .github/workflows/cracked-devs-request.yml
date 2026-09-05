@@ -90,10 +90,23 @@ jobs:
             printf 'page appears only once the pipeline has kept a signal about a repository\n'
             printf 'they own or push to — the roster alone does not clear the provenance floor.\n'
           } > pr.md
-          gh pr create --base main --head "$BRANCH" \
-            --title "chore(devs): track ${LOGIN} on request (#${ISSUE_NUMBER})" \
-            --body-file pr.md
-          gh issue comment "$ISSUE_NUMBER" --body "Opened a pull request for this. It goes live once it is merged."
+          # `gh pr create` needs "Allow GitHub Actions to create and approve pull requests",
+          # which is OFF on this repository and is a real security decision rather than an
+          # oversight: the same switch lets a workflow APPROVE pull requests, self-approval
+          # included. So the branch is pushed either way and the run degrades to handing the
+          # owner a one-click compare link. The requester's answer does not depend on a
+          # setting they cannot see, and turning the switch on later needs no change here.
+          if gh pr create --base main --head "$BRANCH" \
+               --title "chore(devs): track ${LOGIN} on request (#${ISSUE_NUMBER})" \
+               --body-file pr.md; then
+            gh issue comment "$ISSUE_NUMBER" \
+              --body "Opened a pull request for this. It goes live once it is merged."
+          else
+            echo "::notice::pr create refused; the branch is pushed and the owner opens it"
+            COMPARE="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/${BRANCH}?expand=1"
+            gh issue comment "$ISSUE_NUMBER" --body "Prepared the change on branch \`${BRANCH}\`. A person opens and merges the pull request: ${COMPARE}"
+            gh issue edit "$ISSUE_NUMBER" --add-label needs-owner
+          fi
 
       - name: Fail the run when the script itself broke
         if: steps.decide.outputs.status == ''
