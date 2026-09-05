@@ -62,3 +62,8 @@ class RunStats:
     cache_creation: int = 0
     cost_usd: float = 0.0
     llm_calls: int = 0
+    #: F071 — assistant artefacts stripped from the briefing before it was written,
+    #: keyed by artefact name. NON-EMPTY MEANS THE RUN PAGED: the digest model emitted
+    #: the operator's turn-end conventions again and the gate caught them. Recorded on
+    #: the run so a recurrence is answerable from the run log, not only from a push.
+    leaked: dict = field(default_factory=dict)
