@@ -35,8 +35,14 @@ SENTINELS = (
     "Free, open source, backed by Markdown and HTML.",
 )
 
-# The first pipeline day. All of its notes predate the `reason` field, so a w25
-# roundup is 100% empty-reason entries — the only real-data exercise of that branch.
+# The first pipeline week. Its never-rewritten notes predate the `reason` field, so a w25
+# roundup is the only real-data exercise of the empty-reason render branch.
+#
+# NO WEEK IS 100% REASON-LESS ANY MORE, and that is a property of the corpus rather than of
+# this test: the `captured` repair returned seven notes to w25 that had been re-admitted
+# since, and a re-admitted note is rewritten with a triage reason. Nine of the twelve w25
+# entries are still reason-less, which exercises the branch and also exercises it MIXED with
+# the other kind — the shape a real roundup has.
 FIRST_WEEK = (2026, 25)
 # A closed, frozen week used for the exact-count assertions.
 CLOSED_WEEK = (2026, 33)
@@ -54,7 +60,15 @@ def test_every_corpus_note_parses(corpus):
 
 
 def _first_week(corpus):
-    """The 18 notes of ISO week 2026-w25 — a CLOSED week, so this population is frozen.
+    """The 25 notes of ISO week 2026-w25 — a CLOSED week, so this population is frozen.
+
+    IT SAID 18 UNTIL THE CAPTURED REPAIR, and the difference is the point rather than a
+    number that drifted. `captured` was being rewritten to the current day every time a
+    signal was re-admitted, so seven notes FIRST captured in w25 had been carried out of it
+    and the week looked smaller than it was. With first-seen restored from vault history the
+    week holds 25, of which exactly 18 have never been rewritten at all — those are the ones
+    with no `title:` key and an empty reason, and they remain the population the frontmatter
+    assertions below are about.
 
     Exact counts are asserted here and never corpus-wide: the vault gains ~25 signals a
     day, and the pipeline omits the `reason:` key whenever triage reason is empty
@@ -66,13 +80,19 @@ def _first_week(corpus):
 
 def test_the_first_day_notes_recover_their_titles_and_carry_an_empty_reason(corpus):
     first_week = _first_week(corpus)
-    assert len(first_week) == 18                          # closed week: frozen count
+    assert len(first_week) == 25                          # closed week: frozen count
+    # The NEVER-REWRITTEN subset, and the two properties are the same 18 notes rather than
+    # two coincidences: a note the pipeline has re-admitted since is rewritten with a
+    # `title:` key and a triage reason, so "no title key" and "empty reason" both mean
+    # "written once, on the first day, and never touched again".
+    pristine = [
+        n
+        for n in first_week
+        if not vault_read._frontmatter((CORPUS / "Signals" / f"{n.hash}.md").read_text())[0].get("title")
+    ]
+    assert len(pristine) == 18
     assert sum(1 for n in first_week if n.reason == "") == 18
-    # Per-file fact about those same frozen notes: none of them has a `title` key, so
-    # every one of them exercised the H1 recovery path.
-    for note in first_week:
-        fm, _ = vault_read._frontmatter((CORPUS / "Signals" / f"{note.hash}.md").read_text())
-        assert not fm.get("title"), note.hash
+    assert {n.hash for n in pristine} == {n.hash for n in first_week if n.reason == ""}
     # Corpus-wide: floors and invariants only.
     assert corpus.title_recovered >= 18
     assert all(n.title for n in corpus.notes)
@@ -88,8 +108,14 @@ def test_no_note_field_carries_a_scraped_body_sentence(corpus):
 
 
 def test_closed_week_selection_matches_its_measured_shape(corpus):
+    # 106 UNTIL THE CAPTURED REPAIR, and 106 was itself a drifted number: it was measured on
+    # 2026-08-21, by which point `captured` rewrites had already moved notes into and out of
+    # this week. Restoring first-seen from vault history returns five notes to w33 and takes
+    # four back out to the earlier weeks they were actually captured in. 102 is the first
+    # figure here that is a fact about when these signals were seen rather than about when
+    # they were last re-admitted.
     sel = weekly.select(corpus.notes, CLOSED_WEEK)
-    assert (sel.candidates, len(sel.notes), sel.relaxed) == (106, 12, 0)
+    assert (sel.candidates, len(sel.notes), sel.relaxed) == (102, 12, 0)
     for src in {n.source for n in sel.notes}:
         assert sum(1 for n in sel.notes if n.source == src) <= 3
     for cat in {n.category for n in sel.notes}:
@@ -115,12 +141,18 @@ def test_every_week_renders_without_a_none_or_an_empty_blockquote(corpus):
 
 def test_the_reasonless_first_week_still_renders_full_entries(corpus):
     sel = weekly.select(corpus.notes, FIRST_WEEK)
-    assert (sel.candidates, len(sel.notes), sel.relaxed) == (18, 12, 6)
-    assert all(n.reason == "" for n in sel.notes)
+    assert (sel.candidates, len(sel.notes), sel.relaxed) == (25, 12, 4)
+    # A FLOOR, not a total. The branch under test is "an entry whose note carries no
+    # reason still renders whole", and it needs reason-less notes in the picked set, not a
+    # week made only of them. Nine today; a `== 9` here would go red the day the mix
+    # shifts without anything being wrong.
+    assert sum(1 for n in sel.notes if n.reason == "") >= 1
     text = roundup.render(sel)
     assert text.count("[[") == 12
     assert text.count("[Open ↗](") == 12
     assert "None" not in text
+    # The empty-reason path specifically: no entry is left as a bare blockquote marker.
+    assert not [ln for ln in text.splitlines() if ln.strip() in (">", "> ")]
 
 
 def test_render_is_byte_identical_across_reruns_and_input_orders(corpus):

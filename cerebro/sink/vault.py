@@ -3,10 +3,21 @@ from __future__ import annotations
 import re
 from collections import Counter
 from collections.abc import Mapping
+from dataclasses import replace
 
 from ..models import Signal
 
 _RATED = re.compile(r"^rating:\s*[0-9]", re.M)   # a note you've scored — never clobber it
+
+#: The `captured:` line of a note already on disk. FIRST-SEEN IS A FACT ABOUT THE PAST and a
+#: rewrite must not restate it, which is exactly what was happening: every source stamps
+#: `captured=now_iso()` at fetch, and the write below rewrites the whole note whenever a
+#: signal is re-admitted, so a note that came back on a later day silently moved to that day.
+#: Measured on the live vault: 26 notes had it rewritten between 2026-08-21 and 2026-09-05,
+#: and ALL 26 changed ISO week. A weekly roundup is selected by `iso_week_of(captured)`, so a
+#: closed week was not closed — the archive and an already-published roundup could disagree
+#: about which week a signal belongs to.
+_CAPTURED = re.compile(r"^captured: (\S+)\s*$", re.M)
 
 
 def _alias(title: str) -> str:
@@ -130,8 +141,15 @@ def write(date: str, briefing: str, signals: list[Signal], settings, stats=None)
     sig_dir.mkdir(parents=True, exist_ok=True)
     for s in signals:
         p = sig_dir / f"{s.url_hash}.md"
-        if p.exists() and _RATED.search(p.read_text(errors="replace")):
-            continue                                  # preserve your rating (scan whole note — it's already in memory)
+        if p.exists():
+            existing = p.read_text(errors="replace")
+            if _RATED.search(existing):
+                continue                              # preserve your rating (scan whole note — it's already in memory)
+            # The note keeps the day it was FIRST written. Everything else on a re-admitted
+            # signal is refreshed as before: only this one field is a claim about the past.
+            seen = _CAPTURED.search(existing)
+            if seen:
+                s = replace(s, captured=seen.group(1))
         p.write_text(_atomic(s))
     daily = daily_dir / f"{date}.md"
     daily.write_text(_daily(date, briefing, signals, stats))
