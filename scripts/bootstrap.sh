@@ -39,5 +39,10 @@ Bootstrap done. One interactive step remains (can't be carried in .env):
 
 The vault is the ./vault private submodule — already populated above.
 Verify:  .venv/bin/python -m cerebro --dry-run
-Go live: set dry_run:false in config/settings.yaml, then load scripts/com.cerebro.daily.plist
+Go live: set dry_run:false in config/settings.yaml, then schedule it ONE way, never both:
+  Orca:    orca repo add --path "$PWD", then an existing-workspace automation that runs
+           scripts/run.sh daily at 07:00 (the live install uses "cerebro daily")
+  launchd: launchctl load ~/Library/LaunchAgents/com.cerebro.daily.plist (copy from scripts/)
+Either way, also load scripts/com.cerebro.deadman.plist: it pages at 08:15 if the briefing
+never reached the vault remote, and shares no dependency with the run.
 NEXT
