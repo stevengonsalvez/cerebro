@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Dead-man for the daily run: pages if today's briefing is not on the vault remote by
+     08:15. The run itself is the Orca automation "cerebro daily" at 07:00; this job is the
+     independent check on it and shares none of its dependencies. See scripts/deadman.sh. -->
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.cerebro.deadman</string>
+  <key>ProgramArguments</key>
+  <array><string>/Users/stevengonsalvez/d/git/cerebro/scripts/deadman.sh</string></array>
+  <key>StartCalendarInterval</key><dict>
+    <key>Hour</key><integer>8</integer><key>Minute</key><integer>15</integer>
+  </dict>
+  <key>StandardOutPath</key><string>/Users/stevengonsalvez/d/git/cerebro/deadman.log</string>
+  <key>StandardErrorPath</key><string>/Users/stevengonsalvez/d/git/cerebro/deadman.log</string>
+  <key>RunAtLoad</key><false/>
+</dict></plist>
