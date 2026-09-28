@@ -1,12 +1,11 @@
 """The published daily page states the tokens spent producing it, above the briefing."""
-from types import SimpleNamespace
-
+from cerebro.models import RunStats
 from cerebro.sink import vault
 
 
 def test_token_banner_sits_between_title_and_briefing():
-    stats = SimpleNamespace(input_tokens=1000, output_tokens=200, cache_read=30000,
-                            cache_creation=4000, cost_usd=1.5, llm_calls=12, per_source={})
+    stats = RunStats(run_id="t", input_tokens=1000, output_tokens=200, cache_read=30000,
+                     cache_creation=4000, cost_usd=1.5, llm_calls=12)
     note = vault._daily("2026-09-28", "BRIEFING BODY", [], stats)
     body = note.split("---\n", 2)[2]
     assert body.index("# CEREBRO") < body.index("35,200 tokens") < body.index("BRIEFING BODY")
@@ -15,4 +14,4 @@ def test_token_banner_sits_between_title_and_briefing():
 
 
 def test_no_banner_without_stats():
-    assert "tokens" not in vault._daily("2026-09-28", "B", [], None)
+    assert "> Researched" not in vault._daily("2026-09-28", "B", [], None)
