@@ -65,3 +65,16 @@ def sanitize(text: str) -> tuple[str, dict[str, int]]:
         out = rx.sub("", out)
     out = re.sub(r'\n{3,}', '\n\n', out)
     return out, found
+
+
+class EmptyBriefing(RuntimeError):
+    """The digest came back blank. Nothing is written, so no page ships as a bare token line."""
+
+
+def require_prose(text: str) -> str:
+    """Refuse a blank briefing. The daily page opens with a token-usage line, so a page
+    with nothing else on it would still look like it has content between the title and
+    `## Signals`, which is how the daily operator checks that a run worked."""
+    if not text.strip():
+        raise EmptyBriefing("digest returned an empty briefing; refusing to publish")
+    return text
