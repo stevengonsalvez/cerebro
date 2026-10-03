@@ -76,6 +76,11 @@ def run(settings: Settings) -> tuple[RunStats, dict]:
     # signal was correct and only the surrounding commentary did not belong, so refusing to
     # publish would have thrown away a good briefing.
     briefing, leaked = briefing_gate.sanitize(briefing)
+    try:
+        briefing_gate.require_prose(briefing)
+    except briefing_gate.EmptyBriefing as e:
+        notify.push_failure(f"{date}: {e}", settings)
+        raise
     st.leaked = leaked
     st.digested = len(top)
     st.input_tokens, st.output_tokens = meter["input_tokens"], meter["output_tokens"]

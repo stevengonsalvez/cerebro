@@ -114,20 +114,28 @@ def _daily(date: str, briefing: str, signals: list[Signal], stats=None) -> str:
         f"- [[{s.url_hash}|{_alias(s.title)}]] · {s.source} · {s.score:.2f}"
         for s in signals
     )
-    usage = ""
+    usage = banner = ""
     if stats is not None:
+        total = stats.input_tokens + stats.output_tokens + stats.cache_read + stats.cache_creation
+        # Same numbers as the frontmatter, but in the body so the published page shows them.
+        banner = (
+            f"> Researched and written with {total:,} tokens "
+            f"(in {stats.input_tokens:,} · out {stats.output_tokens:,} · "
+            f"cache-read {stats.cache_read:,} · cache-create {stats.cache_creation:,}) "
+            f"across {stats.llm_calls} Claude calls\n\n"
+        )
         usage = (
             f"tokens_input: {stats.input_tokens}\n"
             f"tokens_output: {stats.output_tokens}\n"
             f"cache_read: {stats.cache_read}\n"
             f"cache_creation: {stats.cache_creation}\n"
-            f"tokens_total: {stats.input_tokens + stats.output_tokens + stats.cache_read + stats.cache_creation}\n"
+            f"tokens_total: {total}\n"
             f"cost_usd: {stats.cost_usd:.4f}\n"
             f"llm_calls: {stats.llm_calls}\n"
         )
     return (
         f"---\ndate: {date}\ntype: cerebro-briefing\ncount: {len(signals)}\n{usage}---\n"
-        f"# CEREBRO — {date}\n\n{briefing}\n\n## Signals\n{index}\n"
+        f"# CEREBRO — {date}\n\n{banner}{briefing}\n\n## Signals\n{index}\n"
         f"{_sources_footer(signals, stats)}"
     )
 

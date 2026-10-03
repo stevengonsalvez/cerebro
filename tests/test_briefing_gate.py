@@ -115,3 +115,13 @@ def test_a_hit_pages_the_operator():
     src = pathlib.Path("cerebro/orchestrator.py").read_text()
     assert "if leaked:" in src
     assert "push_failure" in src
+
+
+@pytest.mark.parametrize("blank", ["", "   \n\n  "])
+def test_blank_briefing_is_refused(blank):
+    with pytest.raises(gate.EmptyBriefing):
+        gate.require_prose(blank)
+
+
+def test_prose_passes_through():
+    assert gate.require_prose("Real prose.") == "Real prose."
