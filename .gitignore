@@ -2,6 +2,9 @@
 .env
 *.env
 !.env.example
+# Backups and variants such as .env.bak-*, .env.local: never committed.
+.env.*
+!.env.example
 config/settings.yaml
 config/settings.local.yaml
 config/*.local.yaml
