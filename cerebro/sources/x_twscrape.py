@@ -102,7 +102,11 @@ async def _collect(cfg: dict) -> list[Signal]:
         raise RuntimeError("no x.com cookies — log into x.com in Firefox, or set X_AUTH_TOKEN + X_CT0")
     cookie_str = "; ".join(f"{k}={v}" for k, v in ck.items())
 
-    api = API(ACCOUNTS_DB)
+    # raise_when_no_account: without it twscrape BLOCKS FOREVER when the account is unusable
+    # (twscrape 0.20.1 accounts_pool.py: "raise immediately if raise_when_no_account, otherwise
+    # block forever"). A logged-out Firefox session on 2026-10-07 stalled the whole daily for
+    # 6h on 15-min retries. Raising lets fetch() skip X, as the README promises.
+    api = API(ACCOUNTS_DB, raise_when_no_account=True)
     user = cfg.get("account", "cerebro_x")
     try:
         await api.pool.delete_accounts([user])    # refresh cookies each run
